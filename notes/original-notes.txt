@@ -1,0 +1,65 @@
+A utility library for pure but fallible Racket programs:
+
+  - We permit a single `follow-heart` operation which takes a value and returns a value and should be understood as "doing the right thing," deterministically returning the "right" return value for the given input. This operation is implemented by reading from a Racket parameter and calling an impure procedure found there. The responsibility for ensuring this is "right" belongs to the impure procedure and the impure callers of this pure code.
+  
+  - We do not permit unsafe operations or FFI calls.
+  
+  - We do not permit reading or writing mutable state, streams, channels, mutexes, semaphores, etc.
+  
+  - We do not permit any use of promises or futures. As a guideline, we discourage the use of expressions which may have different performance each time they're evaluated.
+  
+  - Other than the `follow-heart` operation, we do not permit accessing any Racket parameter values, nor writing to them, nor establishing local bindings for them.
+  
+  - We do not permit catching errors, although we do permit raising errors and diverging (nontermination).
+  
+  - We do not permit computations that observe object identity, whether by using `eq?`, `eqv?`, `equal?`, hashing functions, hash tables, or other methods, although these operations are not entirely off limits. For instance, some of the expressions we use may return different values according to `eq?` each time they're evaluated, but the set of values whose origins may be distinguished that way is disjoint from the set of values we permit to be passed to `eq?`. In particular, we don't permit the use of `eq?` and friends to access the object identity of structs, cons cells, numbers, or procedures, but we do permit them on interned symbols, since the tools we have for constructing interned symbols create values consistent according to `eq?`.
+
+A utility library for fallible Racket programs in an ambient monad:
+
+  - We continue to obey most of the same restrictions we do for pure but fallible Racket programs.
+  
+  - We provide `pure` and `bind` functions for the ambient monad. These are functions that return values that user-defined code can't take apart unless it can use Racket's code inspectors to crack open the internals of this library.
+  
+  - We permit an `io` operation which takes a monadic computation, performs it, and returns its result value. It may not always perform it in the same way or with the same result value, and it may use the continuation nonlinearly. The operation may expose values that are otherwise pure but have inconsistent performance when they're used, since that inconsistent performance can be attributed to pending tasks spawned by the impure segment of the computation. This `io` operation is implemented by reading from a Racket parameter and calling an impure procedure found there.
+  
+  - We permit a `with-io` operation that runs another piece of ambient-monad-targeting Racket code, but with an effect handler procedure (which itself is ambient-monad-targeting, but for the current ambient monad). When that code passes a value to its `io`, that value is processed by the effect handler instead. Note that this is intentionally not expressive enough to use the continuation nonlinearly or to keep mutable state, unless the ambient monad already exposes an interface for those things. However, it can use the *effect* nonlinearly.
+
+This begins to suggest a hypermonadic structure. A degree-0 hole is the continuation, and the leaf is the return value. A degree-1 hole is a use of `io`, and the leaf is the input value. A degree-2 hole is a use of `with-io`, and the leaf is the effect handler procedure (which we haven't generalized to an arbitrary value). 
+
+We could try to approach that generalization...
+
+
+A utility library for fallible Racket programs in an ambient hypermonad:
+
+  - We continue to obey most of the same restrictions we do for pure but fallible Racket programs.
+  
+  - We provide `pure` and `bind` functions for the ambient hypermonad. (TODO: Specify how these work.)
+  
+  - We permit an `io` function which takes any nonzero number N of arguments. The first argument is special; it's a degree-N monadic computation value. The rest of the arguments are procedures that represent handlers for successively lower degrees. The lowest-degree handler, if there is one, is special due to our evaluation model; the only thing it "handles" is the continuation of the `io` call, so we call it right away with zero arguments. While we do that, if we dynamically encounter any `io` calls, we handle those by using the corresponding higher-degree handler, or by using the surrounding ambient hypermonad's `io` semantics if it's a higher degree than all of the handlers. To use a handler, we call it with arguments corresponding to the arguments of the `io` call. During that call, we handle `io` calls using the higher-degree handlers, but not lower-or-equal-degree ones pass through to the surrouding ambient hypermonad. The arguments passed to a handler are wrapped so that all of the `io` calls that happen within pass through instead of being handled again. (TODO: Figure out if that's the right kind of shadowing of handlers. Figure out whether we're right to wrap the arguments we pass to a handler.)
+
+
+...but perhaps that's going to be too mind-bending. We have a more important generalization to make.
+
+A utility library for fallible Racket programs that use deterministic concurrency:
+
+  - We continue to obey most of the same restrictions we do for pure but fallible Racket programs.
+  
+  - We provide `dex-by-cline`, `cline-give-up`, and `call-fuse` functions.
+  
+  - We provide `no-effects`, `fuse-effects`, `get-mode`, `make-promise`, `definer-define`, and `committing-to-define` functions.
+  
+  - We provide a `fork` operation which takes a list
+  - We provide standard `later`, `promise`, `force`, `end`, `fork`
+
+  performs it, and returns its result value. It may not always perform it in the same way or with the same result value, and it may use the continuation nonlinearly. The operation may expose values that are otherwise pure but have inconsistent performance when they're used, since that inconsistent performance can be attributed to pending tasks spawned by the impure segment of the computation. This `io` operation is implemented by reading from a Racket parameter and calling an impure procedure found there.
+  
+  - We permit a `with-io` operation that runs another piece of ambient-monad-targeting Racket code, but with an effect handler procedure (which itself is ambient-monad-targeting, but for the current ambient monad). When that code passes a value to its `io`, that value is processed by the effect handler instead. Note that this is intentionally not expressive enough to use the continuation nonlinearly or to keep mutable state, unless the ambient monad already exposes an interface for those things.
+
+
+
+
+
+a continuation is a degree-0 hole where a first-class value is a leaf; a monadic computation values is a degree-1 leaf, and the handler of a `with-io` operation may be considered a degree-2 leaf -- but we will avoid extrapolating upon this.
+
+
+  that translates the monadic computations that code's `io` encounters into monadic computations this ` 
