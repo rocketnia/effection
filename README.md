@@ -30,8 +30,9 @@ For `effection/...` and `effection/.../base` there, we have a few values of `...
 
   - `handler` - Modules offering basic support for setting up and using effect handlers.
   - `promise` - Modules offering basic support for monotonic-state-based deterministic concurrency in a style that uses promises for control flow.
-  - `cline`, `dex`, `merge`, `fuse`, `table` - Modules offering basic support for doing comparisons, doing orderless merge operations, representing orderless collections, and sorting.
+  - `order`, `merge`, `fuse`, `table` - Modules offering basic support for doing comparisons, doing orderless merge operations, representing orderless collections, and sorting.
 
-All that being said, here are the modules currently implemented:
+All that being said, here are the modules currently (partially) implemented:
 
-  - (None)
+  - `effection/order`
+    - `effection/order/base`

@@ -1,6 +1,6 @@
 #lang info
 
-(define collection 'multi)
+(define collection "effection")
 
 (define deps (list))
 (define build-deps
