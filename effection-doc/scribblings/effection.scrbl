@@ -7,7 +7,7 @@
 
 @title{Effection}
 
-Effection is a set of alternate core libraries for Racket, designed around semi-deterministic functional programming.
+Effection is a set of alternate core libraries for Racket, designed around quasi-deterministic functional programming.
 
 Effection code can seamlessly coexist with Racket code, and Effection's modules export most of the same bindings as Racket modules do. The difference is that for an Effection-based program, more things than usual are considered "unsafe."
 
