@@ -19,6 +19,8 @@
 (provide #/struct-out ordering-lt)
 (provide #/struct-out ordering-eq)
 (provide #/struct-out ordering-gt)
+; TODO: Consider exporting functions that construct
+; `ordering-private-lt` and `ordering-private-gt` values.
 (provide ordering-private?)
 (provide dex-result?)
 (provide cline-result?)
@@ -218,6 +220,39 @@
 
 (define/contract dex-cline dex?
   (dex-encapsulated #/dex-internals-cline))
+
+
+(struct-easy "a dex-internals-by-cline" (dex-internals-by-cline cline)
+  #:other
+  
+  #:methods gen:cline-internals
+  [
+    
+    (define (dex-internals-name this)
+      'dex-internals-by-cline)
+    
+    (define (dex-internals-autodex this other)
+      (dissect this (dex-internals-by-cline a)
+      #/dissect other (dex-internals-by-cline b)
+      #/call-dex dex-cline a b))
+    
+    (define (dex-internals-in? this x)
+      (dissect this (dex-internals-by-cline cline)
+      #/in-cline? cline x))
+    
+    (define (dex-internals-call this a b)
+      (dissect this (dex-internals-by-cline cline)
+      #/w- cline-result (call-cline cline a b)
+      #/expect cline-result (list cline-result) cline-result
+      #/list
+      #/mat cline-result (ordering-lt) (ordering-private-lt)
+      #/mat cline-result (ordering-gt) (ordering-private-gt)
+        cline-result))
+  ])
+
+(define/contract (dex-by-cline cline)
+  (-> cline? dex?)
+  (dex-encapsulated #/dex-internals-by-cline cline))
 
 
 (struct-easy "a cline-internals-by-dex" (cline-internals-by-dex dex)

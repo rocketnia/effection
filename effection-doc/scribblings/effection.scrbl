@@ -139,9 +139,13 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   A dex that compares clines. This is fine-grained enough that it trivializes most clines' equational theory; for instance, @racket[(cline-default (cline-give-up) (cline-give-up))] and @racket[(cline-give-up)] can be distinguished this way despite otherwise having equivalent behavior.
 }
 
+@defproc[(dex-by-cline [cline cline?]) dex?]{
+  Returns a dex that compares values according the given cline. If the cline returns the "candidly precedes" or "candidly follows" results, this dex returns the "secretly precedes" or "secretly follows" results respectively.
+}
+
 
 @defproc[(cline-by-dex [dex dex?]) cline?]{
-  Returns a cline that compares values according the given dex. This cline never returns the "candidly precedes" or "candidly follows" results.
+  Returns a cline that compares values according the given dex. Since the dex never returns the "candidly precedes" or "candidly follows" results, this cline doesn't either.
 }
 
 @defthing[cline-give-up cline?]{
