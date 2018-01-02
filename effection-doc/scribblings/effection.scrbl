@@ -118,15 +118,15 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   A struct that pairs a value with a dex that it purportedly belongs to. If @racket[dex] actually is a dex and @racket[value] actually does belong to its domain, this is considered well-formed.
 }
 
-@defthing[dexable/c contract?]{
-  A contract that recognizes a well-formed @racket[dexable].
+@defthing[dexable/c flat-contract?]{
+  A flat contract that recognizes a well-formed @racket[dexable].
 }
 
 @defproc[(dexableof [c contract?]) contract?]{
   Returns a contract that recognizes a well-formed @racket[dexable] and additionally imposes the given contract on its @racket[dexable-value].
 }
 
-@defproc[(dexables-autodex [a dexable/c] [b dexable/c]) boolean?]{
+@defproc[(dexables-autodex [a dexable/c] [b dexable/c]) dex-result?]{
   Returns whether the two given well-formed @racket[dexable] values have the same @racket[dexable-dex] and the same @racket[dexable-value].
 }
 
