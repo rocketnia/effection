@@ -2,8 +2,8 @@
 
 (define collection "effection")
 
-(define deps (list))
+(define deps (list "base"))
 (define build-deps
-  (list "base" "effection-lib" "racket-doc" "scribble-lib"))
+  (list "effection-lib" "parendown-lib" "racket-doc" "scribble-lib"))
 
 (define scribblings (list (list "scribblings/effection.scrbl" (list))))
