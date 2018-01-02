@@ -32,9 +32,9 @@ However, a cline does not merely expose this total ordering. Within the cline’
 @itemlist[
     @item{@racket[(list)]: The values are not both in the domain.}
     @item{@racket[(list (ordering-lt))]: The first value candidly precedes the second.}
-    @item{@racket[(list @#,var[ordering-private-lt])] where @var[ordering-private-lt] is an opaque value that satisfies @racket[ordering-private?]: The first value secretly precedes the second.}
+    @item{@racket[(list _ordering-private-lt)] where @var[ordering-private-lt] is an opaque value that satisfies @racket[ordering-private?]: The first value secretly precedes the second.}
     @item{@racket[(list (ordering-eq))]: The first value is equal to the second.}
-    @item{@racket[(list @#,var[ordering-private-gt])] where @var[ordering-private-gt] is an opaque value that satisfies @racket[ordering-private?]: The first value secretly follows the second.}
+    @item{@racket[(list _ordering-private-gt)] where @var[ordering-private-gt] is an opaque value that satisfies @racket[ordering-private?]: The first value secretly follows the second.}
     @item{@racket[(list (ordering-gt))]: The first value candidly follows the second.}
 ]
 
@@ -79,7 +79,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 }
 
 @defproc[(cline-containing [x any/c]) flat-contract?]{
-  Returns a contract that recognizes any cline @var[c] such that @racket[(in-cline? @#,var[c] x)].
+  Returns a contract that recognizes any cline @var[c] such that @racket[(in-cline? _c x)].
 }
 
 @defproc[(in-cline? [cline cline?] [x any/c]) boolean?]{
@@ -99,7 +99,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 }
 
 @defproc[(dex/c [dex dex?]) flat-contract?]{
-  Returns a contract that recognizes any value @var[x] such that @racket[(in-dex? dex @#,var[x])].
+  Returns a contract that recognizes any value @var[x] such that @racket[(in-dex? dex _x)].
 }
 
 @defproc[(in-dex? [dex dex?] [x any/c]) boolean?]{
@@ -169,7 +169,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
           [result (x) (maybe/c (cline-containing x))]))])
   cline?
 ]{
-  Given a dexable function, returns a cline that works by invoking that function with each value to get @racket[(list @#,var[cline])] or @racket[(list)], verifying that the two @var[cline] values are the same, and then proceeding to invoke that value.
+  Given a dexable function, returns a cline that works by invoking that function with each value to get @racket[(list _cline)] or @racket[(list)], verifying that the two @var[cline] values are the same, and then proceeding to invoke that value.
 }
 
 @defproc[
