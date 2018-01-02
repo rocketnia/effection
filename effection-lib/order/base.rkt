@@ -73,7 +73,7 @@
 
 
 (define-generics cline-internals
-  (cline-internals-name cline-internals)
+  (cline-internals-tag cline-internals)
   (cline-internals-autodex cline-internals other)
   (cline-internals-in? cline-internals x)
   (cline-internals-call cline-internals a b))
@@ -100,7 +100,7 @@
 
 
 (define-generics dex-internals
-  (dex-internals-name dex-internals)
+  (dex-internals-tag dex-internals)
   (dex-internals-autodex dex-internals other)
   (dex-internals-in? dex-internals x)
   (dex-internals-call dex-internals a b))
@@ -171,7 +171,7 @@
   #:methods gen:dex-internals
   [
     
-    (define (dex-internals-name this)
+    (define (dex-internals-tag this)
       'dex-internals-dex)
     
     (define (dex-internals-autodex this other)
@@ -183,10 +183,10 @@
     (define (dex-internals-call this a b)
       (expect a (dex-encapsulated a) (list)
       #/expect b (dex-encapsulated b) (list)
-      #/w- a-name (dex-internals-name a)
-      #/w- b-name (dex-internals-name b)
-      #/if (symbol<? a-name b-name) (list #/ordering-lt)
-      #/if (symbol<? b-name a-name) (list #/ordering-gt)
+      #/w- a-tag (dex-internals-tag a)
+      #/w- b-tag (dex-internals-tag b)
+      #/if (symbol<? a-tag b-tag) (list #/ordering-lt)
+      #/if (symbol<? b-tag a-tag) (list #/ordering-gt)
       #/dex-internals-autodex a b))
   ])
 
@@ -199,7 +199,7 @@
   #:methods gen:dex-internals
   [
     
-    (define (dex-internals-name this)
+    (define (dex-internals-tag this)
       'dex-internals-cline)
     
     (define (dex-internals-autodex this other)
@@ -211,10 +211,10 @@
     (define (dex-internals-call this a b)
       (expect a (cline-encapsulated a) (list)
       #/expect b (cline-encapsulated b) (list)
-      #/w- a-name (cline-internals-name a)
-      #/w- b-name (cline-internals-name b)
-      #/if (symbol<? a-name b-name) (list #/ordering-lt)
-      #/if (symbol<? b-name a-name) (list #/ordering-gt)
+      #/w- a-tag (cline-internals-tag a)
+      #/w- b-tag (cline-internals-tag b)
+      #/if (symbol<? a-tag b-tag) (list #/ordering-lt)
+      #/if (symbol<? b-tag a-tag) (list #/ordering-gt)
       #/cline-internals-autodex a b))
   ])
 
@@ -228,7 +228,7 @@
   #:methods gen:cline-internals
   [
     
-    (define (dex-internals-name this)
+    (define (dex-internals-tag this)
       'dex-internals-by-cline)
     
     (define (dex-internals-autodex this other)
@@ -261,7 +261,7 @@
   #:methods gen:cline-internals
   [
     
-    (define (cline-internals-name this)
+    (define (cline-internals-tag this)
       'cline-internals-by-dex)
     
     (define (cline-internals-autodex this other)
@@ -289,7 +289,7 @@
   #:methods gen:cline-internals
   [
     
-    (define (cline-internals-name this)
+    (define (cline-internals-tag this)
       'cline-internals-give-up)
     
     (define (cline-internals-autodex this other)
@@ -315,7 +315,7 @@
   #:methods gen:cline-internals
   [
     
-    (define (cline-internals-name this)
+    (define (cline-internals-tag this)
       'cline-internals-default)
     
     (define (cline-internals-autodex this other)
@@ -360,7 +360,7 @@
   #:methods gen:cline-internals
   [
     
-    (define (cline-internals-name this)
+    (define (cline-internals-tag this)
       'cline-internals-by-own-method)
     
     (define (cline-internals-autodex this other)
@@ -413,7 +413,7 @@
   #:methods gen:cline-internals
   [
     
-    (define (cline-internals-name this)
+    (define (cline-internals-tag this)
       'cline-internals-fix)
     
     (define (cline-internals-autodex this other)
