@@ -1,8 +1,9 @@
 #lang parendown scribble/manual
 @(require #/for-label racket/base)
-@(require #/for-label effection/order)
+@(require #/for-label effection/order/base)
+@(require #/for-label effection/maybe/base)
 @(require #/for-label #/only-in racket/contract/base
-  -> ->i any/c contract? flat-contract?)
+  -> ->i any/c chaperone-contract? contract? flat-contract?)
 
 
 @title{Effection}
@@ -19,6 +20,36 @@ With the addition of restrictions, there comes a need to offer alternatives to c
 
 
 @table-of-contents[]
+
+
+
+@section[#:tag "maybe"]{Maybe}
+
+@defmodule[effection/maybe/base]
+
+Maybe values are a way to encode optional data. Using maybe values can simplify some interfaces that would otherwise use run time errors or special-cased sentinel values like @racket[#f].
+
+
+@defstruct*[nothing ()]{
+  A maybe value that does not contain a value.
+  
+  Every two nothing values are @racket[equal?].
+}
+
+@defstruct*[just ([value any/c])]{
+  A maybe value that does contain a value.
+  
+  Two just values are @racket[equal?] if they contain @racket[equal?] values.
+}
+
+@defproc[(maybe? [x any/c]) boolean?]{
+  Returns whether the given value is a maybe value. That is, it checks that the value is either a @racket[nothing] value or a @racket[just] value.
+}
+
+@defproc[(maybe/c [c chaperone-contract?]) chaperone-contract?]{
+  Returns a chaperone contract that recognizes a maybe value where the contained value, if any, abides by the given chaperone contract.
+}
+
 
 
 @section[#:tag "order"]{Order}
@@ -41,12 +72,6 @@ However, a cline does not merely expose this total ordering. Within the cline’
 The “secretly precedes” and “secretly follows” cases are indistinguishable to Effection-safe code.
 
 A “dex” is like a cline, but it never results in the “candidly precedes” and “candidly follows” cases. Thus, a dex is useful as a kind of equality test.
-
-
-@; TODO: Put this somewhere better.
-@defproc[(maybe/c [c contract?]) contract?]{
-  Returns a contract that recognizes a list of zero or one elements, where the one element (if present) matches the given contract.
-}
 
 
 @defstruct*[ordering-lt ()]{
@@ -126,8 +151,8 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Returns a contract that recognizes a well-formed @racket[dexable] and additionally imposes the given contract on its @racket[dexable-value].
 }
 
-@defproc[(dexables-autodex [a dexable/c] [b dexable/c]) dex-result?]{
-  Returns whether the two given well-formed @racket[dexable] values have the same @racket[dexable-dex] and the same @racket[dexable-value].
+@defproc[(dexables-autodex [a dexable/c] [b dexable/c]) (maybe/c dex-result?)]{
+  Compares the two given well-formed @racket[dexable] values to see if they have the same @racket[dexable-dex] and the same @racket[dexable-value]. If they have the same dex, this returns a @racket[just] of a @racket[dex-result?]; otherwise, this returns @racket[(nothing)].
 }
 
 

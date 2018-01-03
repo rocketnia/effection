@@ -1,8 +1,8 @@
 #lang parendown racket/base
 
 (require #/only-in racket/contract/base
-  -> ->i and/c any/c chaperone-contract? cons/c contract?
-  contract-projection flat-contract? or/c struct/c struct/dc)
+  -> ->i and/c any/c chaperone-contract? contract? contract-projection
+  flat-contract? struct/c struct/dc)
 (require #/only-in racket/contract/combinator
   contract-first-order-passes? make-contract)
 (require #/only-in racket/contract/region define/contract)
@@ -10,11 +10,10 @@
 
 (require #/only-in lathe dissect expect mat next nextlet w-)
 
+(require #/only-in effection/maybe/base just nothing maybe/c)
+
 (require "../private/util.rkt")
 
-
-; TODO: Put this somewhere better.
-(provide maybe/c)
 
 (provide #/struct-out ordering-lt)
 (provide #/struct-out ordering-eq)
@@ -45,12 +44,6 @@
   cline-by-own-method
   cline-fix)
 
-
-
-; TODO: Put this somewhere better.
-(define/contract (maybe/c c)
-  (-> contract? contract?)
-  (or/c null? #/cons/c c null?))
 
 
 (struct-easy "a ordering-lt" (ordering-lt) #:equal)
@@ -226,17 +219,18 @@
           #/dexable dex #/c-projection x))))))
 
 (define/contract (dexables-autodex a b)
-  (-> dexable/c dexable/c dex-result?)
+  (-> dexable/c dexable/c #/maybe/c dex-result?)
   (dissect a (dexable a-dex a)
   #/dissect b (dexable b-dex b)
-  #/expect (call-dex dex-dex a-dex b-dex) (list #/ordering-eq) (list)
+  #/expect (call-dex dex-dex a-dex b-dex) (just #/ordering-eq)
+    (nothing)
   #/call-dex a-dex a b))
 
 ; TODO: Provide and document this.
 (define/contract (name-of x)
   (-> dexable/c name?)
   (dissect x (dexable dex x)
-  #/dissect (name-of-by-dex dex x) (list result)
+  #/dissect (name-of-by-dex dex x) (just result)
     result))
 
 
@@ -254,23 +248,23 @@
       'dex-dex)
     
     (define (dex-internals-autodex this other)
-      (list #/ordering-eq))
+      (just #/ordering-eq))
     
     (define (dex-internals-in? this x)
       (dex? x))
     
     (define (dex-internals-name-of this x)
       (if (dex? x)
-        (list #/autoname-dex x)
-        (list)))
+        (just #/autoname-dex x)
+        (nothing)))
     
     (define (dex-internals-call this a b)
-      (expect a (dex-encapsulated a) (list)
-      #/expect b (dex-encapsulated b) (list)
+      (expect a (dex-encapsulated a) (nothing)
+      #/expect b (dex-encapsulated b) (nothing)
       #/w- a-tag (dex-internals-tag a)
       #/w- b-tag (dex-internals-tag b)
-      #/if (symbol<? a-tag b-tag) (list #/ordering-lt)
-      #/if (symbol<? b-tag a-tag) (list #/ordering-gt)
+      #/if (symbol<? a-tag b-tag) (just #/ordering-lt)
+      #/if (symbol<? b-tag a-tag) (just #/ordering-gt)
       #/dex-internals-autodex a b))
   ])
 
@@ -290,23 +284,23 @@
       'dex-cline)
     
     (define (dex-internals-autodex this other)
-      (list #/ordering-eq))
+      (just #/ordering-eq))
     
     (define (dex-internals-in? this x)
       (cline? x))
     
     (define (dex-internals-name-of this x)
       (if (cline? x)
-        (list #/autoname-cline x)
-        (list)))
+        (just #/autoname-cline x)
+        (nothing)))
     
     (define (dex-internals-call this a b)
-      (expect a (cline-encapsulated a) (list)
-      #/expect b (cline-encapsulated b) (list)
+      (expect a (cline-encapsulated a) (nothing)
+      #/expect b (cline-encapsulated b) (nothing)
       #/w- a-tag (cline-internals-tag a)
       #/w- b-tag (cline-internals-tag b)
-      #/if (symbol<? a-tag b-tag) (list #/ordering-lt)
-      #/if (symbol<? b-tag a-tag) (list #/ordering-gt)
+      #/if (symbol<? a-tag b-tag) (just #/ordering-lt)
+      #/if (symbol<? b-tag a-tag) (just #/ordering-gt)
       #/cline-internals-autodex a b))
   ])
 
@@ -327,19 +321,19 @@
       'dex-name)
     
     (define (dex-internals-autodex this other)
-      (list #/ordering-eq))
+      (just #/ordering-eq))
     
     (define (dex-internals-in? this x)
       (name? x))
     
     (define (dex-internals-name-of this x)
-      (expect x (name-internal rep) (list)
+      (expect x (name-internal rep) (nothing)
       #/list #/list 'name rep))
     
     (define (dex-internals-call this a b)
       (if (and (name? a) (name? b))
-        (list #/names-autodex a b)
-        (list)))
+        (just #/names-autodex a b)
+        (nothing)))
   ])
 
 ; TODO: Provide and document this.
@@ -376,7 +370,7 @@
     (define (dex-internals-call this a b)
       (dissect this (dex-internals-by-cline cline)
       #/w- cline-result (call-cline cline a b)
-      #/expect cline-result (list cline-result) cline-result
+      #/expect cline-result (just cline-result) cline-result
       #/list
       #/mat cline-result (ordering-lt) (ordering-private-lt)
       #/mat cline-result (ordering-gt) (ordering-private-gt)
@@ -437,16 +431,16 @@
       'cline-give-up)
     
     (define (cline-internals-autodex this other)
-      (list #/ordering-eq))
+      (just #/ordering-eq))
     
     (define (cline-internals-in? this x)
       #f)
     
     (define (cline-internals-name-of this x)
-      (list))
+      (nothing))
     
     (define (cline-internals-call this a b)
-      (list))
+      (nothing))
   ])
 
 (define/contract cline-give-up cline?
@@ -475,7 +469,7 @@
       (dissect this (cline-internals-default a1 a2)
       #/dissect other (cline-internals-default b1 b2)
       #/dissect (call-dex dex-cline a1 b1) result
-      #/expect result (list #/ordering-eq) result
+      #/expect result (just #/ordering-eq) result
       #/call-dex dex-cline a2 b2))
     
     (define (cline-internals-in? this x)
@@ -484,21 +478,21 @@
     
     (define (cline-internals-name-of this x)
       (dissect this (cline-internals-default first second)
-      #/mat (name-of-by-cline first x) (list result) (list result)
+      #/mat (name-of-by-cline first x) (just result) (just result)
       #/name-of-by-cline second x))
     
     (define (cline-internals-call this a b)
       (dissect this (cline-internals-default first second)
       #/w- first-result (call-cline first a b)
-      #/mat first-result (list -) first-result
+      #/mat first-result (just -) first-result
       #/if (in-cline? first a)
         (if (in-cline? second b)
-          (list #/ordering-lt)
-          (list))
+          (just #/ordering-lt)
+          (nothing))
       #/if (in-cline? first b)
         (if (in-cline? second a)
-          (list #/ordering-gt)
-          (list))
+          (just #/ordering-gt)
+          (nothing))
       #/call-cline second a b))
   ])
 
@@ -536,7 +530,7 @@
     (define (cline-internals-in? this x)
       (dissect this
         (cline-internals-by-own-method #/dexable dex get-method)
-      #/expect (get-method x) (list method) #f
+      #/expect (get-method x) (just method) #f
       ; TODO: Currently, this is redundant because our contract for
       ; `cline-by-own-method` enforces that the method must return a
       ; cline that contains the value. If we keep that contract,
@@ -546,16 +540,16 @@
     (define (cline-internals-name-of this x)
       (dissect this
         (cline-internals-by-own-method #/dexable dex get-method)
-      #/expect (get-method x) (list method) #f
+      #/expect (get-method x) (just method) #f
       #/name-of-by-cline method x))
     
     (define (cline-internals-call this a b)
       (dissect this
         (cline-internals-by-own-method #/dexable dex get-method)
-      #/expect (get-method a) (list a-method) (list)
-      #/expect (get-method b) (list b-method) (list)
+      #/expect (get-method a) (just a-method) (nothing)
+      #/expect (get-method b) (just b-method) (nothing)
       #/expect (call-dex dex-cline a-method b-method)
-        (list #/ordering-eq)
+        (just #/ordering-eq)
         
         ; TODO: See if we should indeed raise an error here. An
         ; alternative would be to use the result of this `call-dex` as
