@@ -2,7 +2,7 @@
 
 (require #/only-in racket/contract/base
   -> ->i and/c any/c chaperone-contract? contract? contract-projection
-  flat-contract? struct/c struct/dc)
+  flat-contract? struct/c)
 (require #/only-in racket/contract/combinator
   contract-first-order-passes? make-contract)
 (require #/only-in racket/contract/region define/contract)
@@ -29,11 +29,10 @@
 (provide in-cline? call-cline)
 
 (provide dex?)
-(provide dex/c)
 (provide in-dex? call-dex)
 
 (provide #/struct-out dexable)
-(provide dexable/c dexableof)
+(provide valid-dexable? dexableof)
 (provide dexables-autodex)
 
 (provide dex-dex dex-cline)
@@ -160,10 +159,6 @@
   (-> any/c boolean?)
   (dex-encapsulated? x))
 
-(define/contract (dex/c dex)
-  (-> dex? flat-contract?)
-  (lambda (x) (in-dex? dex x)))
-
 ; TODO: See if we should provide and document this.
 (define/contract (autoname-dex dex)
   (-> dex? name?)
@@ -189,15 +184,14 @@
 
 (struct-easy "a dexable" (dexable dex value))
 
-; TODO: Make this a predicate.
-(define/contract dexable/c flat-contract?
-  (struct/dc dexable
-    [dex dex?]
-    [value (dex) #:flat (dex/c dex)]))
+(define/contract (valid-dexable? x)
+  (-> any/c boolean?)
+  (expect x (dexable dex value) #f
+  #/and (dex? dex) (in-dex? dex value)))
 
 (define/contract (dexableof c)
   (-> contract? contract?)
-  (and/c dexable/c
+  (and/c valid-dexable?
   #/if (chaperone-contract? c)
     (struct/c dexable any/c c)
     (make-contract
@@ -219,7 +213,7 @@
           #/dexable dex #/c-projection x))))))
 
 (define/contract (dexables-autodex a b)
-  (-> dexable/c dexable/c #/maybe/c dex-result?)
+  (-> valid-dexable? valid-dexable? #/maybe/c dex-result?)
   (dissect a (dexable a-dex a)
   #/dissect b (dexable b-dex b)
   #/expect (call-dex dex-dex a-dex b-dex) (just #/ordering-eq)
@@ -228,7 +222,7 @@
 
 ; TODO: Provide and document this.
 (define/contract (name-of x)
-  (-> dexable/c name?)
+  (-> valid-dexable? name?)
   (dissect x (dexable dex x)
   #/dissect (name-of-by-dex dex x) (just result)
     result))

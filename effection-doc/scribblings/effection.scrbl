@@ -123,10 +123,6 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Returns whether the given value is a dex.
 }
 
-@defproc[(dex/c [dex dex?]) flat-contract?]{
-  Returns a contract that recognizes any value @var[x] such that @racket[(in-dex? dex _x)].
-}
-
 @defproc[(in-dex? [dex dex?] [x any/c]) boolean?]{
   Given a dex and a value, returns whether the value belongs to the dex's domain.
 }
@@ -143,15 +139,15 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   A struct that pairs a value with a dex that it purportedly belongs to. If @racket[dex] actually is a dex and @racket[value] actually does belong to its domain, this is considered well-formed.
 }
 
-@defthing[dexable/c flat-contract?]{
-  A flat contract that recognizes a well-formed @racket[dexable].
+@defproc[(valid-dexable? [x any/c]) boolean?]{
+  Returns whether the given value is a well-formed @racket[dexable].
 }
 
 @defproc[(dexableof [c contract?]) contract?]{
   Returns a contract that recognizes a well-formed @racket[dexable] and additionally imposes the given contract on its @racket[dexable-value].
 }
 
-@defproc[(dexables-autodex [a dexable/c] [b dexable/c]) (maybe/c dex-result?)]{
+@defproc[(dexables-autodex [a valid-dexable?] [b valid-dexable?]) (maybe/c dex-result?)]{
   Compares the two given well-formed @racket[dexable] values to see if they have the same @racket[dexable-dex] and the same @racket[dexable-value]. If they have the same dex, this returns a @racket[just] of a @racket[dex-result?]; otherwise, this returns @racket[(nothing)].
 }
 
