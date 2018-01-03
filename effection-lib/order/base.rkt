@@ -45,11 +45,11 @@
 
 
 
-(struct-easy "a ordering-lt" (ordering-lt) #:equal)
-(struct-easy "a ordering-private-lt" (ordering-private-lt) #:equal)
-(struct-easy "a ordering-eq" (ordering-eq) #:equal)
-(struct-easy "a ordering-private-gt" (ordering-private-gt) #:equal)
-(struct-easy "a ordering-gt" (ordering-gt) #:equal)
+(struct-easy "an ordering-lt" (ordering-lt) #:equal)
+(struct-easy "an ordering-private-lt" (ordering-private-lt) #:equal)
+(struct-easy "an ordering-eq" (ordering-eq) #:equal)
+(struct-easy "an ordering-private-gt" (ordering-private-gt) #:equal)
+(struct-easy "an ordering-gt" (ordering-gt) #:equal)
 
 (define/contract (ordering-private? x)
   (-> any/c boolean?)
