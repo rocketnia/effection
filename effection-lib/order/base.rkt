@@ -525,11 +525,10 @@
       (dissect this
         (cline-internals-by-own-method #/dexable dex get-method)
       #/expect (get-method x) (just method) #f
-      ; TODO: Currently, this is redundant because our contract for
-      ; `cline-by-own-method` enforces that the method must return a
-      ; cline that contains the value. If we keep that contract,
-      ; remove this check here, and vice versa.
-      #/in-cline? method x))
+        ; NOTE: Since our contract for `cline-by-own-method` enforces
+        ; that the method must return a cline that contains the value,
+        ; we don't have to bother with an `in-cline?` call here.
+        #t))
     
     (define (cline-internals-name-of this x)
       (dissect this
@@ -544,13 +543,7 @@
       #/expect (get-method b) (just b-method) (nothing)
       #/expect (call-dex dex-cline a-method b-method)
         (just #/ordering-eq)
-        
-        ; TODO: See if we should indeed raise an error here. An
-        ; alternative would be to use the result of this `call-dex` as
-        ; the result.
-        ;
         ; TODO: Choose an error message.
-        ;
         (error "Called a cline-by-own-method on two values with different methods")
       #/call-cline a-method a b))
   ])
