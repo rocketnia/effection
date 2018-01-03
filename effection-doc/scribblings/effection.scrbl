@@ -58,7 +58,7 @@ Maybe values are a way to encode optional data. Using maybe values can simplify 
 
 A “cline” is based on a total ordering on values in its domain, or in other words a binary relation that is reflexive, transitive, and antisymmetric. Its antisymmetry is as fine-grained as possible: If any two values in a cline’s domain are related by that cline in both directions, only Effection-unsafe code will be able to distinguish the two values.
 
-However, a cline does not merely expose this total ordering. Within the cline’s domain, there may be equivalence classes of values for which every two nonequal values will not have their relative order exposed to Effection-safe code. When Effection-safe code uses @racket[call-cline] to compare two values by a cline, it can get several results:
+However, a cline does not merely expose this total ordering. Within the cline’s domain, there may be equivalence classes of values for which every two nonequal values will not have their relative order exposed to Effection-safe code. When Effection-safe code uses @racket[compare-by-cline] to compare two values by a cline, it can get several results:
 
 @itemlist[
     @item{@racket[(list)]: The values are not both in the domain.}
@@ -120,7 +120,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 }
 
 @defproc[
-  (call-cline [cline cline?] [a any/c] [b any/c])
+  (compare-by-cline [cline cline?] [a any/c] [b any/c])
   (maybe/c cline-result?)
 ]{
   Given a cline and two values, compares those values according to the cline. The result is @racket[(list)] if either value is outside the cline's domain.
@@ -136,7 +136,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 }
 
 @defproc[
-  (call-dex [dex dex?] [a any/c] [b any/c])
+  (compare-by-dex [dex dex?] [a any/c] [b any/c])
   (maybe/c dex-result?)
 ]{
   Given a dex and two values, compares those values according to the dex. The result is @racket[(list)] if either value is outside the cline's domain.

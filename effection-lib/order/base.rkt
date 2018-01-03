@@ -23,10 +23,10 @@
 
 (provide cline?)
 (provide cline-containing)
-(provide in-cline? call-cline)
+(provide in-cline? compare-by-cline)
 
 (provide dex?)
-(provide in-dex? call-dex)
+(provide in-dex? compare-by-dex)
 
 (provide #/struct-out dexable)
 (provide valid-dexable? dexableof)
@@ -150,7 +150,7 @@
   (dissect cline (cline-encapsulated internals)
   #/cline-internals-name-of internals x))
 
-(define/contract (call-cline cline a b)
+(define/contract (compare-by-cline cline a b)
   (-> cline? any/c any/c #/maybe/c cline-result?)
   (dissect cline (cline-encapsulated internals)
   #/cline-internals-call internals a b))
@@ -187,7 +187,7 @@
   (dissect dex (dex-encapsulated internals)
   #/dex-internals-name-of internals x))
 
-(define/contract (call-dex dex a b)
+(define/contract (compare-by-dex dex a b)
   (-> dex? any/c any/c #/maybe/c dex-result?)
   (dissect dex (dex-encapsulated internals)
   #/dex-internals-call internals a b))
@@ -227,9 +227,9 @@
   (-> valid-dexable? valid-dexable? #/maybe/c dex-result?)
   (dissect a (dexable a-dex a)
   #/dissect b (dexable b-dex b)
-  #/expect (call-dex dex-dex a-dex b-dex) (just #/ordering-eq)
+  #/expect (compare-by-dex dex-dex a-dex b-dex) (just #/ordering-eq)
     (nothing)
-  #/call-dex a-dex a b))
+  #/compare-by-dex a-dex a b))
 
 ; TODO: Provide and document this.
 (define/contract (name-of x)
@@ -362,7 +362,7 @@
     (define (dex-internals-autodex this other)
       (dissect this (dex-internals-by-cline a)
       #/dissect other (dex-internals-by-cline b)
-      #/call-dex dex-cline a b))
+      #/compare-by-dex dex-cline a b))
     
     (define (dex-internals-in? this x)
       (dissect this (dex-internals-by-cline cline)
@@ -374,7 +374,7 @@
     
     (define (dex-internals-call this a b)
       (dissect this (dex-internals-by-cline cline)
-      #/w- cline-result (call-cline cline a b)
+      #/w- cline-result (compare-by-cline cline a b)
       #/expect cline-result (just cline-result) cline-result
       #/list
       #/mat cline-result (ordering-lt) (ordering-private-lt)
@@ -403,7 +403,7 @@
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-by-dex a)
       #/dissect other (cline-internals-by-dex b)
-      #/call-dex dex-dex a b))
+      #/compare-by-dex dex-dex a b))
     
     (define (cline-internals-in? this x)
       (dissect this (cline-internals-by-dex dex)
@@ -415,7 +415,7 @@
     
     (define (cline-internals-call this a b)
       (dissect this (cline-internals-by-dex dex)
-      #/call-dex dex a b))
+      #/compare-by-dex dex a b))
   ])
 
 (define/contract (cline-by-dex dex)
@@ -473,9 +473,9 @@
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-default a1 a2)
       #/dissect other (cline-internals-default b1 b2)
-      #/dissect (call-dex dex-cline a1 b1) result
+      #/dissect (compare-by-dex dex-cline a1 b1) result
       #/expect result (just #/ordering-eq) result
-      #/call-dex dex-cline a2 b2))
+      #/compare-by-dex dex-cline a2 b2))
     
     (define (cline-internals-in? this x)
       (dissect this (cline-internals-default first second)
@@ -488,7 +488,7 @@
     
     (define (cline-internals-call this a b)
       (dissect this (cline-internals-default first second)
-      #/w- first-result (call-cline first a b)
+      #/w- first-result (compare-by-cline first a b)
       #/mat first-result (just -) first-result
       #/if (in-cline? first a)
         (if (in-cline? second b)
@@ -498,7 +498,7 @@
         (if (in-cline? second a)
           (just #/ordering-gt)
           (nothing))
-      #/call-cline second a b))
+      #/compare-by-cline second a b))
   ])
 
 (define/contract
@@ -552,11 +552,11 @@
         (cline-internals-by-own-method #/dexable dex get-method)
       #/expect (get-method a) (just a-method) (nothing)
       #/expect (get-method b) (just b-method) (nothing)
-      #/expect (call-dex dex-cline a-method b-method)
+      #/expect (compare-by-dex dex-cline a-method b-method)
         (just #/ordering-eq)
         ; TODO: Choose an error message.
         (error "Called a cline-by-own-method on two values with different methods")
-      #/call-cline a-method a b))
+      #/compare-by-cline a-method a b))
   ])
 
 (define/contract
@@ -600,7 +600,7 @@
     
     (define (cline-internals-call this a b)
       (dissect this (cline-internals-fix #/dexable dex unwrap)
-      #/call-cline (unwrap #/cline-encapsulated this) a b))
+      #/compare-by-cline (unwrap #/cline-encapsulated this) a b))
   ])
 
 (define/contract (cline-fix dexable-unwrap)
