@@ -107,6 +107,11 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 }
 
 
+@defproc[(name? [x any/c]) boolean?]{
+  Returns whether the given value is a name. In Effection, a "name" is something like a partial application of comparison by a dex. Any value can be converted to a name using @racket[name-of] if any dex for that value is at hand (and it always converts to the same name regardless of which dex is chosen), and names themselves can be compared using @racket[dex-name].
+}
+
+
 @defproc[(cline? [x any/c]) boolean?]{
   Returns whether the given value is a cline.
 }
@@ -135,6 +140,10 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Given a dex and a value, returns whether the value belongs to the dex's domain.
 }
 
+@defproc[(name-of [dex dex?] [x any/c]) (maybe/c name?)]{
+  Given a dex and a value, returns a @racket[just] of a name that the value can be compared by, if the value belongs to the dex's domain; otherwise returns a @racket[nothing].
+}
+
 @defproc[
   (compare-by-dex [dex dex?] [a any/c] [b any/c])
   (maybe/c dex-result?)
@@ -159,6 +168,12 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Compares the two given well-formed @racket[dexable] values to see if they have the same @racket[dexable-dex] and the same @racket[dexable-value]. If they have the same dex, this returns a @racket[just] of a @racket[dex-result?]; otherwise, this returns @racket[(nothing)].
 }
 
+@defproc[(name-of-dexable [x valid-dexable?]) name?]{
+  Given a well-formed @racket[dexable] value, returns a name the contained value can be compared by.
+  
+  This is a convenience layer over @racket[name-of].
+}
+
 
 @defthing[dex-dex dex?]{
   A dex that compares dexes.
@@ -170,6 +185,10 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   A dex that compares clines.
   
   All presently existing clines allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(cline-default (cline-give-up) (cline-give-up))] and @racket[(cline-give-up)] can be distinguished this way despite otherwise having equivalent behavior.
+}
+
+@defthing[dex-name dex?]{
+  A dex that compares names.
 }
 
 @defproc[(dex-by-cline [cline cline?]) dex?]{

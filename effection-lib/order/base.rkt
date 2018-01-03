@@ -21,18 +21,20 @@
 (provide ordering-private? dex-result? cline-result?)
 (provide make-ordering-private-lt make-ordering-private-gt)
 
+(provide name?)
+
 (provide cline?)
 (provide cline-containing)
 (provide in-cline? compare-by-cline)
 
 (provide dex?)
-(provide in-dex? compare-by-dex)
+(provide in-dex? name-of compare-by-dex)
 
 (provide #/struct-out dexable)
 (provide valid-dexable? dexableof)
-(provide dexables-autodex)
+(provide dexables-autodex name-of-dexable)
 
-(provide dex-dex dex-cline)
+(provide dex-dex dex-cline dex-name dex-by-cline)
 (provide
   cline-by-dex
   cline-give-up
@@ -80,7 +82,6 @@
 ; ascend in that order.
 (struct-easy "a name" (name-internal rep))
 
-; TODO: Provide and document this.
 (define/contract (name? x)
   (-> any/c boolean?)
   (name-internal? x))
@@ -142,7 +143,6 @@
   (dissect cline (cline-encapsulated internals)
   #/cline-internals-in? internals x))
 
-; TODO: Rename, provide, and document this.
 (define/contract (name-of-by-cline cline x)
   (-> cline? any/c #/maybe/c name?)
   (dissect cline (cline-encapsulated internals)
@@ -178,8 +178,7 @@
   (dissect dex (dex-encapsulated internals)
   #/dex-internals-in? internals x))
 
-; TODO: Rename, provide, and document this.
-(define/contract (name-of-by-dex dex x)
+(define/contract (name-of dex x)
   (-> dex? any/c #/maybe/c name?)
   (dissect dex (dex-encapsulated internals)
   #/dex-internals-name-of internals x))
@@ -220,6 +219,7 @@
           (dissect x (dexable dex x)
           #/dexable dex #/c-projection x))))))
 
+; TODO: Rename this to `compare-dexables`.
 (define/contract (dexables-autodex a b)
   (-> valid-dexable? valid-dexable? #/maybe/c dex-result?)
   (dissect a (dexable a-dex a)
@@ -228,11 +228,10 @@
     (nothing)
   #/compare-by-dex a-dex a b))
 
-; TODO: Rename, provide, and document this.
-(define/contract (name-of x)
+(define/contract (name-of-dexable x)
   (-> valid-dexable? name?)
   (dissect x (dexable dex x)
-  #/dissect (name-of-by-dex dex x) (just result)
+  #/dissect (name-of dex x) (just result)
     result))
 
 
@@ -338,7 +337,6 @@
         (nothing)))
   ])
 
-; TODO: Provide and document this.
 (define/contract dex-name dex?
   (dex-encapsulated #/dex-internals-name))
 
@@ -408,7 +406,7 @@
     
     (define (cline-internals-name-of this x)
       (dissect this (cline-internals-by-dex dex)
-      #/name-of-by-dex dex x))
+      #/name-of dex x))
     
     (define (cline-internals-call this a b)
       (dissect this (cline-internals-by-dex dex)
@@ -522,7 +520,7 @@
         (cline-internals-by-own-method #/dexable dex get-method)
       #/list 'cline-by-own-method
         (autoname-dex dex)
-        (name-of-by-dex dex get-method)))
+        (name-of dex get-method)))
     
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-by-own-method a)
@@ -580,7 +578,7 @@
       (dissect this (cline-internals-fix #/dexable dex unwrap)
       #/list 'cline-fix
         (autoname-dex dex)
-        (name-of-by-dex dex unwrap)))
+        (name-of dex unwrap)))
     
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-fix a)
