@@ -85,7 +85,6 @@
   (-> any/c boolean?)
   (name-internal? x))
 
-; TODO: Provide and document this.
 (define/contract (names-autodex a b)
   (-> name? name? dex-result?)
   (dissect a (name-internal a)
@@ -133,7 +132,6 @@
   (-> any/c flat-contract?)
   (and/c cline? #/lambda (cline) (in-cline? cline x)))
 
-; TODO: See if we should provide and document this.
 (define/contract (autoname-cline cline)
   (-> cline? name?)
   (dissect cline (cline-encapsulated internals)
@@ -144,7 +142,7 @@
   (dissect cline (cline-encapsulated internals)
   #/cline-internals-in? internals x))
 
-; TODO: See if we should provide and document this.
+; TODO: Rename, provide, and document this.
 (define/contract (name-of-by-cline cline x)
   (-> cline? any/c #/maybe/c name?)
   (dissect cline (cline-encapsulated internals)
@@ -170,7 +168,6 @@
   (-> any/c boolean?)
   (dex-encapsulated? x))
 
-; TODO: See if we should provide and document this.
 (define/contract (autoname-dex dex)
   (-> dex? name?)
   (dissect dex (dex-encapsulated internals)
@@ -181,7 +178,7 @@
   (dissect dex (dex-encapsulated internals)
   #/dex-internals-in? internals x))
 
-; TODO: See if we should provide and document this.
+; TODO: Rename, provide, and document this.
 (define/contract (name-of-by-dex dex x)
   (-> dex? any/c #/maybe/c name?)
   (dissect dex (dex-encapsulated internals)
@@ -231,7 +228,7 @@
     (nothing)
   #/compare-by-dex a-dex a b))
 
-; TODO: Provide and document this.
+; TODO: Rename, provide, and document this.
 (define/contract (name-of x)
   (-> valid-dexable? name?)
   (dissect x (dexable dex x)
