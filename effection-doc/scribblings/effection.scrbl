@@ -98,6 +98,14 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Returns whether the given value is a possible result for a dex (something that satisfies @racket[ordering-lt?], @racket[dex-result?], or @racket[ordering-gt?]).
 }
 
+@defproc[(make-ordering-private-lt) ordering-private?]{
+  Returns a value that represents the result of a comparison where the first value turned out to be secretly strictly less than the second value.
+}
+
+@defproc[(make-ordering-private-gt) ordering-private?]{
+  Returns a value that represents the result of a comparison where the first value turned out to be secretly strictly greater than the second value.
+}
+
 
 @defproc[(cline? [x any/c]) boolean?]{
   Returns whether the given value is a cline.

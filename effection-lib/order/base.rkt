@@ -18,11 +18,8 @@
 (provide #/struct-out ordering-lt)
 (provide #/struct-out ordering-eq)
 (provide #/struct-out ordering-gt)
-; TODO: Consider exporting functions that construct
-; `ordering-private-lt` and `ordering-private-gt` values.
-(provide ordering-private?)
-(provide dex-result?)
-(provide cline-result?)
+(provide ordering-private? dex-result? cline-result?)
+(provide make-ordering-private-lt make-ordering-private-gt)
 
 (provide cline?)
 (provide cline-containing)
@@ -62,6 +59,20 @@
 (define/contract (cline-result? x)
   (-> any/c boolean?)
   (or (dex-result? x) (ordering-lt? x) (ordering-gt? x)))
+
+; NOTE: We make these procedures because if we provided them as bare
+; values, we would encourage people to write code that appeared to
+; keep the ordering private but actually exposed it to a simple `eq?`
+; check. Of course, Effection-unsafe Racket code can still compare
+; these values by writing them to streams and observing the data
+; that's written this way, but at least that's harder to do by
+; accident.
+(define/contract (make-ordering-private-lt)
+  (-> ordering-private?)
+  (ordering-private-lt))
+(define/contract (make-ordering-private-gt)
+  (-> ordering-private?)
+  (ordering-private-gt))
 
 
 ; Internally, we represent name values as data made of symbols, empty
