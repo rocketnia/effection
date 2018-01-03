@@ -533,7 +533,7 @@
     (define (cline-internals-name-of this x)
       (dissect this
         (cline-internals-by-own-method #/dexable dex get-method)
-      #/expect (get-method x) (just method) #f
+      #/expect (get-method x) (just method) (nothing)
       #/name-of-by-cline method x))
     
     (define (cline-internals-call this a b)
