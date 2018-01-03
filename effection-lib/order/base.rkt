@@ -32,7 +32,7 @@
 
 (provide #/struct-out dexable)
 (provide valid-dexable? dexableof)
-(provide dexables-autodex name-of-dexable)
+(provide compare-dexables name-of-dexable)
 
 (provide dex-dex dex-cline dex-name dex-by-cline)
 (provide
@@ -219,8 +219,7 @@
           (dissect x (dexable dex x)
           #/dexable dex #/c-projection x))))))
 
-; TODO: Rename this to `compare-dexables`.
-(define/contract (dexables-autodex a b)
+(define/contract (compare-dexables a b)
   (-> valid-dexable? valid-dexable? #/maybe/c dex-result?)
   (dissect a (dexable a-dex a)
   #/dissect b (dexable b-dex b)
@@ -525,7 +524,7 @@
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-by-own-method a)
       #/dissect other (cline-internals-by-own-method b)
-      #/dexables-autodex a b))
+      #/compare-dexables a b))
     
     (define (cline-internals-in? this x)
       (dissect this
@@ -583,7 +582,7 @@
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-fix a)
       #/dissect other (cline-internals-fix b)
-      #/dexables-autodex a b))
+      #/compare-dexables a b))
     
     (define (cline-internals-in? this x)
       (dissect this (cline-internals-fix #/dexable dex unwrap)

@@ -164,7 +164,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Returns a contract that recognizes a well-formed @racket[dexable] and additionally imposes the given contract on its @racket[dexable-value].
 }
 
-@defproc[(dexables-autodex [a valid-dexable?] [b valid-dexable?]) (maybe/c dex-result?)]{
+@defproc[(compare-dexables [a valid-dexable?] [b valid-dexable?]) (maybe/c dex-result?)]{
   Compares the two given well-formed @racket[dexable] values to see if they have the same @racket[dexable-dex] and the same @racket[dexable-value]. If they have the same dex, this returns a @racket[just] of a @racket[dex-result?]; otherwise, this returns @racket[(nothing)].
 }
 
