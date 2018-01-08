@@ -3,3 +3,4 @@
 (define collection "effection")
 
 (define deps (list "base" "effection-lib" "rackunit-lib"))
+(define build-deps (list "parendown-lib"))

@@ -554,8 +554,13 @@
       #/expect (get-method b) (just b-method) (nothing)
       #/expect (compare-by-dex dex-cline a-method b-method)
         (just #/ordering-eq)
-        ; TODO: Choose an error message.
-        (error "Called a cline-by-own-method on two values with different methods")
+        (raise-arguments-error 'cline-by-own-method
+          "A cline-by-own-method obtained two different methods from the two values being compared"
+          "get-method" get-method
+          "a" a
+          "b" b
+          "a-method" a-method
+          "b-method" b-method)
       #/compare-by-cline a-method a b))
   ])
 
