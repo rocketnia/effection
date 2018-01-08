@@ -33,13 +33,13 @@ Maybe values are a way to encode optional data. Using maybe values can simplify 
 @defstruct*[nothing ()]{
   A maybe value that does not contain a value.
   
-  Every two nothing values are @racket[equal?].
+  Every two @tt{nothing} values are @racket[equal?].
 }
 
 @defstruct*[just ([value any/c])]{
   A maybe value that does contain a value.
   
-  Two just values are @racket[equal?] if they contain @racket[equal?] values.
+  Two @tt{just} values are @racket[equal?] if they contain @racket[equal?] values.
 }
 
 @defproc[(maybe? [x any/c]) boolean?]{
@@ -63,9 +63,9 @@ However, a cline does not merely expose this total ordering. Within the cline’
 @itemlist[
     @item{@racket[(list)]: The values are not both in the domain.}
     @item{@racket[(list (ordering-lt))]: The first value candidly precedes the second.}
-    @item{@racket[(list _ordering-private-lt)] where @var[ordering-private-lt] is an opaque value that satisfies @racket[ordering-private?]: The first value secretly precedes the second.}
+    @item{@racket[(list (make-ordering-private-lt))]: The first value secretly precedes the second.}
     @item{@racket[(list (ordering-eq))]: The first value is equal to the second.}
-    @item{@racket[(list _ordering-private-gt)] where @var[ordering-private-gt] is an opaque value that satisfies @racket[ordering-private?]: The first value secretly follows the second.}
+    @item{@racket[(list (make-ordering-private-gt))]: The first value secretly follows the second.}
     @item{@racket[(list (ordering-gt))]: The first value candidly follows the second.}
 ]
 
@@ -76,14 +76,20 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 
 @defstruct*[ordering-lt ()]{
   A struct that represents the result of a comparison where the first value turned out to be candidly strictly less than the second value.
+  
+  For the purposes of Effection-unsafe Racket code, every two @tt{ordering-lt} values are @racket[equal?].
 }
 
 @defstruct*[ordering-eq ()]{
   A struct that represents the result of a comparison where the first value turned out to be equal to the second value.
+  
+  For the purposes of Effection-unsafe Racket code, every two @tt{ordering-eq} values are @racket[equal?].
 }
 
 @defstruct*[ordering-gt ()]{
   A struct that represents the result of a comparison where the first value turned out to be candidly strictly greater than the second value.
+  
+  For the purposes of Effection-unsafe Racket code, every two @tt{ordering-gt} values are @racket[equal?].
 }
 
 @defproc[(ordering-private? [x any/c]) boolean?]{

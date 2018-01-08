@@ -45,14 +45,20 @@
 
 
 (struct-easy "an ordering-lt" (ordering-lt) #:equal)
-(struct-easy "an ordering-private-lt" (ordering-private-lt) #:equal)
 (struct-easy "an ordering-eq" (ordering-eq) #:equal)
-(struct-easy "an ordering-private-gt" (ordering-private-gt) #:equal)
 (struct-easy "an ordering-gt" (ordering-gt) #:equal)
+
+; NOTE: We used to expose this as two structs, namely
+; `ordering-private-lt` and `ordering-private-gt`, but that approach
+; had a problem: Using `struct->vector`, Racket code can detect which
+; is which without even going to the trouble of writing the values to
+; a text stream.
+(struct-easy "an ordering-private-encapsulated"
+  (ordering-private-encapsulated ordering))
 
 (define/contract (ordering-private? x)
   (-> any/c boolean?)
-  (or (ordering-private-lt? x) (ordering-private-gt? x)))
+  (ordering-private-encapsulated? x))
 
 (define/contract (dex-result? x)
   (-> any/c boolean?)
@@ -71,10 +77,10 @@
 ; accident.
 (define/contract (make-ordering-private-lt)
   (-> ordering-private?)
-  (ordering-private-lt))
+  (ordering-private-encapsulated #/ordering-lt))
 (define/contract (make-ordering-private-gt)
   (-> ordering-private?)
-  (ordering-private-gt))
+  (ordering-private-encapsulated #/ordering-gt))
 
 
 ; Internally, we represent name values as data made of symbols, empty
@@ -98,20 +104,20 @@
         (w- first-result (next a-first b-first)
         #/expect first-result (ordering-eq) first-result
         #/next a-rest b-rest)
-      #/ordering-private-gt)
-    #/mat b (cons b-first b-rest) (ordering-private-lt)
+      #/make-ordering-private-gt)
+    #/mat b (cons b-first b-rest) (make-ordering-private-lt)
     
     ; Handle the empty lists.
     #/mat a (list)
       (mat b (list) (ordering-eq)
-      #/ordering-private-gt)
-    #/mat b (list) (ordering-private-lt)
+      #/make-ordering-private-gt)
+    #/mat b (list) (make-ordering-private-lt)
     
     ; Handle the symbols.
     #/if (symbol<? a b)
-      (ordering-private-lt)
+      (make-ordering-private-lt)
     #/if (symbol<? b a)
-      (ordering-private-gt)
+      (make-ordering-private-gt)
       (ordering-eq))))
 
 
@@ -371,8 +377,8 @@
       #/w- cline-result (compare-by-cline cline a b)
       #/expect cline-result (just cline-result) cline-result
       #/list
-      #/mat cline-result (ordering-lt) (ordering-private-lt)
-      #/mat cline-result (ordering-gt) (ordering-private-gt)
+      #/mat cline-result (ordering-lt) (make-ordering-private-lt)
+      #/mat cline-result (ordering-gt) (make-ordering-private-gt)
         cline-result))
   ])
 
