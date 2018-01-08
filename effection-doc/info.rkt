@@ -6,4 +6,5 @@
 (define build-deps
   (list "effection-lib" "parendown-lib" "racket-doc" "scribble-lib"))
 
-(define scribblings (list (list "scribblings/effection.scrbl" (list))))
+(define scribblings
+  (list (list "scribblings/effection.scrbl" (list))))
