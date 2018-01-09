@@ -140,14 +140,41 @@
 
 ; ===== Names, dexes, and dexables ===================================
 
-; Internally, we represent name values as data made of symbols, empty
-; lists, and cons cells, and for sorting purposes, we consider them to
-; ascend in that order.
+; Internally, we represent name values as data made of structure type
+; descriptors, symbols, empty lists, and cons cells, and for sorting
+; purposes, we consider them to ascend in that order.
 (struct-easy "a name" (name-internal rep))
 
 (define/contract (name? x)
   (-> any/c boolean?)
   (name-internal? x))
+
+(define/contract (lt-autodex a b <?)
+  (-> any/c any/c (-> any/c any/c boolean?) dex-result?)
+  (if (<? a b) (make-ordering-private-lt)
+  #/if (<? b a) (make-ordering-private-gt)
+  #/ordering-eq))
+
+; TODO: Test this implementation very thoroughly. We need to know what
+; happens when this module is used through diamond dependencies, what
+; happens if this module is somehow visited more than once, and that
+; kind of thing. We probably won't be able to guarantee struct type
+; descriptors will be sorted the same way in every phase, but we can
+; at least document why not.
+(define descriptors-semaphore* (make-semaphore 1))
+(define descriptors-to-ranks* (make-weak-hasheq))
+(define descriptors-next-rank* 0)
+(define/contract (descriptor-rank descriptor)
+  (-> struct-type? exact-nonnegative-integer?)
+  (call-with-semaphore descriptors-semaphore* #/lambda ()
+    (if (hash-has-key? descriptors-to-ranks* descriptor)
+      (hash-ref descriptors-to-ranks* descriptor)
+    #/w- rank descriptors-next-rank*
+      (hash-set! descriptors-to-ranks* descriptor rank)
+      (set! descriptors-next-rank* (add1 rank)))))
+(define/contract (struct-type-descriptors-autodex a b)
+  (-> struct-type? struct-type? dex-result?)
+  (lt-autodex (descriptor-rank a) (descriptor-rank b) <))
 
 (define/contract (names-autodex a b)
   (-> name? name? dex-result?)
@@ -171,11 +198,13 @@
     #/mat b (list) (make-ordering-private-lt)
     
     ; Handle the symbols.
-    #/if (symbol<? a b)
-      (make-ordering-private-lt)
-    #/if (symbol<? b a)
-      (make-ordering-private-gt)
-      (ordering-eq))))
+    #/if (symbol? a)
+      (if (symbol? b) (lt-autodex a b symbol<?)
+      #/make-ordering-private-gt)
+    #/if (symbol? b) (make-ordering-private-lt)
+    
+    ; Handle the structure type descriptors.
+    #/struct-type-descriptors-autodex a b)))
 
 
 (define-generics dex-internals
@@ -256,44 +285,6 @@
   (dissect x (dexable dex x)
   #/dissect (name-of dex x) (just result)
     result))
-
-
-
-(define/contract (lt-autodex a b <?)
-  (-> any/c any/c (-> any/c any/c boolean?) dex-result?)
-  (if (<? a b) (make-ordering-private-lt)
-  #/if (<? b a) (make-ordering-private-gt)
-  #/ordering-eq))
-
-; TODO: Test this implementation very thoroughly. We need to know what
-; happens when this module is used through diamond dependencies, what
-; happens if this module is somehow visited more than once, and that
-; kind of thing. We probably won't be able to guarantee struct type
-; descriptors will be sorted the same way in every phase, but we can
-; at least document why not.
-(define descriptors-semaphore* (make-semaphore 1))
-(define descriptors-to-ranks* (make-weak-hasheq))
-(define descriptors-next-rank* 0)
-(define/contract (descriptor-rank descriptor)
-  (-> struct-type? exact-nonnegative-integer?)
-  (call-with-semaphore descriptors-semaphore* #/lambda ()
-    (if (hash-has-key? descriptors-to-ranks* descriptor)
-      (hash-ref descriptors-to-ranks* descriptor)
-    #/w- rank descriptors-next-rank*
-      (hash-set! descriptors-to-ranks* descriptor rank)
-      (set! descriptors-next-rank* (add1 rank)))))
-(define/contract (struct-type-descriptors-autodex a b)
-  (-> struct-type? struct-type? dex-result?)
-  (lt-autodex (descriptor-rank a) (descriptor-rank b) <))
-
-(define/contract (lists-autodex as bs elem-autodex)
-  (-> list? list? (-> any/c any/c #/maybe/c dex-result?)
-    (maybe/c dex-result?))
-  (expect as (cons a as) (just #/make-ordering-private-lt)
-  #/expect bs (cons b bs) (just #/make-ordering-private-gt)
-  #/expect (elem-autodex a b) (just elem-result) (nothing)
-  #/expect elem-result (ordering-eq) (just elem-result)
-  #/lists-autodex as bs elem-autodex))
 
 
 
@@ -559,7 +550,15 @@
       #/w- descriptor-result
         (struct-type-descriptors-autodex a-descriptor b-descriptor)
       #/expect descriptor-result (ordering-eq) descriptor-result
-      #/lists-autodex a-fields b-fields #/lambda (a-field b-field)
+      #/begin
+        (define (aligned-lists-autodex as bs elem-autodex)
+          (expect (list as bs) (list (cons a as) (cons b bs))
+            (just #/ordering-eq)
+          #/expect (elem-autodex a b) (just elem-result) (nothing)
+          #/expect elem-result (ordering-eq) (just elem-result)
+          #/aligned-lists-autodex as bs elem-autodex))
+      #/aligned-lists-autodex a-fields b-fields
+      #/lambda (a-field b-field)
         (dissect a-field (list a-getter a-dex)
         #/dissect b-field (list b-getter b-dex)
         #/compare-by-dex dex-dex a-dex b-dex)))
