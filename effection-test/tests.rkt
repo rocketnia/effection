@@ -6,7 +6,7 @@
 
 (require rackunit)
 
-(require #/only-in lathe expect)
+(require #/only-in lathe expect w-)
 
 (require effection/maybe)
 (require effection/order)
@@ -80,3 +80,35 @@
     (just-value #/name-of (dex-maybe dex-give-up) (nothing)))
   (just #/ordering-eq)
   "Using `name-of` with different dexes gives the same name")
+
+
+(struct-easy "a custom-pair" (custom-pair a b))
+
+(check-equal?
+  (compare-by-dex
+    (dex-struct-by-field-position custom-pair
+      [0 dex-dex]
+      [1 dex-cline])
+    (custom-pair dex-give-up cline-give-up)
+    (custom-pair dex-give-up cline-give-up))
+  (just #/ordering-eq)
+  "Specifying fields in order with `dex-struct-by-field-position` works")
+(check-equal?
+  (compare-by-dex
+    (dex-struct-by-field-position custom-pair
+      [1 dex-cline]
+      [0 dex-dex])
+    (custom-pair dex-give-up cline-give-up)
+    (custom-pair dex-give-up cline-give-up))
+  (just #/ordering-eq)
+  "Specifying fields out of order with `dex-struct-by-field-position` works")
+
+(check-equal?
+  (w- name
+    (just-value #/name-of dex-dex
+    #/dex-struct-by-field-position custom-pair
+      [1 dex-cline]
+      [0 dex-dex])
+    (compare-by-dex dex-name name name))
+  (just #/ordering-eq)
+  "Names that internally contain structure type descriptors and exact nonnegative integers can be compared")

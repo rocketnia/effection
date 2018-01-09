@@ -189,7 +189,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 ]{
   Given two dexes, returns a dex over the union of their domains.
   
-  For the sake of nontermination, errors, and performance concerns, this attempts to compute the result using @racket[dex-for-trying-first] before it moves on to @racket[dex-for-trying-second].
+  For the sake of nontermination, error, and performance concerns, this attempts to compute the result using @racket[dex-for-trying-first] before it moves on to @racket[dex-for-trying-second].
   
   When compared by @racket[dex-dex], all @racket[dex-default] values are @racket[ordering-eq] if their @var[dex-for-trying-first] values are and their @var[dex-for-trying-second] values are.
 }
@@ -211,10 +211,27 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 }
 
 @defform[
+  (dex-struct-by-field-position struct-id
+    [field-position-nat dex-expr]
+    ...)
+  #:contracts ([dex-expr dex?])
+]{
+  Returns a dex that compares instances of the structure type named by @racket[struct-id], and whose field values can be compared by the dexes produced by the @racket[dex-expr] expressions.
+  
+  Each @racket[field-position-nat] must be a distinct number indicating which field should be checked by the associated dex, and there must be an entry for every field.
+  
+  For the sake of nontermination, error, and performance concerns, this dex computes by attempting the given dexes in the order they appear in this call.
+  
+  A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
+}
+
+@defform[
   (dex-struct struct-id dex-expr ...)
   #:contracts ([dex-expr dex?])
 ]{
   Returns a dex that compares instances of the structure type named by @racket[struct-id], and whose field values can be compared by the dexes produced by the @racket[dex-expr] expressions.
+  
+  For the sake of nontermination, error, and performance concerns, this dex computes by attempting the given dexes in the order they appear in this call.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
 }
@@ -270,7 +287,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 ]{
   Given two clines, returns a cline over the union of their domains. The resulting cline’s ascending order consists of the first cline’s ascending order in its domain, followed by the second cline’s ascending order outside the first cline’s domain.
   
-  For the sake of nontermination, errors, and performance concerns, this attempts to compute the result using @racket[cline-for-trying-first] before it moves on to @racket[cline-for-trying-second].
+  For the sake of nontermination, error, and performance concerns, this attempts to compute the result using @racket[cline-for-trying-first] before it moves on to @racket[cline-for-trying-second].
   
   When compared by @racket[dex-cline], all @racket[cline-default] values are @racket[ordering-eq] if their @var[cline-for-trying-first] values are and their @var[cline-for-trying-second] values are.
   

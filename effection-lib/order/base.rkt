@@ -7,7 +7,7 @@
 (require #/for-syntax #/only-in racket/contract/base -> any/c listof)
 (require #/for-syntax #/only-in racket/contract/region
   define/contract)
-(require #/for-syntax #/only-in syntax/parse expr id syntax-parse)
+(require #/for-syntax #/only-in syntax/parse expr id nat syntax-parse)
 
 (require #/for-syntax #/only-in lathe
   dissect expect mat next nextlet w-)
@@ -16,7 +16,7 @@
 
 
 (require #/only-in racket/contract/base
-  -> and/c any/c chaperone-contract? contract? contract-projection
+  -> and/c any any/c chaperone-contract? contract? contract-projection
   struct/c)
 (require #/only-in racket/contract/combinator
   contract-first-order-passes? make-contract)
@@ -56,6 +56,7 @@
   dex-default
   dex-by-own-method
   dex-fix
+  dex-struct-by-field-position
   dex-struct)
 
 
@@ -141,8 +142,9 @@
 ; ===== Names, dexes, and dexables ===================================
 
 ; Internally, we represent name values as data made of structure type
-; descriptors, symbols, empty lists, and cons cells, and for sorting
-; purposes, we consider them to ascend in that order.
+; descriptors, exact nonnegative integers, symbols, empty lists, and
+; cons cells, and for sorting purposes, we consider them to ascend in
+; that order.
 (struct-easy "a name" (name-internal rep))
 
 (define/contract (name? x)
@@ -171,7 +173,8 @@
       (hash-ref descriptors-to-ranks* descriptor)
     #/w- rank descriptors-next-rank*
       (hash-set! descriptors-to-ranks* descriptor rank)
-      (set! descriptors-next-rank* (add1 rank)))))
+      (set! descriptors-next-rank* (add1 rank))
+      rank)))
 (define/contract (struct-type-descriptors-autodex a b)
   (-> struct-type? struct-type? dex-result?)
   (lt-autodex (descriptor-rank a) (descriptor-rank b) <))
@@ -203,6 +206,12 @@
       #/make-ordering-private-gt)
     #/if (symbol? b) (make-ordering-private-lt)
     
+    ; Handle the exact nonnegative integers.
+    #/if (exact-nonnegative-integer? a)
+      (if (exact-nonnegative-integer? b) (lt-autodex a b <)
+      #/make-ordering-private-gt)
+    #/if (exact-nonnegative-integer? b) (make-ordering-private-lt)
+    
     ; Handle the structure type descriptors.
     #/struct-type-descriptors-autodex a b)))
 
@@ -222,7 +231,7 @@
   (dex-encapsulated? x))
 
 (define/contract (autoname-dex dex)
-  (-> dex? name?)
+  (-> dex? any)
   (dissect dex (dex-encapsulated internals)
   #/dex-internals-autoname internals))
 
@@ -548,8 +557,8 @@
     (define (dex-internals-autoname this)
       (dissect this (dex-internals-struct descriptor counts? fields)
       #/list 'dex-struct descriptor
-      #/list-fmap fields #/dissectfn (list getter dex)
-        (autoname-dex dex)))
+      #/list-fmap fields #/dissectfn (list getter position dex)
+        (list position #/autoname-dex dex)))
     
     (define (dex-internals-autodex this other)
       (dissect this
@@ -568,8 +577,10 @@
           #/aligned-lists-autodex as bs elem-autodex))
       #/aligned-lists-autodex a-fields b-fields
       #/lambda (a-field b-field)
-        (dissect a-field (list a-getter a-dex)
-        #/dissect b-field (list b-getter b-dex)
+        (dissect a-field (list a-getter a-position a-dex)
+        #/dissect b-field (list b-getter b-position b-dex)
+        #/w- position-result (lt-autodex a-position b-position <)
+        #/expect position-result (ordering-eq) position-result
         #/compare-by-dex dex-dex a-dex b-dex)))
     
     (define (dex-internals-in? this x)
@@ -579,9 +590,13 @@
     (define (dex-internals-name-of this x)
       (dissect this (dex-internals-struct descriptor counts? fields)
       #/expect (counts? x) #t (nothing)
-      #/just #/name-internal #/cons 'struct
-      #/list-fmap fields #/dissectfn (list getter dex)
-        (name-of dex #/getter x)))
+      #/nextlet fields fields rev-result (list)
+        (expect fields (cons field fields)
+          (just #/name-internal #/cons 'struct #/reverse rev-result)
+        #/dissect field (list getter position dex)
+        #/expect (name-of dex #/getter x) (just name) (nothing)
+        #/dissect name (name-internal rep)
+        #/next fields #/cons rep rev-result)))
     
     (define (dex-internals-call this a b)
       (dissect this (dex-internals-struct descriptor counts? fields)
@@ -589,7 +604,7 @@
       #/expect (counts? b) #t (nothing)
       #/nextlet fields fields
         (expect fields (cons field fields) (just #/ordering-eq)
-        #/dissect field (list getter dex)
+        #/dissect field (list getter position dex)
         #/expect (compare-by-dex dex (getter a) (getter b))
           (just elem-result)
           (nothing)
@@ -597,13 +612,13 @@
         #/next fields)))
   ])
 
-(define-syntax dex-struct #/lambda (stx) #/syntax-parse stx #/
-  (_ struct-tag:id field-dexes:expr ...)
-  (w- struct-info (syntax-local-value #'struct-tag)
+; TODO: Move this somewhere better.
+(define-for-syntax (get-immutable-root-ancestor-struct-info stx id)
+  (w- struct-info (syntax-local-value id)
   #/expect (struct-info? struct-info) #t
     (raise-syntax-error #f
       "not an identifier with struct-info attached"
-      stx #'struct-tag)
+      stx id)
   #/dissect (extract-struct-info struct-info)
     (list struct:foo make-foo foo? getters setters super)
   #/expect super #t
@@ -611,43 +626,89 @@
       (nextlet super super
         (mat super #f
           ; The super-type is unknown.
-          "can only make a dex-struct for the root super-type in a structure type hierarchy"
+          "not the root super-type in a structure type hierarchy"
         #/dissect (extract-struct-info #/syntax-local-value super)
           (list _ _ _ _ _ super-super)
         #/expect super-super #t (next super-super)
         ; There is no super-type beyond this one.
         #/format
-          "can only make a dex-struct for the root super-type in a structure type hierarchy, in this case ~s"
+          "not the root super-type in a structure type hierarchy, which in this case would be ~s"
           (syntax-e super)))
-      stx #'struct-tag)
+      stx id)
   #/expect
     (list-all getters #/lambda (getter) #/not #/eq? #f getter)
     #t
     (raise-syntax-error #f
       "not a structure type with all of its getters available"
-      stx #'struct-tag)
+      stx id)
   #/expect (list-all setters #/lambda (setter) #/eq? #f setter) #t
     (raise-syntax-error #f
       "not an immutable structure type"
-      stx #'struct-tag)
+      stx id)
   ; TODO: Also verify that `struct:foo`, `make-foo`, `foo?`, and
   ; `getters` all belong to the same structure type and that the
   ; `getters` are exhaustive and arranged in the correct order.
   ; Otherwise, this could create a dex that doesn't behave
   ; consistently with other dexes for the same structure type.
-  #/w- field-dexes (desyntax-list #'#/field-dexes ...)
-  #/expect (= (length getters) (length field-dexes)) #t
+  #/list struct:foo make-foo foo? #/reverse getters))
+
+(define-syntax dex-struct-by-field-position
+#/lambda (stx) #/syntax-parse stx #/
+  (_ struct-tag:id [field-position:nat field-dex:expr] ...)
+  (dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
+    (list struct:foo make-foo foo? getters)
+  #/w- fields (desyntax-list #'#/[field-position field-dex] ...)
+  #/w- n (length getters)
+  #/expect (= n (length fields)) #t
     (raise-syntax-error #f
       (format "expected ~s dexes, got ~s"
-        (length getters)
-        (length field-dexes))
+        n
+        (length fields))
+      stx)
+  #/w- seen (make-hasheq)
+  #/syntax-protect
+    #`(dex-encapsulated #/dex-internals-struct #,struct:foo #,foo?
+      #/list
+        #,@(list-fmap fields #/lambda (field)
+             (dissect (desyntax-list field)
+               (list position-stx dex)
+             #/w- position (syntax-e position-stx)
+             #/expect (< position n) #t
+               (raise-syntax-error #f
+                 (format
+                   "expected a field position less than ~s, got ~s"
+                   n
+                   position)
+                 stx position-stx)
+             #/expect (hash-has-key? seen position) #f
+               (raise-syntax-error #f
+                 "duplicate field position"
+                 stx position-stx)
+             #/begin (hash-set! seen position #t)
+               #`(list
+                   #,(list-ref getters position)
+                   #,position-stx
+                   #,dex))))))
+
+(define-syntax dex-struct #/lambda (stx) #/syntax-parse stx #/
+  (_ struct-tag:id field-dex:expr ...)
+  (dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
+    (list struct:foo make-foo foo? getters)
+  #/w- fields (desyntax-list #'#/field-dex ...)
+  #/w- n (length getters)
+  #/expect (= n (length fields)) #t
+    (raise-syntax-error #f
+      (format "expected ~s dexes, got ~s"
+        n
+        (length fields))
       stx)
   #/syntax-protect
     #`(dex-encapsulated #/dex-internals-struct #,struct:foo #,foo?
       #/list
-        #,@(list-zip-map (reverse getters) field-dexes
-           #/lambda (getter field-dex)
-             #`(list #,getter #,field-dex)))))
+        #,@(list-kv-map (map list fields getters)
+           #/lambda (position field)
+             (dissect field (list dex getter)
+               #`(list #,getter #,position #,dex))))))
 
 
 
@@ -668,7 +729,7 @@
   (cline-encapsulated? x))
 
 (define/contract (autoname-cline cline)
-  (-> cline? name?)
+  (-> cline? any)
   (dissect cline (cline-encapsulated internals)
   #/cline-internals-autoname internals))
 
