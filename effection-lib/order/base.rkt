@@ -22,6 +22,7 @@
   contract-first-order-passes? make-contract)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/generic define/generic define-generics)
+(require #/only-in syntax/parse/define define-simple-macro)
 
 (require #/only-in lathe dissect dissectfn expect mat next nextlet w-)
 
@@ -137,6 +138,15 @@
   (-> ordering-private?)
   (ordering-private-encapsulated #/ordering-gt))
 
+(define-simple-macro (ordering-or first:expr second:expr)
+  (w- result first
+  #/expect result (ordering-eq) result
+    second))
+
+(define-simple-macro (maybe-ordering-or first:expr second:expr)
+  (w- result first
+  #/expect result (just #/ordering-eq) result
+    second))
 
 
 ; ===== Names, dexes, and dexables ===================================
@@ -188,9 +198,7 @@
     ; Handle the cons cells.
     (mat a (cons a-first a-rest)
       (mat b (cons b-first b-rest)
-        (w- first-result (next a-first b-first)
-        #/expect first-result (ordering-eq) first-result
-        #/next a-rest b-rest)
+        (ordering-or (next a-first b-first) (next a-rest b-rest))
       #/make-ordering-private-gt)
     #/mat b (cons b-first b-rest) (make-ordering-private-lt)
     
@@ -417,9 +425,9 @@
     (define (dex-internals-autodex this other)
       (dissect this (dex-internals-default a1 a2)
       #/dissect other (dex-internals-default b1 b2)
-      #/dissect (compare-by-dex dex-dex a1 b1) result
-      #/expect result (just #/ordering-eq) result
-      #/compare-by-dex dex-dex a2 b2))
+      #/maybe-ordering-or
+        (compare-by-dex dex-dex a1 b1)
+        (compare-by-dex dex-dex a2 b2)))
     
     (define (dex-internals-in? this x)
       (dissect this (dex-internals-default first second)
@@ -565,22 +573,21 @@
         (dex-internals-struct a-descriptor a-counts? a-fields)
       #/dissect other
         (dex-internals-struct b-descriptor b-counts? b-fields)
-      #/w- descriptor-result
-        (struct-type-descriptors-autodex a-descriptor b-descriptor)
-      #/expect descriptor-result (ordering-eq) descriptor-result
+      #/maybe-ordering-or
+        (just
+        #/struct-type-descriptors-autodex a-descriptor b-descriptor)
       #/begin
         (define (aligned-lists-autodex as bs elem-autodex)
           (expect (list as bs) (list (cons a as) (cons b bs))
             (just #/ordering-eq)
-          #/expect (elem-autodex a b) (just elem-result) (nothing)
-          #/expect elem-result (ordering-eq) (just elem-result)
+          #/maybe-ordering-or (elem-autodex a b)
           #/aligned-lists-autodex as bs elem-autodex))
       #/aligned-lists-autodex a-fields b-fields
       #/lambda (a-field b-field)
         (dissect a-field (list a-getter a-position a-dex)
         #/dissect b-field (list b-getter b-position b-dex)
-        #/w- position-result (lt-autodex a-position b-position <)
-        #/expect position-result (ordering-eq) position-result
+        #/maybe-ordering-or
+          (just #/lt-autodex a-position b-position <)
         #/compare-by-dex dex-dex a-dex b-dex)))
     
     (define (dex-internals-in? this x)
@@ -605,10 +612,7 @@
       #/nextlet fields fields
         (expect fields (cons field fields) (just #/ordering-eq)
         #/dissect field (list getter position dex)
-        #/expect (compare-by-dex dex (getter a) (getter b))
-          (just elem-result)
-          (nothing)
-        #/expect elem-result (ordering-eq) (just elem-result)
+        #/maybe-ordering-or (compare-by-dex dex (getter a) (getter b))
         #/next fields)))
   ])
 
@@ -872,9 +876,9 @@
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-default a1 a2)
       #/dissect other (cline-internals-default b1 b2)
-      #/dissect (compare-by-dex dex-cline a1 b1) result
-      #/expect result (just #/ordering-eq) result
-      #/compare-by-dex dex-cline a2 b2))
+      #/maybe-ordering-or
+        (compare-by-dex dex-cline a1 b1)
+        (compare-by-dex dex-cline a2 b2)))
     
     (define (cline-internals-dex this)
       (dissect this (cline-internals-default first second)
