@@ -30,16 +30,18 @@
 (require "../private/util.rkt")
 
 
+; ==== Orderings ====
+
 (provide #/struct-out ordering-lt)
 (provide #/struct-out ordering-eq)
 (provide #/struct-out ordering-gt)
 (provide ordering-private? dex-result? cline-result?)
 (provide make-ordering-private-lt make-ordering-private-gt)
 
-(provide name?)
 
-(provide cline?)
-(provide get-dex-from-cline in-cline? compare-by-cline)
+; ==== Names, dexes, and dexables ====
+
+(provide name?)
 
 (provide dex?)
 (provide in-dex? name-of compare-by-dex)
@@ -47,16 +49,22 @@
 (provide #/struct-out dexable)
 (provide valid-dexable? dexableof)
 (provide compare-dexables name-of-dexable)
+(provide dex-name dex-dex)
 
 (provide
   dex-give-up
   dex-default
   dex-by-own-method
   dex-fix
-  dex-dex
-  dex-cline
-  dex-name
   dex-struct)
+
+
+; ==== Clines ====
+
+(provide cline?)
+(provide get-dex-from-cline in-cline? compare-by-cline)
+(provide dex-cline)
+
 (provide
   cline-by-dex
   cline-give-up
@@ -65,6 +73,8 @@
   cline-fix)
 
 
+
+; ===== Miscellaneous utilities ======================================
 
 (begin-for-syntax
   
@@ -85,6 +95,8 @@
 )
 
 
+
+; ===== Orderings ====================================================
 
 (struct-easy "an ordering-lt" (ordering-lt) #:equal)
 (struct-easy "an ordering-eq" (ordering-eq) #:equal)
@@ -125,6 +137,9 @@
   (ordering-private-encapsulated #/ordering-gt))
 
 
+
+; ===== Names, dexes, and dexables ===================================
+
 ; Internally, we represent name values as data made of symbols, empty
 ; lists, and cons cells, and for sorting purposes, we consider them to
 ; ascend in that order.
@@ -161,41 +176,6 @@
     #/if (symbol<? b a)
       (make-ordering-private-gt)
       (ordering-eq))))
-
-
-(define-generics cline-internals
-  (cline-internals-tag cline-internals)
-  (cline-internals-autoname cline-internals)
-  (cline-internals-autodex cline-internals other)
-  (cline-internals-dex cline-internals)
-  (cline-internals-in? cline-internals x)
-  (cline-internals-call cline-internals a b))
-
-(struct-easy "a cline-encapsulated" (cline-encapsulated internals))
-
-(define/contract (cline? x)
-  (-> any/c boolean?)
-  (cline-encapsulated? x))
-
-(define/contract (autoname-cline cline)
-  (-> cline? name?)
-  (dissect cline (cline-encapsulated internals)
-  #/cline-internals-autoname internals))
-
-(define/contract (get-dex-from-cline cline)
-  (-> cline? dex?)
-  (dissect cline (cline-encapsulated internals)
-  #/cline-internals-dex internals))
-
-(define/contract (in-cline? cline x)
-  (-> cline? any/c boolean?)
-  (dissect cline (cline-encapsulated internals)
-  #/cline-internals-in? internals x))
-
-(define/contract (compare-by-cline cline a b)
-  (-> cline? any/c any/c #/maybe/c cline-result?)
-  (dissect cline (cline-encapsulated internals)
-  #/cline-internals-call internals a b))
 
 
 (define-generics dex-internals
@@ -315,6 +295,74 @@
   #/expect elem-result (ordering-eq) (just elem-result)
   #/lists-autodex as bs elem-autodex))
 
+
+
+(struct-easy "a dex-internals-name" (dex-internals-name)
+  #:other
+  
+  #:methods gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'dex-name)
+    
+    (define (dex-internals-autoname this)
+      'dex-name)
+    
+    (define (dex-internals-autodex this other)
+      (just #/ordering-eq))
+    
+    (define (dex-internals-in? this x)
+      (name? x))
+    
+    (define (dex-internals-name-of this x)
+      (expect x (name-internal rep) (nothing)
+      #/just #/list 'name rep))
+    
+    (define (dex-internals-call this a b)
+      (if (and (name? a) (name? b))
+        (just #/names-autodex a b)
+        (nothing)))
+  ])
+
+(define/contract dex-name dex?
+  (dex-encapsulated #/dex-internals-name))
+
+
+(struct-easy "a dex-internals-dex" (dex-internals-dex)
+  #:other
+  
+  #:methods gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'dex-dex)
+    
+    (define (dex-internals-autoname this)
+      'dex-dex)
+    
+    (define (dex-internals-autodex this other)
+      (just #/ordering-eq))
+    
+    (define (dex-internals-in? this x)
+      (dex? x))
+    
+    (define (dex-internals-name-of this x)
+      (if (dex? x)
+        (just #/autoname-dex x)
+        (nothing)))
+    
+    (define (dex-internals-call this a b)
+      (expect a (dex-encapsulated a) (nothing)
+      #/expect b (dex-encapsulated b) (nothing)
+      #/w- a-tag (dex-internals-tag a)
+      #/w- b-tag (dex-internals-tag b)
+      #/if (symbol<? a-tag b-tag) (just #/ordering-lt)
+      #/if (symbol<? b-tag a-tag) (just #/ordering-gt)
+      #/dex-internals-autodex a b))
+  ])
+
+(define/contract dex-dex dex? #/dex-encapsulated #/dex-internals-dex)
 
 
 (struct-easy "a dex-internals-give-up" (dex-internals-give-up)
@@ -487,111 +535,6 @@
   (dex-encapsulated #/dex-internals-fix dexable-unwrap))
 
 
-(struct-easy "a dex-internals-dex" (dex-internals-dex)
-  #:other
-  
-  #:methods gen:dex-internals
-  [
-    
-    (define (dex-internals-tag this)
-      'dex-dex)
-    
-    (define (dex-internals-autoname this)
-      'dex-dex)
-    
-    (define (dex-internals-autodex this other)
-      (just #/ordering-eq))
-    
-    (define (dex-internals-in? this x)
-      (dex? x))
-    
-    (define (dex-internals-name-of this x)
-      (if (dex? x)
-        (just #/autoname-dex x)
-        (nothing)))
-    
-    (define (dex-internals-call this a b)
-      (expect a (dex-encapsulated a) (nothing)
-      #/expect b (dex-encapsulated b) (nothing)
-      #/w- a-tag (dex-internals-tag a)
-      #/w- b-tag (dex-internals-tag b)
-      #/if (symbol<? a-tag b-tag) (just #/ordering-lt)
-      #/if (symbol<? b-tag a-tag) (just #/ordering-gt)
-      #/dex-internals-autodex a b))
-  ])
-
-(define/contract dex-dex dex? #/dex-encapsulated #/dex-internals-dex)
-
-
-(struct-easy "a dex-internals-cline" (dex-internals-cline)
-  #:other
-  
-  #:methods gen:dex-internals
-  [
-    
-    (define (dex-internals-tag this)
-      'dex-cline)
-    
-    (define (dex-internals-autoname this)
-      'dex-cline)
-    
-    (define (dex-internals-autodex this other)
-      (just #/ordering-eq))
-    
-    (define (dex-internals-in? this x)
-      (cline? x))
-    
-    (define (dex-internals-name-of this x)
-      (if (cline? x)
-        (just #/autoname-cline x)
-        (nothing)))
-    
-    (define (dex-internals-call this a b)
-      (expect a (cline-encapsulated a) (nothing)
-      #/expect b (cline-encapsulated b) (nothing)
-      #/w- a-tag (cline-internals-tag a)
-      #/w- b-tag (cline-internals-tag b)
-      #/if (symbol<? a-tag b-tag) (just #/ordering-lt)
-      #/if (symbol<? b-tag a-tag) (just #/ordering-gt)
-      #/cline-internals-autodex a b))
-  ])
-
-(define/contract dex-cline dex?
-  (dex-encapsulated #/dex-internals-cline))
-
-
-(struct-easy "a dex-internals-name" (dex-internals-name)
-  #:other
-  
-  #:methods gen:dex-internals
-  [
-    
-    (define (dex-internals-tag this)
-      'dex-name)
-    
-    (define (dex-internals-autoname this)
-      'dex-name)
-    
-    (define (dex-internals-autodex this other)
-      (just #/ordering-eq))
-    
-    (define (dex-internals-in? this x)
-      (name? x))
-    
-    (define (dex-internals-name-of this x)
-      (expect x (name-internal rep) (nothing)
-      #/just #/list 'name rep))
-    
-    (define (dex-internals-call this a b)
-      (if (and (name? a) (name? b))
-        (just #/names-autodex a b)
-        (nothing)))
-  ])
-
-(define/contract dex-name dex?
-  (dex-encapsulated #/dex-internals-name))
-
-
 (struct-easy "a dex-internals-struct"
   (dex-internals-struct descriptor counts? fields)
   #:other
@@ -691,6 +634,81 @@
         #,@(list-zip-map (reverse getters) field-dexes
            #/lambda (getter field-dex)
              #`(list #,getter #,field-dex)))))
+
+
+
+; ===== Clines =======================================================
+
+(define-generics cline-internals
+  (cline-internals-tag cline-internals)
+  (cline-internals-autoname cline-internals)
+  (cline-internals-autodex cline-internals other)
+  (cline-internals-dex cline-internals)
+  (cline-internals-in? cline-internals x)
+  (cline-internals-call cline-internals a b))
+
+(struct-easy "a cline-encapsulated" (cline-encapsulated internals))
+
+(define/contract (cline? x)
+  (-> any/c boolean?)
+  (cline-encapsulated? x))
+
+(define/contract (autoname-cline cline)
+  (-> cline? name?)
+  (dissect cline (cline-encapsulated internals)
+  #/cline-internals-autoname internals))
+
+(define/contract (get-dex-from-cline cline)
+  (-> cline? dex?)
+  (dissect cline (cline-encapsulated internals)
+  #/cline-internals-dex internals))
+
+(define/contract (in-cline? cline x)
+  (-> cline? any/c boolean?)
+  (dissect cline (cline-encapsulated internals)
+  #/cline-internals-in? internals x))
+
+(define/contract (compare-by-cline cline a b)
+  (-> cline? any/c any/c #/maybe/c cline-result?)
+  (dissect cline (cline-encapsulated internals)
+  #/cline-internals-call internals a b))
+
+
+(struct-easy "a dex-internals-cline" (dex-internals-cline)
+  #:other
+  
+  #:methods gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'dex-cline)
+    
+    (define (dex-internals-autoname this)
+      'dex-cline)
+    
+    (define (dex-internals-autodex this other)
+      (just #/ordering-eq))
+    
+    (define (dex-internals-in? this x)
+      (cline? x))
+    
+    (define (dex-internals-name-of this x)
+      (if (cline? x)
+        (just #/autoname-cline x)
+        (nothing)))
+    
+    (define (dex-internals-call this a b)
+      (expect a (cline-encapsulated a) (nothing)
+      #/expect b (cline-encapsulated b) (nothing)
+      #/w- a-tag (cline-internals-tag a)
+      #/w- b-tag (cline-internals-tag b)
+      #/if (symbol<? a-tag b-tag) (just #/ordering-lt)
+      #/if (symbol<? b-tag a-tag) (just #/ordering-gt)
+      #/cline-internals-autodex a b))
+  ])
+
+(define/contract dex-cline dex?
+  (dex-encapsulated #/dex-internals-cline))
 
 
 (struct-easy "a cline-internals-by-dex" (cline-internals-by-dex dex)

@@ -75,6 +75,7 @@ The “secretly precedes” and “secretly follows” cases are indistinguishab
 
 A “dex” is like a cline, but it never results in the “candidly precedes” and “candidly follows” cases. Thus, a dex is useful as a kind of equality test.
 
+@; ==== Orderings ====
 
 @defstruct*[ordering-lt ()]{
   A struct that represents the result of a comparison where the first value turned out to be candidly strictly less than the second value.
@@ -115,28 +116,10 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 }
 
 
+@; ==== Names, dexes, and dexables ====
+
 @defproc[(name? [x any/c]) boolean?]{
   Returns whether the given value is a name. In Effection, a "name" is something like a partial application of comparison by a dex. Any value can be converted to a name using @racket[name-of] if any dex for that value is at hand (and it always converts to the same name regardless of which dex is chosen), and names themselves can be compared using @racket[dex-name].
-}
-
-
-@defproc[(cline? [x any/c]) boolean?]{
-  Returns whether the given value is a cline.
-}
-
-@defproc[(get-dex-from-cline [cline cline?]) dex?]{
-  Given a cline, returns a dex over the same domain.
-}
-
-@defproc[(in-cline? [cline cline?] [x any/c]) boolean?]{
-  Given a cline and a value, returns whether the value belongs to the cline's domain.
-}
-
-@defproc[
-  (compare-by-cline [cline cline?] [a any/c] [b any/c])
-  (maybe/c cline-result?)
-]{
-  Given a cline and two values, compares those values according to the cline. The result is @racket[(nothing)] if either value is outside the cline's domain.
 }
 
 
@@ -156,7 +139,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   (compare-by-dex [dex dex?] [a any/c] [b any/c])
   (maybe/c dex-result?)
 ]{
-  Given a dex and two values, compares those values according to the dex. The result is @racket[(nothing)] if either value is outside the cline's domain.
+  Given a dex and two values, compares those values according to the dex. The result is @racket[(nothing)] if either value is outside the dex's domain.
 }
 
 
@@ -180,6 +163,17 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Given a well-formed @racket[dexable] value, returns a name the contained value can be compared by.
   
   This is a convenience layer over @racket[name-of].
+}
+
+
+@defthing[dex-name dex?]{
+  A dex that compares names.
+}
+
+@defthing[dex-dex dex?]{
+  A dex that compares dexes.
+  
+  All presently existing dexes allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(dex-default (dex-give-up) (dex-give-up))] and @racket[(dex-give-up)] can be distinguished this way despite otherwise having equivalent behavior.
 }
 
 
@@ -209,22 +203,6 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   When compared by @racket[dex-dex], all @racket[dex-fix] values are @racket[ordering-eq] if their @var[dexable-unwrap] values' dexes and values are.
 }
 
-@defthing[dex-dex dex?]{
-  A dex that compares dexes.
-  
-  All presently existing dexes allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(dex-default (dex-give-up) (dex-give-up))] and @racket[(dex-give-up)] can be distinguished this way despite otherwise having equivalent behavior.
-}
-
-@defthing[dex-cline dex?]{
-  A dex that compares clines.
-  
-  All presently existing clines allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(cline-default (cline-give-up) (cline-give-up))] and @racket[(cline-give-up)] can be distinguished this way despite otherwise having equivalent behavior.
-}
-
-@defthing[dex-name dex?]{
-  A dex that compares names.
-}
-
 @defform[
   (dex-struct struct-id dex-expr ...)
   #:contracts ([dex-expr dex?])
@@ -232,6 +210,34 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Returns a dex that compares instances of the structure type named by @racket[struct-id], and whose field values can be compared by the dexes produced by the @racket[dex-expr] expressions.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no supertype.
+}
+
+
+@; ==== Clines ====
+
+@defproc[(cline? [x any/c]) boolean?]{
+  Returns whether the given value is a cline.
+}
+
+@defproc[(get-dex-from-cline [cline cline?]) dex?]{
+  Given a cline, returns a dex over the same domain.
+}
+
+@defproc[(in-cline? [cline cline?] [x any/c]) boolean?]{
+  Given a cline and a value, returns whether the value belongs to the cline's domain.
+}
+
+@defproc[
+  (compare-by-cline [cline cline?] [a any/c] [b any/c])
+  (maybe/c cline-result?)
+]{
+  Given a cline and two values, compares those values according to the cline. The result is @racket[(nothing)] if either value is outside the cline's domain.
+}
+
+@defthing[dex-cline dex?]{
+  A dex that compares clines.
+  
+  All presently existing clines allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(cline-default (cline-give-up) (cline-give-up))] and @racket[(cline-give-up)] can be distinguished this way despite otherwise having equivalent behavior.
 }
 
 
