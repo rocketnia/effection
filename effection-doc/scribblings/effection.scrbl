@@ -75,7 +75,8 @@ The “secretly precedes” and “secretly follows” cases are indistinguishab
 
 A “dex” is like a cline, but it never results in the “candidly precedes” and “candidly follows” cases. Thus, a dex is useful as a kind of equality test.
 
-@; ==== Orderings ====
+
+@subsection[#:tag "orderings"]{Orderings}
 
 @defstruct*[ordering-lt ()]{
   A struct that represents the result of a comparison where the first value turned out to be candidly strictly less than the second value.
@@ -116,7 +117,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 }
 
 
-@; ==== Names, dexes, and dexables ====
+@subsection[#:tag "dexes"]{Names, Dexes, and Dexables}
 
 @defproc[(name? [x any/c]) boolean?]{
   Returns whether the given value is a name. In Effection, a "name" is something like a partial application of comparison by a dex. Any value can be converted to a name using @racket[name-of] if any dex for that value is at hand (and it always converts to the same name regardless of which dex is chosen), and names themselves can be compared using @racket[dex-name].
@@ -237,7 +238,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 }
 
 
-@; ==== Clines ====
+@subsection[#:tag "clines"]{Clines}
 
 @defproc[(cline? [x any/c]) boolean?]{
   Returns whether the given value is a cline.
