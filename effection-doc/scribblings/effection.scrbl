@@ -3,7 +3,7 @@
 @(require #/for-label effection/order/base)
 @(require #/for-label effection/maybe/base)
 @(require #/for-label #/only-in racket/contract/base
-  -> ->i any/c chaperone-contract? contract? flat-contract?)
+  -> any/c chaperone-contract? contract?)
 
 
 @title{Effection}
@@ -13,6 +13,8 @@ Effection is a set of alternate core libraries for Racket, designed around quasi
 Effection code can seamlessly coexist with Racket code, and Effection's modules export most of the same bindings as Racket modules do. The difference is that for an Effection-based program, more things than usual are considered "unsafe."
 
 While programming in the Effection style, most of Racket's usual side effects are considered unsafe. Operations that are otherwise deterministic but may allocate fresh values that are not @racket[eq?] to each other, such as the operations @racket[lambda] and @racket[list], are considered safe, but to cover up for this, @racket[eq?] itself is considered unsafe. Operations that can raise errors by exhausting the heap or the stack are nevertheless considered safe, and other error-raising operations like @racket[append] and @racket[+] are considered safe as well; to cover up for this, catching errors is considered unsafe.
+
+Somewhat inconveniently, the Effection style considers structure types that inherit from other structure types to be unsafe. In particular, it is Effection-unsafe to invoke their predicates and their field accessors, despite the fact that it is Effection-safe to invoke predicates and field accessors of other structure types. This way, Effection-safe code can actually determine that it knows a non-subtyping structure instance up to (Effection-safe) observational equivalence (see @racket[dex-struct]), knowledge which enables certain data representation and concurrency techniques.
 
 These policies achieve a kind of purity, but Effection-based programs are not necessarily pure throughout. Effection offers an extensible side effect model, allowing programmers to continue using Racket-style impurity in their programs without compromising their ability to expose a pure interface. This does not mean existing impure Racket code can be used as-is, but it means many of the same idioms can be translated into slightly more verbose Effection equivalents, particularly without inversion of control.
 
@@ -61,12 +63,12 @@ A “cline” is based on a total ordering on values in its domain, or in other 
 However, a cline does not merely expose this total ordering. Within the cline’s domain, there may be equivalence classes of values for which every two nonequal values will not have their relative order exposed to Effection-safe code. When Effection-safe code uses @racket[compare-by-cline] to compare two values by a cline, it can get several results:
 
 @itemlist[
-    @item{@racket[(list)]: The values are not both in the domain.}
-    @item{@racket[(list (ordering-lt))]: The first value candidly precedes the second.}
-    @item{@racket[(list (make-ordering-private-lt))]: The first value secretly precedes the second.}
-    @item{@racket[(list (ordering-eq))]: The first value is equal to the second.}
-    @item{@racket[(list (make-ordering-private-gt))]: The first value secretly follows the second.}
-    @item{@racket[(list (ordering-gt))]: The first value candidly follows the second.}
+    @item{@racket[(nothing)]: The values are not both in the domain.}
+    @item{@racket[(just (ordering-lt))]: The first value candidly precedes the second.}
+    @item{@racket[(just (make-ordering-private-lt))]: The first value secretly precedes the second.}
+    @item{@racket[(just (ordering-eq))]: The first value is equal to the second.}
+    @item{@racket[(just (make-ordering-private-gt))]: The first value secretly follows the second.}
+    @item{@racket[(just (ordering-gt))]: The first value candidly follows the second.}
 ]
 
 The “secretly precedes” and “secretly follows” cases are indistinguishable to Effection-safe code.
@@ -122,10 +124,6 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Returns whether the given value is a cline.
 }
 
-@defproc[(cline-containing [x any/c]) flat-contract?]{
-  Returns a contract that recognizes any cline @var[c] such that @racket[(in-cline? _c x)].
-}
-
 @defproc[(in-cline? [cline cline?] [x any/c]) boolean?]{
   Given a cline and a value, returns whether the value belongs to the cline's domain.
 }
@@ -134,7 +132,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   (compare-by-cline [cline cline?] [a any/c] [b any/c])
   (maybe/c cline-result?)
 ]{
-  Given a cline and two values, compares those values according to the cline. The result is @racket[(list)] if either value is outside the cline's domain.
+  Given a cline and two values, compares those values according to the cline. The result is @racket[(nothing)] if either value is outside the cline's domain.
 }
 
 
@@ -154,7 +152,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   (compare-by-dex [dex dex?] [a any/c] [b any/c])
   (maybe/c dex-result?)
 ]{
-  Given a dex and two values, compares those values according to the dex. The result is @racket[(list)] if either value is outside the cline's domain.
+  Given a dex and two values, compares those values according to the dex. The result is @racket[(nothing)] if either value is outside the cline's domain.
 }
 
 
@@ -203,6 +201,15 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   When compared by @racket[dex-dex], @racket[dex-by-cline] values are @racket[ordering-eq] if their clines are.
 }
 
+@defform[
+  (dex-struct struct-id dex-expr ...)
+  #:contracts ([dex-expr dex?])
+]{
+  Returns a dex that compares instances of the structure type named by @racket[struct-id], and whose field values can be compared by the dexes produced by the @racket[dex-expr] expressions.
+  
+  A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no supertype.
+}
+
 
 @defproc[(cline-by-dex [dex dex?]) cline?]{
   Returns a cline that compares values according the given dex. Since the dex never returns the "candidly precedes" or "candidly follows" results, this cline doesn't either.
@@ -227,13 +234,10 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 
 @defproc[
   (cline-by-own-method
-    [dexable-get-method
-      (dexableof
-        (->i ([x any/c])
-          [result (x) (maybe/c (cline-containing x))]))])
+    [dexable-get-method (dexableof (-> any/c (maybe/c cline?)))])
   cline?
 ]{
-  Given a dexable function, returns a cline that works by invoking that function with each value to get @racket[(list _cline)] or @racket[(list)], verifying that the two @var[cline] values are the same, and then proceeding to invoke that value.
+  Given a dexable function, returns a cline that works by invoking that function with each value to get @racket[(just _cline)] or @racket[(nothing)], verifying that the two @var[cline] values are the same, and then proceeding to invoke that value.
   
   When compared by @racket[dex-cline], all @racket[cline-by-own-method] values are @racket[ordering-eq] if their @var[dexable-get-method] values' dexes and values are.
 }

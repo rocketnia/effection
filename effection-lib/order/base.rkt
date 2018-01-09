@@ -1,14 +1,29 @@
 #lang parendown racket/base
 
+
+(require #/for-syntax racket/base)
+(require #/for-syntax #/only-in racket/struct-info
+  extract-struct-info struct-info?)
+(require #/for-syntax #/only-in racket/contract/base -> any/c listof)
+(require #/for-syntax #/only-in racket/contract/region
+  define/contract)
+(require #/for-syntax #/only-in syntax/parse expr id syntax-parse)
+
+(require #/for-syntax #/only-in lathe
+  dissect expect mat next nextlet w-)
+
+(require #/for-syntax "../private/util.rkt")
+
+
 (require #/only-in racket/contract/base
-  -> ->i and/c any/c chaperone-contract? contract? contract-projection
-  flat-contract? struct/c)
+  -> and/c any/c chaperone-contract? contract? contract-projection
+  struct/c)
 (require #/only-in racket/contract/combinator
   contract-first-order-passes? make-contract)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/generic define-generics)
 
-(require #/only-in lathe dissect expect mat next nextlet w-)
+(require #/only-in lathe dissect dissectfn expect mat next nextlet w-)
 
 (require #/only-in effection/maybe/base just nothing maybe/c)
 
@@ -24,7 +39,6 @@
 (provide name?)
 
 (provide cline?)
-(provide cline-containing)
 (provide in-cline? compare-by-cline)
 
 (provide dex?)
@@ -34,13 +48,33 @@
 (provide valid-dexable? dexableof)
 (provide compare-dexables name-of-dexable)
 
-(provide dex-dex dex-cline dex-name dex-by-cline)
+(provide dex-dex dex-cline dex-name dex-by-cline dex-struct)
 (provide
   cline-by-dex
   cline-give-up
   cline-default
   cline-by-own-method
   cline-fix)
+
+
+
+(begin-for-syntax
+  
+  (define/contract (proper-syntax-pair? x)
+    (-> any/c boolean?)
+    (mat x (list) #t
+    #/mat x (cons first rest)
+      (and (syntax? first) #/proper-syntax-pair? rest)
+    #/and (syntax? x) #/proper-syntax-pair? #/syntax-e x))
+
+  (define/contract (desyntax-list syntax-list)
+    (-> proper-syntax-pair? #/listof syntax?)
+    (nextlet syntax-list syntax-list
+      (mat syntax-list (list) (list)
+      #/mat syntax-list (cons first rest)
+        (cons first #/next rest)
+      #/next #/syntax-e syntax-list)))
+)
 
 
 
@@ -134,10 +168,6 @@
 (define/contract (cline? x)
   (-> any/c boolean?)
   (cline-encapsulated? x))
-
-(define/contract (cline-containing x)
-  (-> any/c flat-contract?)
-  (and/c cline? #/lambda (cline) (in-cline? cline x)))
 
 (define/contract (autoname-cline cline)
   (-> cline? name?)
@@ -238,6 +268,44 @@
   (dissect x (dexable dex x)
   #/dissect (name-of dex x) (just result)
     result))
+
+
+
+(define/contract (lt-autodex a b <?)
+  (-> any/c any/c (-> any/c any/c boolean?) dex-result?)
+  (if (<? a b) (make-ordering-private-lt)
+  #/if (<? b a) (make-ordering-private-gt)
+  #/ordering-eq))
+
+; TODO: Test this implementation very thoroughly. We need to know what
+; happens when this module is used through diamond dependencies, what
+; happens if this module is somehow visited more than once, and that
+; kind of thing. We probably won't be able to guarantee struct type
+; descriptors will be sorted the same way in every phase, but we can
+; at least document why not.
+(define descriptors-semaphore* (make-semaphore 1))
+(define descriptors-to-ranks* (make-weak-hasheq))
+(define descriptors-next-rank* 0)
+(define/contract (descriptor-rank descriptor)
+  (-> struct-type? exact-nonnegative-integer?)
+  (call-with-semaphore descriptors-semaphore* #/lambda ()
+    (if (hash-has-key? descriptors-to-ranks* descriptor)
+      (hash-ref descriptors-to-ranks* descriptor)
+    #/w- rank descriptors-next-rank*
+      (hash-set! descriptors-to-ranks* descriptor rank)
+      (set! descriptors-next-rank* (add1 rank)))))
+(define/contract (struct-type-descriptors-autodex a b)
+  (-> struct-type? struct-type? dex-result?)
+  (lt-autodex (descriptor-rank a) (descriptor-rank b) <))
+
+(define/contract (lists-autodex as bs elem-autodex)
+  (-> list? list? (-> any/c any/c #/maybe/c dex-result?)
+    (maybe/c dex-result?))
+  (expect as (cons a as) (just #/make-ordering-private-lt)
+  #/expect bs (cons b bs) (just #/make-ordering-private-gt)
+  #/expect (elem-autodex a b) (just elem-result) (nothing)
+  #/expect elem-result (ordering-eq) (just elem-result)
+  #/lists-autodex as bs elem-autodex))
 
 
 
@@ -346,10 +414,15 @@
   (dex-encapsulated #/dex-internals-name))
 
 
+; TODO: Replace `dex-by-cline` with a method on clines that makes them
+; return an appropriate dex for their domain. That way, we can have
+; clines that have orderings that are inconsistent with each other
+; (e.g. ascending and descending order).
+
 (struct-easy "a dex-internals-by-cline" (dex-internals-by-cline cline)
   #:other
   
-  #:methods gen:cline-internals
+  #:methods gen:dex-internals
   [
     
     (define (dex-internals-tag this)
@@ -385,6 +458,107 @@
 (define/contract (dex-by-cline cline)
   (-> cline? dex?)
   (dex-encapsulated #/dex-internals-by-cline cline))
+
+
+(struct-easy "a dex-internals-struct"
+  (dex-internals-struct descriptor counts? fields)
+  #:other
+  
+  #:methods gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'dex-struct)
+    
+    (define (dex-internals-autoname this)
+      (dissect this (dex-internals-struct descriptor counts? fields)
+      #/list 'dex-struct descriptor
+      #/list-fmap fields #/dissectfn (list getter dex)
+        (autoname-dex dex)))
+    
+    (define (dex-internals-autodex this other)
+      (dissect this
+        (dex-internals-struct a-descriptor a-counts? a-fields)
+      #/dissect other
+        (dex-internals-struct b-descriptor b-counts? b-fields)
+      #/w- descriptor-result
+        (struct-type-descriptors-autodex a-descriptor b-descriptor)
+      #/expect descriptor-result (ordering-eq) descriptor-result
+      #/lists-autodex a-fields b-fields #/lambda (a-field b-field)
+        (dissect a-field (list a-getter a-dex)
+        #/dissect b-field (list b-getter b-dex)
+        #/compare-by-dex dex-dex a-dex b-dex)))
+    
+    (define (dex-internals-in? this x)
+      (dissect this (dex-internals-struct descriptor counts? fields)
+      #/counts? x))
+    
+    (define (dex-internals-name-of this x)
+      (dissect this (dex-internals-struct descriptor counts? fields)
+      #/expect (counts? x) #t (nothing)
+      #/just #/cons 'struct
+      #/list-fmap fields #/dissectfn (list getter dex)
+        (name-of dex #/getter x)))
+    
+    (define (dex-internals-call this a b)
+      (dissect this (dex-internals-struct descriptor counts? fields)
+      #/expect (counts? a) #t (nothing)
+      #/expect (counts? b) #t (nothing)
+      #/nextlet fields fields
+        (expect fields (cons field fields) (just #/ordering-eq)
+        #/dissect field (list getter dex)
+        #/expect (compare-by-dex dex (getter a) (getter b))
+          (just elem-result)
+          (nothing)
+        #/expect elem-result (ordering-eq) (just elem-result)
+        #/next fields)))
+  ])
+
+(define-syntax dex-struct #/lambda (stx) #/syntax-parse stx #/
+  (_ struct-tag:id field-dexes:expr ...)
+  (w- struct-info (syntax-local-value #'struct-tag)
+  #/expect (struct-info? struct-info) #t
+    (raise-syntax-error #f
+      "not an identifier with struct-info attached"
+      stx #'struct-tag)
+  #/dissect (extract-struct-info struct-info)
+    (list struct:foo make-foo foo? getters setters super)
+  #/expect super #t
+    (raise-syntax-error #f
+      (mat super #f
+        "can only make a dex-struct for the root supertype in a structure type hierarchy"
+        (format
+          "can only make a dex-struct for the root supertype in a structure type hierarchy, in this case ~s or an ancestor thereof"
+          super))
+      stx #'struct-tag)
+  #/expect
+    (list-all getters #/lambda (getter) #/not #/eq? #f getter)
+    #t
+    (raise-syntax-error #f
+      "not a structure type with all of its getters available"
+      stx #'struct-tag)
+  #/expect (list-all setters #/lambda (setter) #/eq? #f setter) #t
+    (raise-syntax-error #f
+      "not an immutable structure type"
+      stx #'struct-tag)
+  ; TODO: Also verify that `struct:foo`, `make-foo`, `foo?`, and
+  ; `getters` all belong to the same structure type and that the
+  ; `getters` are exhaustive and arranged in the correct order.
+  ; Otherwise, this could create a dex that doesn't behave
+  ; consistently with other dexes for the same structure type.
+  #/w- field-dexes (desyntax-list #'#/field-dexes ...)
+  #/expect (= (length getters) (length field-dexes)) #t
+    (raise-syntax-error #f
+      (format "expected ~s dexes, got ~s"
+        (length getters)
+        (length field-dexes))
+      stx)
+  #/syntax-protect
+    #`(dex-encapsulated #/dex-internals-struct #,struct:foo #,foo?
+      #/list
+        #,@(list-zip-map (reverse getters) field-dexes
+           #/lambda (getter field-dex)
+             #`(list #,getter #,field-dex)))))
 
 
 (struct-easy "a cline-internals-by-dex" (cline-internals-by-dex dex)
@@ -536,10 +710,7 @@
       (dissect this
         (cline-internals-by-own-method #/dexable dex get-method)
       #/expect (get-method x) (just method) #f
-        ; NOTE: Since our contract for `cline-by-own-method` enforces
-        ; that the method must return a cline that contains the value,
-        ; we don't have to bother with an `in-cline?` call here.
-        #t))
+      #/in-cline? method x))
     
     (define (cline-internals-name-of this x)
       (dissect this
@@ -566,10 +737,7 @@
 
 (define/contract
   (cline-by-own-method dexable-get-method)
-  (->
-    (dexableof
-    #/->i ([x any/c]) [result (x) (maybe/c #/cline-containing x)])
-    cline?)
+  (-> (dexableof #/-> any/c #/maybe/c cline?) cline?)
   (cline-encapsulated
   #/cline-internals-by-own-method dexable-get-method))
 

@@ -6,32 +6,32 @@
 
 ; TODO: Use this in a unit test.
 
-; TODO: Uncomment this once we've implemented `dex-struct`.
-
-#|
 (require rackunit)
 
-(require effection)
+(require #/only-in lathe expect)
+
+(require effection/maybe)
+(require effection/order)
 (require effection/private/util)
 
 (provide #/all-defined-out)
 
 
-(struct-easy mk-just1 ()
+(struct-easy "a mk-just1" (mk-just1)
   #:other
   
   #:property prop:procedure
   (lambda (this result)
-    (expect this (foo)
+    (expect this (mk-just1)
       (error "Expected this to be a mk-just1")
     #/just result))
 )
-(struct-easy mk-just2 ()
+(struct-easy "a mk-just2" (mk-just2)
   #:other
   
   #:property prop:procedure
   (lambda (this result)
-    (expect this (foo)
+    (expect this (mk-just2)
       (error "Expected this to be a mk-just2")
     #/just result))
 )
@@ -49,4 +49,3 @@
     ; comparison, so a dynamic error will be raised.
     (cline-by-own-method #/dexable (dex-struct mk-just1) #/mk-just1)
     (cline-by-own-method #/dexable (dex-struct mk-just2) #/mk-just2)))
-|#
