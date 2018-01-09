@@ -1,4 +1,4 @@
-#lang racket/base
+#lang parendown racket/base
 
 ; main.rkt
 ;
@@ -6,9 +6,77 @@
 
 (require rackunit)
 
-(require effection)
+(require #/only-in lathe expect)
+
+(require effection/maybe)
+(require effection/order)
+(require effection/private/util)
 
 ; (We provide nothing from this module.)
 
 
-(check-equal? (+ 1 2) 3 "Running a placeholder test")
+(struct-easy "a mk-just1" (mk-just1)
+  #:other
+  
+  #:property prop:procedure
+  (lambda (this result)
+    (expect this (mk-just1)
+      (error "Expected this to be a mk-just1")
+    #/just result))
+)
+(struct-easy "a mk-just2" (mk-just2)
+  #:other
+  
+  #:property prop:procedure
+  (lambda (this result)
+    (expect this (mk-just2)
+      (error "Expected this to be a mk-just2")
+    #/just result))
+)
+
+
+(check-exn
+  exn:fail:contract?
+  (lambda ()
+    (compare-by-dex
+      ; This dex compares any dex which has itself in its domain. The
+      ; method of comparison (the dex) is obtained from the value by
+      ; doing nothing; the method is the value.
+      (dex-by-own-method #/dexable (dex-struct mk-just1) #/mk-just1)
+      
+      ; These two values are dexes, and they are each in their own
+      ; domain, but they're different dexes. When they're compared,
+      ; it will not be possible to decide upon a single method of
+      ; comparison, so a dynamic error will be raised.
+      (dex-by-own-method #/dexable (dex-struct mk-just1) #/mk-just1)
+      (dex-by-own-method #/dexable (dex-struct mk-just2) #/mk-just2)))
+  "Calling a `dex-by-own-method` on two values with different methods raises an error")
+
+(check-exn
+  exn:fail:contract?
+  (lambda ()
+    (compare-by-cline
+      ; This cline compares any cline which has itself in its domain.
+      ; The method of comparison (the cline) is obtained from the
+      ; value by doing nothing; the method is the value.
+      (cline-by-own-method #/dexable (dex-struct mk-just1) #/mk-just1)
+      
+      ; These two values are clines, and they are each in their own
+      ; domain, but they're different clines. When they're compared,
+      ; it will not be possible to decide upon a single method of
+      ; comparison, so a dynamic error will be raised.
+      (cline-by-own-method #/dexable (dex-struct mk-just1) #/mk-just1)
+      (cline-by-own-method #/dexable (dex-struct mk-just2)
+      #/mk-just2)))
+  "Calling a `cline-by-own-method` on two values with different methods raises an error")
+
+
+(define (dex-maybe dex-elem)
+  (dex-default (dex-struct nothing) (dex-struct just dex-elem)))
+
+(check-equal?
+  (compare-by-dex dex-name
+    (just-value #/name-of (dex-struct nothing) (nothing))
+    (just-value #/name-of (dex-maybe dex-give-up) (nothing)))
+  (just #/ordering-eq)
+  "Using `name-of` with different dexes gives the same name")

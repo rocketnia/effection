@@ -21,7 +21,7 @@
 (require #/only-in racket/contract/combinator
   contract-first-order-passes? make-contract)
 (require #/only-in racket/contract/region define/contract)
-(require #/only-in racket/generic define-generics)
+(require #/only-in racket/generic define/generic define-generics)
 
 (require #/only-in lathe dissect dissectfn expect mat next nextlet w-)
 
@@ -308,7 +308,7 @@
     
     (define (dex-internals-name-of this x)
       (expect x (name-internal rep) (nothing)
-      #/just #/list 'name rep))
+      #/just #/name-internal #/list 'name rep))
     
     (define (dex-internals-call this a b)
       (if (and (name? a) (name? b))
@@ -326,6 +326,10 @@
   #:methods gen:dex-internals
   [
     
+    (define/generic super-tag dex-internals-tag)
+    (define/generic super-autodex dex-internals-autodex)
+    
+    
     (define (dex-internals-tag this)
       'dex-dex)
     
@@ -340,17 +344,17 @@
     
     (define (dex-internals-name-of this x)
       (if (dex? x)
-        (just #/autoname-dex x)
+        (just #/name-internal #/autoname-dex x)
         (nothing)))
     
     (define (dex-internals-call this a b)
       (expect a (dex-encapsulated a) (nothing)
       #/expect b (dex-encapsulated b) (nothing)
-      #/w- a-tag (dex-internals-tag a)
-      #/w- b-tag (dex-internals-tag b)
+      #/w- a-tag (super-tag a)
+      #/w- b-tag (super-tag b)
       #/if (symbol<? a-tag b-tag) (just #/ordering-lt)
       #/if (symbol<? b-tag a-tag) (just #/ordering-gt)
-      #/dex-internals-autodex a b))
+      #/super-autodex a b))
   ])
 
 (define/contract dex-dex dex? #/dex-encapsulated #/dex-internals-dex)
@@ -570,7 +574,7 @@
     (define (dex-internals-name-of this x)
       (dissect this (dex-internals-struct descriptor counts? fields)
       #/expect (counts? x) #t (nothing)
-      #/just #/cons 'struct
+      #/just #/name-internal #/cons 'struct
       #/list-fmap fields #/dissectfn (list getter dex)
         (name-of dex #/getter x)))
     
@@ -699,7 +703,7 @@
     
     (define (dex-internals-name-of this x)
       (if (cline? x)
-        (just #/autoname-cline x)
+        (just #/name-internal #/autoname-cline x)
         (nothing)))
     
     (define (dex-internals-call this a b)
