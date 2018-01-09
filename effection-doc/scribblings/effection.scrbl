@@ -209,7 +209,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 ]{
   Returns a dex that compares instances of the structure type named by @racket[struct-id], and whose field values can be compared by the dexes produced by the @racket[dex-expr] expressions.
   
-  A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no supertype.
+  A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
 }
 
 

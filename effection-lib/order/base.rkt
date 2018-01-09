@@ -417,7 +417,7 @@
     (define (dex-internals-call this a b)
       (dissect this (dex-internals-default first second)
       #/w- first-result (compare-by-dex first a b)
-      #/mat first-result (just -) first-result
+      #/mat first-result (just _) first-result
       #/if (in-dex? first a)
         (if (in-dex? second b)
           (just #/ordering-lt)
@@ -599,11 +599,17 @@
     (list struct:foo make-foo foo? getters setters super)
   #/expect super #t
     (raise-syntax-error #f
-      (mat super #f
-        "can only make a dex-struct for the root supertype in a structure type hierarchy"
-        (format
-          "can only make a dex-struct for the root supertype in a structure type hierarchy, in this case ~s or an ancestor thereof"
-          super))
+      (nextlet super super
+        (mat super #f
+          ; The super-type is unknown.
+          "can only make a dex-struct for the root super-type in a structure type hierarchy"
+        #/dissect (extract-struct-info #/syntax-local-value super)
+          (list _ _ _ _ _ super-super)
+        #/expect super-super #t (next super-super)
+        ; There is no super-type beyond this one.
+        #/format
+          "can only make a dex-struct for the root super-type in a structure type hierarchy, in this case ~s"
+          (syntax-e super)))
       stx #'struct-tag)
   #/expect
     (list-all getters #/lambda (getter) #/not #/eq? #f getter)
@@ -813,7 +819,7 @@
     (define (cline-internals-call this a b)
       (dissect this (cline-internals-default first second)
       #/w- first-result (compare-by-cline first a b)
-      #/mat first-result (just -) first-result
+      #/mat first-result (just _) first-result
       #/if (in-cline? first a)
         (if (in-cline? second b)
           (just #/ordering-lt)
