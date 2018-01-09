@@ -252,10 +252,14 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Returns a cline that compares values according the given dex. Since the dex never returns the "candidly precedes" or "candidly follows" results, this cline doesn't either.
   
   When compared by @racket[dex-cline], all @racket[cline-by-dex] values are @racket[ordering-eq] if their dexes are.
+  
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to the original @racket[dex].
 }
 
 @defthing[cline-give-up cline?]{
   A cline over an empty domain.
+  
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to @racket[dex-give-up].
 }
 
 @defproc[
@@ -269,6 +273,8 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   For the sake of nontermination, errors, and performance concerns, this attempts to compute the result using @racket[cline-for-trying-first] before it moves on to @racket[cline-for-trying-second].
   
   When compared by @racket[dex-cline], all @racket[cline-default] values are @racket[ordering-eq] if their @var[cline-for-trying-first] values are and their @var[cline-for-trying-second] values are.
+  
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to the similarly constructed @racket[dex-default].
 }
 
 @defproc[
@@ -279,6 +285,8 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Given a dexable function, returns a cline that works by invoking that function with each value to get @racket[(just _cline)] or @racket[(nothing)], verifying that the two @var[cline] values are the same, and then proceeding to invoke that value.
   
   When compared by @racket[dex-cline], all @racket[cline-by-own-method] values are @racket[ordering-eq] if their @var[dexable-get-method] values' dexes and values are.
+  
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
 }
 
 @defproc[
@@ -288,4 +296,6 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Given a dexable function, returns a cline that works by passing itself to the function and then invoking the resulting cline.
   
   When compared by @racket[dex-cline], all @racket[cline-fix] values are @racket[ordering-eq] if their @var[dexable-unwrap] values' dexes and values are.
+  
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
 }
