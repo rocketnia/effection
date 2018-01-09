@@ -389,7 +389,10 @@
   (dex-encapsulated #/dex-internals-give-up))
 
 
-(struct-easy "a dex-internals-default" (dex-internals-default a b)
+(struct-easy "a dex-internals-default"
+  (dex-internals-default
+    dex-for-trying-first
+    dex-for-trying-second)
   #:other
   
   #:methods gen:dex-internals
@@ -399,8 +402,8 @@
       'dex-default)
     
     (define (dex-internals-autoname this)
-      (dissect this (dex-internals-default a b)
-      #/list 'dex-default (autoname-dex a) (autoname-dex b)))
+      (dissect this (dex-internals-default first second)
+      #/list 'dex-default (autoname-dex first) (autoname-dex second)))
     
     (define (dex-internals-autodex this other)
       (dissect this (dex-internals-default a1 a2)
@@ -410,13 +413,13 @@
       #/compare-by-dex dex-dex a2 b2))
     
     (define (dex-internals-in? this x)
-      (dissect this (dex-internals-default a b)
-      #/or (in-dex? a x) (in-dex? b x)))
+      (dissect this (dex-internals-default first second)
+      #/or (in-dex? first x) (in-dex? second x)))
     
     (define (dex-internals-name-of this x)
-      (dissect this (dex-internals-default a b)
-      #/mat (name-of a x) (just result) (just result)
-      #/name-of b x))
+      (dissect this (dex-internals-default first second)
+      #/mat (name-of first x) (just result) (just result)
+      #/name-of second x))
     
     (define (dex-internals-call this a b)
       (dissect this (dex-internals-default first second)
@@ -433,9 +436,11 @@
       #/compare-by-dex second a b))
   ])
 
-(define/contract (dex-default a b)
+(define/contract
+  (dex-default dex-for-trying-first dex-for-trying-second)
   (-> dex? dex? dex?)
-  (dex-encapsulated #/dex-internals-default a b))
+  (dex-encapsulated
+  #/dex-internals-default dex-for-trying-first dex-for-trying-second))
 
 
 (struct-easy "a dex-internals-by-own-method"

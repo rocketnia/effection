@@ -181,10 +181,17 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   A dex over an empty domain.
 }
 
-@defproc[(dex-default [a dex?] [b dex?]) dex?]{
+@defproc[
+  (dex-default
+    [dex-for-trying-first dex?]
+    [dex-for-trying-second dex?])
+  dex?
+]{
   Given two dexes, returns a dex over the union of their domains.
   
-  When compared by @racket[dex-dex], all @racket[dex-default] values are @racket[ordering-eq] if their @var[a] values are and their @var[b] values are.
+  For the sake of nontermination, errors, and performance concerns, this attempts to compute the result using @racket[dex-for-trying-first] before it moves on to @racket[dex-for-trying-second].
+  
+  When compared by @racket[dex-dex], all @racket[dex-default] values are @racket[ordering-eq] if their @var[dex-for-trying-first] values are and their @var[dex-for-trying-second] values are.
 }
 
 @defproc[
@@ -258,6 +265,8 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   cline?
 ]{
   Given two clines, returns a cline over the union of their domains. The resulting cline’s ascending order consists of the first cline’s ascending order in its domain, followed by the second cline’s ascending order outside the first cline’s domain.
+  
+  For the sake of nontermination, errors, and performance concerns, this attempts to compute the result using @racket[cline-for-trying-first] before it moves on to @racket[cline-for-trying-second].
   
   When compared by @racket[dex-cline], all @racket[cline-default] values are @racket[ordering-eq] if their @var[cline-for-trying-first] values are and their @var[cline-for-trying-second] values are.
 }
