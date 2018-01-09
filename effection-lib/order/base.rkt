@@ -39,7 +39,7 @@
 (provide name?)
 
 (provide cline?)
-(provide in-cline? compare-by-cline)
+(provide get-dex-from-cline in-cline? compare-by-cline)
 
 (provide dex?)
 (provide in-dex? name-of compare-by-dex)
@@ -48,7 +48,15 @@
 (provide valid-dexable? dexableof)
 (provide compare-dexables name-of-dexable)
 
-(provide dex-dex dex-cline dex-name dex-by-cline dex-struct)
+(provide
+  dex-give-up
+  dex-default
+  dex-by-own-method
+  dex-fix
+  dex-dex
+  dex-cline
+  dex-name
+  dex-struct)
 (provide
   cline-by-dex
   cline-give-up
@@ -159,8 +167,8 @@
   (cline-internals-tag cline-internals)
   (cline-internals-autoname cline-internals)
   (cline-internals-autodex cline-internals other)
+  (cline-internals-dex cline-internals)
   (cline-internals-in? cline-internals x)
-  (cline-internals-name-of cline-internals x)
   (cline-internals-call cline-internals a b))
 
 (struct-easy "a cline-encapsulated" (cline-encapsulated internals))
@@ -174,15 +182,15 @@
   (dissect cline (cline-encapsulated internals)
   #/cline-internals-autoname internals))
 
+(define/contract (get-dex-from-cline cline)
+  (-> cline? dex?)
+  (dissect cline (cline-encapsulated internals)
+  #/cline-internals-dex internals))
+
 (define/contract (in-cline? cline x)
   (-> cline? any/c boolean?)
   (dissect cline (cline-encapsulated internals)
   #/cline-internals-in? internals x))
-
-(define/contract (name-of-by-cline cline x)
-  (-> cline? any/c #/maybe/c name?)
-  (dissect cline (cline-encapsulated internals)
-  #/cline-internals-name-of internals x))
 
 (define/contract (compare-by-cline cline a b)
   (-> cline? any/c any/c #/maybe/c cline-result?)
@@ -309,6 +317,176 @@
 
 
 
+(struct-easy "a dex-internals-give-up" (dex-internals-give-up)
+  #:other
+  
+  #:methods gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'dex-give-up)
+    
+    (define (dex-internals-autoname this)
+      'dex-give-up)
+    
+    (define (dex-internals-autodex this other)
+      (just #/ordering-eq))
+    
+    (define (dex-internals-in? this x)
+      #f)
+    
+    (define (dex-internals-name-of this x)
+      (nothing))
+    
+    (define (dex-internals-call this a b)
+      (nothing))
+  ])
+
+(define/contract dex-give-up dex?
+  (dex-encapsulated #/dex-internals-give-up))
+
+
+(struct-easy "a dex-internals-default" (dex-internals-default a b)
+  #:other
+  
+  #:methods gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'dex-default)
+    
+    (define (dex-internals-autoname this)
+      (dissect this (dex-internals-default a b)
+      #/list 'dex-default (autoname-dex a) (autoname-dex b)))
+    
+    (define (dex-internals-autodex this other)
+      (dissect this (dex-internals-default a1 a2)
+      #/dissect other (dex-internals-default b1 b2)
+      #/dissect (compare-by-dex dex-dex a1 b1) result
+      #/expect result (just #/ordering-eq) result
+      #/compare-by-dex dex-dex a2 b2))
+    
+    (define (dex-internals-in? this x)
+      (dissect this (dex-internals-default a b)
+      #/or (in-dex? a x) (in-dex? b x)))
+    
+    (define (dex-internals-name-of this x)
+      (dissect this (dex-internals-default a b)
+      #/mat (name-of a x) (just result) (just result)
+      #/name-of b x))
+    
+    (define (dex-internals-call this a b)
+      (dissect this (dex-internals-default first second)
+      #/w- first-result (compare-by-dex first a b)
+      #/mat first-result (just -) first-result
+      #/if (in-dex? first a)
+        (if (in-dex? second b)
+          (just #/ordering-lt)
+          (nothing))
+      #/if (in-dex? first b)
+        (if (in-dex? second a)
+          (just #/ordering-gt)
+          (nothing))
+      #/compare-by-dex second a b))
+  ])
+
+(define/contract (dex-default a b)
+  (-> dex? dex? dex?)
+  (dex-encapsulated #/dex-internals-default a b))
+
+
+(struct-easy "a dex-internals-by-own-method"
+  (dex-internals-by-own-method dexable-get-method)
+  #:other
+  
+  #:methods gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'dex-by-own-method)
+    
+    (define (dex-internals-autoname this)
+      (dissect this
+        (dex-internals-by-own-method #/dexable dex get-method)
+      #/list 'dex-by-own-method
+        (autoname-dex dex)
+        (name-of dex get-method)))
+    
+    (define (dex-internals-autodex this other)
+      (dissect this (dex-internals-by-own-method a)
+      #/dissect other (dex-internals-by-own-method b)
+      #/compare-dexables a b))
+    
+    (define (dex-internals-in? this x)
+      (dissect this
+        (dex-internals-by-own-method #/dexable dex get-method)
+      #/expect (get-method x) (just method) #f
+      #/in-dex? method x))
+    
+    (define (dex-internals-name-of this x)
+      (dissect this
+        (dex-internals-by-own-method #/dexable dex get-method)
+      #/expect (get-method x) (just method) (nothing)
+      #/name-of method x))
+    
+    (define (dex-internals-call this a b)
+      (dissect this
+        (dex-internals-by-own-method #/dexable dex get-method)
+      #/expect (get-method a) (just a-method) (nothing)
+      #/expect (get-method b) (just b-method) (nothing)
+      #/expect (compare-by-dex dex-dex a-method b-method)
+        (just #/ordering-eq)
+        (raise-arguments-error 'dex-by-own-method
+          "A dex-by-own-method obtained two different methods from the two values being compared"
+          "get-method" get-method
+          "a" a
+          "b" b
+          "a-method" a-method
+          "b-method" b-method)
+      #/compare-by-dex a-method a b))
+  ])
+
+(define/contract (dex-by-own-method dexable-get-method)
+  (-> (dexableof #/-> any/c #/maybe/c dex?) dex?)
+  (dex-encapsulated #/dex-internals-by-own-method dexable-get-method))
+
+
+(struct-easy "a dex-internals-fix" (dex-internals-fix dexable-unwrap)
+  #:other
+  
+  #:methods gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'dex-fix)
+    
+    (define (dex-internals-autoname this)
+      (dissect this (dex-internals-fix #/dexable dex unwrap)
+      #/list 'dex-fix (autoname-dex dex) (name-of dex unwrap)))
+    
+    (define (dex-internals-autodex this other)
+      (dissect this (dex-internals-fix a)
+      #/dissect other (dex-internals-fix b)
+      #/compare-dexables a b))
+    
+    (define (dex-internals-in? this x)
+      (dissect this (dex-internals-fix #/dexable dex unwrap)
+      #/in-dex? (unwrap #/dex-encapsulated this) x))
+    
+    (define (dex-internals-name-of this x)
+      (dissect this (dex-internals-fix #/dexable dex unwrap)
+      #/name-of (unwrap #/dex-encapsulated this) x))
+    
+    (define (dex-internals-call this a b)
+      (dissect this (dex-internals-fix #/dexable dex unwrap)
+      #/compare-by-dex (unwrap #/dex-encapsulated this) a b))
+  ])
+
+(define/contract (dex-fix dexable-unwrap)
+  (-> (dexableof #/-> dex? dex?) dex?)
+  (dex-encapsulated #/dex-internals-fix dexable-unwrap))
+
+
 (struct-easy "a dex-internals-dex" (dex-internals-dex)
   #:other
   
@@ -402,7 +580,7 @@
     
     (define (dex-internals-name-of this x)
       (expect x (name-internal rep) (nothing)
-      #/list #/list 'name rep))
+      #/just #/list 'name rep))
     
     (define (dex-internals-call this a b)
       (if (and (name? a) (name? b))
@@ -412,52 +590,6 @@
 
 (define/contract dex-name dex?
   (dex-encapsulated #/dex-internals-name))
-
-
-; TODO: Replace `dex-by-cline` with a method on clines that makes them
-; return an appropriate dex for their domain. That way, we can have
-; clines that have orderings that are inconsistent with each other
-; (e.g. ascending and descending order).
-
-(struct-easy "a dex-internals-by-cline" (dex-internals-by-cline cline)
-  #:other
-  
-  #:methods gen:dex-internals
-  [
-    
-    (define (dex-internals-tag this)
-      'dex-by-cline)
-    
-    (define (dex-internals-autoname this)
-      (dissect this (dex-internals-by-cline cline)
-      #/list 'dex-by-cline #/autoname-cline cline))
-    
-    (define (dex-internals-autodex this other)
-      (dissect this (dex-internals-by-cline a)
-      #/dissect other (dex-internals-by-cline b)
-      #/compare-by-dex dex-cline a b))
-    
-    (define (dex-internals-in? this x)
-      (dissect this (dex-internals-by-cline cline)
-      #/in-cline? cline x))
-    
-    (define (dex-internals-name-of this x)
-      (dissect this (dex-internals-by-cline cline)
-      #/name-of-by-cline cline x))
-    
-    (define (dex-internals-call this a b)
-      (dissect this (dex-internals-by-cline cline)
-      #/w- cline-result (compare-by-cline cline a b)
-      #/expect cline-result (just cline-result) cline-result
-      #/list
-      #/mat cline-result (ordering-lt) (make-ordering-private-lt)
-      #/mat cline-result (ordering-gt) (make-ordering-private-gt)
-        cline-result))
-  ])
-
-(define/contract (dex-by-cline cline)
-  (-> cline? dex?)
-  (dex-encapsulated #/dex-internals-by-cline cline))
 
 
 (struct-easy "a dex-internals-struct"
@@ -579,13 +711,13 @@
       #/dissect other (cline-internals-by-dex b)
       #/compare-by-dex dex-dex a b))
     
+    (define (cline-internals-dex this)
+      (dissect this (cline-internals-by-dex dex)
+        dex))
+    
     (define (cline-internals-in? this x)
       (dissect this (cline-internals-by-dex dex)
       #/in-dex? dex x))
-    
-    (define (cline-internals-name-of this x)
-      (dissect this (cline-internals-by-dex dex)
-      #/name-of dex x))
     
     (define (cline-internals-call this a b)
       (dissect this (cline-internals-by-dex dex)
@@ -612,11 +744,11 @@
     (define (cline-internals-autodex this other)
       (just #/ordering-eq))
     
+    (define (cline-internals-dex this)
+      (dex-give-up))
+    
     (define (cline-internals-in? this x)
       #f)
-    
-    (define (cline-internals-name-of this x)
-      (nothing))
     
     (define (cline-internals-call this a b)
       (nothing))
@@ -651,14 +783,15 @@
       #/expect result (just #/ordering-eq) result
       #/compare-by-dex dex-cline a2 b2))
     
+    (define (cline-internals-dex this)
+      (dissect this (cline-internals-default first second)
+      #/dex-default
+        (get-dex-from-cline first)
+        (get-dex-from-cline second)))
+    
     (define (cline-internals-in? this x)
       (dissect this (cline-internals-default first second)
       #/or (in-cline? first x) (in-cline? second x)))
-    
-    (define (cline-internals-name-of this x)
-      (dissect this (cline-internals-default first second)
-      #/mat (name-of-by-cline first x) (just result) (just result)
-      #/name-of-by-cline second x))
     
     (define (cline-internals-call this a b)
       (dissect this (cline-internals-default first second)
@@ -684,6 +817,16 @@
     cline-for-trying-second))
 
 
+(struct-easy "a convert-dex-from-cline-by-own-method"
+  (convert-dex-from-cline-by-own-method get-method)
+  #:other
+  
+  #:property prop:procedure
+  (lambda (this x)
+    (dissect this (convert-dex-from-cline-by-own-method get-method)
+    #/expect (get-method x) (just result) (nothing)
+    #/just #/get-dex-from-cline result)))
+
 (struct-easy "a cline-internals-by-own-method"
   (cline-internals-by-own-method dexable-get-method)
   #:other
@@ -706,17 +849,18 @@
       #/dissect other (cline-internals-by-own-method b)
       #/compare-dexables a b))
     
+    (define (cline-internals-dex this)
+      (dissect this
+        (cline-internals-by-own-method #/dexable dex get-method)
+      #/dex-by-own-method #/dexable
+        (dex-struct convert-dex-from-cline-by-own-method dex)
+        (convert-dex-from-cline-by-own-method get-method)))
+    
     (define (cline-internals-in? this x)
       (dissect this
         (cline-internals-by-own-method #/dexable dex get-method)
       #/expect (get-method x) (just method) #f
       #/in-cline? method x))
-    
-    (define (cline-internals-name-of this x)
-      (dissect this
-        (cline-internals-by-own-method #/dexable dex get-method)
-      #/expect (get-method x) (just method) (nothing)
-      #/name-of-by-cline method x))
     
     (define (cline-internals-call this a b)
       (dissect this
@@ -735,12 +879,20 @@
       #/compare-by-cline a-method a b))
   ])
 
-(define/contract
-  (cline-by-own-method dexable-get-method)
+(define/contract (cline-by-own-method dexable-get-method)
   (-> (dexableof #/-> any/c #/maybe/c cline?) cline?)
   (cline-encapsulated
   #/cline-internals-by-own-method dexable-get-method))
 
+
+(struct-easy "a convert-dex-from-cline-fix"
+  (convert-dex-from-cline-fix unwrap)
+  #:other
+  
+  #:property prop:procedure
+  (lambda (this dex)
+    (dissect this (convert-dex-from-cline-fix unwrap)
+    #/get-dex-from-cline #/unwrap #/cline-by-dex dex)))
 
 (struct-easy "a cline-internals-fix"
   (cline-internals-fix dexable-unwrap)
@@ -754,22 +906,22 @@
     
     (define (cline-internals-autoname this)
       (dissect this (cline-internals-fix #/dexable dex unwrap)
-      #/list 'cline-fix
-        (autoname-dex dex)
-        (name-of dex unwrap)))
+      #/list 'cline-fix (autoname-dex dex) (name-of dex unwrap)))
     
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-fix a)
       #/dissect other (cline-internals-fix b)
       #/compare-dexables a b))
     
+    (define (cline-internals-dex this)
+      (dissect this (cline-internals-fix #/dexable dex unwrap)
+      #/dex-fix #/dexable
+        (dex-struct convert-dex-from-cline-fix dex)
+        (convert-dex-from-cline-fix unwrap)))
+    
     (define (cline-internals-in? this x)
       (dissect this (cline-internals-fix #/dexable dex unwrap)
       #/in-cline? (unwrap #/cline-encapsulated this) x))
-    
-    (define (cline-internals-name-of this x)
-      (dissect this (cline-internals-fix #/dexable dex unwrap)
-      #/name-of-by-cline (unwrap #/cline-encapsulated this) x))
     
     (define (cline-internals-call this a b)
       (dissect this (cline-internals-fix #/dexable dex unwrap)

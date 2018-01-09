@@ -124,6 +124,10 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Returns whether the given value is a cline.
 }
 
+@defproc[(get-dex-from-cline [cline cline?]) dex?]{
+  Given a cline, returns a dex over the same domain.
+}
+
 @defproc[(in-cline? [cline cline?] [x any/c]) boolean?]{
   Given a cline and a value, returns whether the value belongs to the cline's domain.
 }
@@ -179,10 +183,36 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 }
 
 
+@defthing[dex-give-up dex?]{
+  A dex over an empty domain.
+}
+
+@defproc[(dex-default [a dex?] [b dex?]) dex?]{
+  Given two dexes, returns a dex over the union of their domains.
+  
+  When compared by @racket[dex-dex], all @racket[dex-default] values are @racket[ordering-eq] if their @var[a] values are and their @var[b] values are.
+}
+
+@defproc[
+  (dex-by-own-method
+    [dexable-get-method (dexableof (-> any/c (maybe/c dex?)))])
+  dex?
+]{
+  Given a dexable function, returns a dex that works by invoking that function with each value to get @racket[(just _dex)] or @racket[(nothing)], verifying that the two @var[dex] values are the same, and then proceeding to invoke that value.
+  
+  When compared by @racket[dex-dex], all @racket[dex-by-own-method] values are @racket[ordering-eq] if their @var[dexable-get-method] values' dexes and values are.
+}
+
+@defproc[(dex-fix [dexable-unwrap (dexableof (-> dex? dex?))]) dex?]{
+  Given a dexable function, returns a dex that works by passing itself to the function and then invoking the resulting dex.
+  
+  When compared by @racket[dex-dex], all @racket[dex-fix] values are @racket[ordering-eq] if their @var[dexable-unwrap] values' dexes and values are.
+}
+
 @defthing[dex-dex dex?]{
   A dex that compares dexes.
   
-  All presently existing dexes allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(dex-by-cline (cline-by-dex (dex-cline)))] and @racket[(dex-cline)] can be distinguished this way despite otherwise having equivalent behavior.
+  All presently existing dexes allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(dex-default (dex-give-up) (dex-give-up))] and @racket[(dex-give-up)] can be distinguished this way despite otherwise having equivalent behavior.
 }
 
 @defthing[dex-cline dex?]{
@@ -193,12 +223,6 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 
 @defthing[dex-name dex?]{
   A dex that compares names.
-}
-
-@defproc[(dex-by-cline [cline cline?]) dex?]{
-  Returns a dex that compares values according the given cline. If the cline returns the "candidly precedes" or "candidly follows" results, this dex returns the "secretly precedes" or "secretly follows" results respectively.
-  
-  When compared by @racket[dex-dex], @racket[dex-by-cline] values are @racket[ordering-eq] if their clines are.
 }
 
 @defform[
