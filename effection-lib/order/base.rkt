@@ -623,11 +623,11 @@
   [
     
     (define (dex-internals-tag this)
-      'dex-struct)
+      'dex-struct-by-field-position)
     
     (define (dex-internals-autoname this)
       (dissect this (dex-internals-struct descriptor counts? fields)
-      #/list* 'dex-struct descriptor
+      #/list* 'dex-struct-by-field-position descriptor
       #/list-fmap fields #/dissectfn (list getter position dex)
         (list position #/autoname-dex dex)))
     
@@ -1053,11 +1053,11 @@
   [
     
     (define (cline-internals-tag this)
-      'cline-struct)
+      'cline-struct-by-field-position)
     
     (define (cline-internals-autoname this)
       (dissect this (cline-internals-struct descriptor counts? fields)
-      #/list* 'cline-struct descriptor
+      #/list* 'cline-struct-by-field-position descriptor
       #/list-fmap fields #/dissectfn (list getter position cline)
         (list position #/autoname-cline cline)))
     
@@ -1340,3 +1340,117 @@
 (define/contract (merge-fix dexable-unwrap)
   (-> (dexableof #/-> merge? merge?) merge?)
   (merge-encapsulated #/merge-internals-fix dexable-unwrap))
+
+
+(struct-easy "a merge-internals-struct"
+  (merge-internals-struct descriptor constructor counts? fields)
+  #:other
+  
+  #:methods gen:merge-internals
+  [
+    
+    (define (merge-internals-tag this)
+      'merge-struct-by-field-position)
+    
+    (define (merge-internals-autoname this)
+      (dissect this
+        (merge-internals-struct descriptor constructor counts? fields)
+      #/list* 'merge-struct-by-field-position descriptor
+      #/list-fmap fields #/dissectfn (list getter position merge)
+        (list position #/autoname-merge merge)))
+    
+    (define (merge-internals-autodex this other)
+      (dissect this
+        (merge-internals-struct
+          a-descriptor a-constructor a-counts? a-fields)
+      #/dissect other
+        (merge-internals-struct
+          b-descriptor a-constructor b-counts? b-fields)
+      #/maybe-ordering-or
+        (just
+        #/struct-type-descriptors-autodex a-descriptor b-descriptor)
+      #/maybe-compare-aligned-lists a-fields b-fields
+      #/lambda (a-field b-field)
+        (dissect a-field (list a-getter a-position a-merge)
+        #/dissect b-field (list b-getter b-position b-merge)
+        #/maybe-ordering-or
+          (just #/lt-autodex a-position b-position <)
+        #/compare-by-dex dex-merge a-merge b-merge)))
+    
+    (define (merge-internals-call this a b)
+      (dissect this
+        (merge-internals-struct descriptor constructor counts? fields)
+      #/expect (counts? a) #t (nothing)
+      #/expect (counts? b) #t (nothing)
+      #/w- n (length fields)
+      #/nextlet fields fields args (hasheq)
+        (expect fields (cons field fields)
+          (apply constructor #/build-list n #/lambda (i)
+            (hash-ref args i))
+        #/dissect field (list getter position merge)
+        #/next fields
+        #/hash-set args position
+          (call-merge merge (getter a) (getter b)))))
+  ])
+
+; TODO: Document and provide this.
+(define-syntax merge-struct-by-field-position
+#/lambda (stx) #/syntax-parse stx #/
+  (_ struct-tag:id [field-position:nat field-merge:expr] ...)
+  (dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
+    (list struct:foo make-foo foo? getters)
+  #/w- fields (desyntax-list #'#/[field-position field-merge] ...)
+  #/w- n (length getters)
+  #/expect (= n (length fields)) #t
+    (raise-syntax-error #f
+      (format "expected ~s merges, got ~s"
+        n
+        (length fields))
+      stx)
+  #/w- seen (make-hasheq)
+  #/syntax-protect
+    #`(merge-encapsulated
+      #/merge-internals-struct #,struct:foo #,make-foo #,foo?
+      #/list
+        #,@(list-fmap fields #/lambda (field)
+             (dissect (desyntax-list field)
+               (list position-stx merge)
+             #/w- position (syntax-e position-stx)
+             #/expect (< position n) #t
+               (raise-syntax-error #f
+                 (format
+                   "expected a field position less than ~s, got ~s"
+                   n
+                   position)
+                 stx position-stx)
+             #/expect (hash-has-key? seen position) #f
+               (raise-syntax-error #f
+                 "duplicate field position"
+                 stx position-stx)
+             #/begin (hash-set! seen position #t)
+               #`(list
+                   #,(list-ref getters position)
+                   #,position-stx
+                   #,merge))))))
+
+; TODO: Document and provide this.
+(define-syntax merge-struct #/lambda (stx) #/syntax-parse stx #/
+  (_ struct-tag:id field-merge:expr ...)
+  (dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
+    (list struct:foo make-foo foo? getters)
+  #/w- fields (desyntax-list #'#/field-merge ...)
+  #/w- n (length getters)
+  #/expect (= n (length fields)) #t
+    (raise-syntax-error #f
+      (format "expected ~s merges, got ~s"
+        n
+        (length fields))
+      stx)
+  #/syntax-protect
+    #`(merge-encapsulated
+      #/merge-internals-struct #,struct:foo #,make-foo #,foo?
+      #/list
+        #,@(list-kv-map (map list fields getters)
+           #/lambda (position field)
+             (dissect field (list merge getter)
+               #`(list #,getter #,position #,merge))))))
