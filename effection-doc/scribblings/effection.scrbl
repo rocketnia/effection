@@ -357,7 +357,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 }
 
 
-@subsection[#:tag "merges-and-fuses"]{Merges and fuses}
+@subsection[#:tag "merges-and-fuses"]{Merges and Fuses}
 
 Effection offers a non-exhaustive but extensive selection of "merges" and "fuses." These are values which can be compared for equality with like values (using @racket[dex-merge] and @racket[dex-fuse]), and they represent operations of two arguments (invocable using @racket[call-merge] and @racket[call-fuse]).
 
