@@ -192,7 +192,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   For the sake of nontermination, error, and performance concerns, this attempts to compute the result using @racket[dex-for-trying-first] before it moves on to @racket[dex-for-trying-second].
   
-  When compared by @racket[dex-dex], all @racket[dex-default] values are @racket[ordering-eq] if their @var[dex-for-trying-first] values are and their @var[dex-for-trying-second] values are.
+  When compared by @racket[dex-dex], all @tt{dex-default} values are @racket[ordering-eq] if their @racket[dex-for-trying-first] values are and their @racket[dex-for-trying-second] values are.
 }
 
 @defproc[
@@ -202,13 +202,13 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 ]{
   Given a dexable function, returns a dex that works by invoking that function with each value to get @racket[(just _dex)] or @racket[(nothing)], verifying that the two @var[dex] values are the same, and then proceeding to invoke that value.
   
-  When compared by @racket[dex-dex], all @racket[dex-by-own-method] values are @racket[ordering-eq] if their @var[dexable-get-method] values' dexes and values are.
+  When compared by @racket[dex-dex], all @tt{dex-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
 }
 
 @defproc[(dex-fix [dexable-unwrap (dexableof (-> dex? dex?))]) dex?]{
   Given a dexable function, returns a dex that works by passing itself to the function and then invoking the resulting dex.
   
-  When compared by @racket[dex-dex], all @racket[dex-fix] values are @racket[ordering-eq] if their @var[dexable-unwrap] values' dexes and values are.
+  When compared by @racket[dex-dex], all @tt{dex-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
 }
 
 @defform[
@@ -224,6 +224,8 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   For the sake of nontermination, error, and performance concerns, this dex computes by attempting the given dexes in the order they appear in this call.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
+  
+  When compared by @racket[dex-dex], all @tt{dex-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[dex-expr] values are @racket[ordering-eq].
 }
 
 @defform[
@@ -235,6 +237,8 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   For the sake of nontermination, error, and performance concerns, this dex computes by attempting the given dexes in the order they appear in this call.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
+  
+  When compared by @racket[dex-dex], each @tt{dex-struct} value is @racket[ordering-eq] to the equivalent @racket[dex-struct-by-field-position] value.
 }
 
 
@@ -269,7 +273,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 @defproc[(cline-by-dex [dex dex?]) cline?]{
   Returns a cline that compares values according the given dex. Since the dex never returns the "candidly precedes" or "candidly follows" results, this cline doesn't either.
   
-  When compared by @racket[dex-cline], all @racket[cline-by-dex] values are @racket[ordering-eq] if their dexes are.
+  When compared by @racket[dex-cline], all @tt{cline-by-dex} values are @racket[ordering-eq] if their dexes are.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to the original @racket[dex].
 }
@@ -290,7 +294,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   For the sake of nontermination, error, and performance concerns, this attempts to compute the result using @racket[cline-for-trying-first] before it moves on to @racket[cline-for-trying-second].
   
-  When compared by @racket[dex-cline], all @racket[cline-default] values are @racket[ordering-eq] if their @var[cline-for-trying-first] values are and their @var[cline-for-trying-second] values are.
+  When compared by @racket[dex-cline], all @tt{cline-default} values are @racket[ordering-eq] if their @racket[cline-for-trying-first] values are and their @racket[cline-for-trying-second] values are.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to the similarly constructed @racket[dex-default].
 }
@@ -302,7 +306,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 ]{
   Given a dexable function, returns a cline that works by invoking that function with each value to get @racket[(just _cline)] or @racket[(nothing)], verifying that the two @var[cline] values are the same, and then proceeding to invoke that value.
   
-  When compared by @racket[dex-cline], all @racket[cline-by-own-method] values are @racket[ordering-eq] if their @var[dexable-get-method] values' dexes and values are.
+  When compared by @racket[dex-cline], all @tt{cline-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
 }
@@ -313,7 +317,41 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 ]{
   Given a dexable function, returns a cline that works by passing itself to the function and then invoking the resulting cline.
   
-  When compared by @racket[dex-cline], all @racket[cline-fix] values are @racket[ordering-eq] if their @var[dexable-unwrap] values' dexes and values are.
+  When compared by @racket[dex-cline], all @tt{cline-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
+}
+
+@defform[
+  (cline-struct-by-field-position struct-id
+    [field-position-nat cline-expr]
+    ...)
+  #:contracts ([cline-expr cline?])
+]{
+  Returns a cline that compares instances of the structure type named by @racket[struct-id], and whose field values can be compared by the clines produced by the @racket[cline-expr] expressions. The comparison is lexicographic, with the most significant comparisons being the @racket[cline-expr] values that appear earliest in this call.
+  
+  Each @racket[field-position-nat] must be a distinct number indicating which field should be checked by the associated cline, and there must be an entry for every field.
+  
+  For the sake of nontermination, error, and performance concerns, this cline computes by attempting the given clines in the order they appear in this call.
+  
+  A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
+  
+  When compared by @racket[dex-cline], all @tt{cline-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[cline-expr] values are @racket[ordering-eq].
+  
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to the similarly constructed @racket[dex-struct-by-field-position].
+}
+
+@defform[
+  (cline-struct struct-id cline-expr ...)
+  #:contracts ([cline-expr cline?])
+]{
+  Returns a cline that compares instances of the structure type named by @racket[struct-id], and whose field values can be compared by the clines produced by the @racket[cline-expr] expressions. The comparison is lexicographic, with the most significant comparisons being the @racket[cline-expr] values that appear earliest in this call.
+  
+  For the sake of nontermination, error, and performance concerns, this cline computes by attempting the given clines in the order they appear in this call.
+  
+  A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
+  
+  When compared by @racket[dex-cline], each @racket[cline-struct] value is @racket[ordering-eq] to the equivalent @racket[cline-struct-by-field-position] value.
+  
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to the similarly constructed @racket[dex-struct].
 }

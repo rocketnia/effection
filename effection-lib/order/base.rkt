@@ -72,7 +72,9 @@
   cline-give-up
   cline-default
   cline-by-own-method
-  cline-fix)
+  cline-fix
+  cline-struct-by-field-position
+  cline-struct)
 
 
 
@@ -86,7 +88,7 @@
     #/mat x (cons first rest)
       (and (syntax? first) #/proper-syntax-pair? rest)
     #/and (syntax? x) #/proper-syntax-pair? #/syntax-e x))
-
+  
   (define/contract (desyntax-list syntax-list)
     (-> proper-syntax-pair? #/listof syntax?)
     (nextlet syntax-list syntax-list
@@ -95,6 +97,45 @@
         (cons first #/next rest)
       #/next #/syntax-e syntax-list)))
 )
+
+(define-for-syntax (get-immutable-root-ancestor-struct-info stx id)
+  (w- struct-info (syntax-local-value id)
+  #/expect (struct-info? struct-info) #t
+    (raise-syntax-error #f
+      "not an identifier with struct-info attached"
+      stx id)
+  #/dissect (extract-struct-info struct-info)
+    (list struct:foo make-foo foo? getters setters super)
+  #/expect super #t
+    (raise-syntax-error #f
+      (nextlet super super
+        (mat super #f
+          ; The super-type is unknown.
+          "not the root super-type in a structure type hierarchy"
+        #/dissect (extract-struct-info #/syntax-local-value super)
+          (list _ _ _ _ _ super-super)
+        #/expect super-super #t (next super-super)
+        ; There is no super-type beyond this one.
+        #/format
+          "not the root super-type in a structure type hierarchy, which in this case would be ~s"
+          (syntax-e super)))
+      stx id)
+  #/expect
+    (list-all getters #/lambda (getter) #/not #/eq? #f getter)
+    #t
+    (raise-syntax-error #f
+      "not a structure type with all of its getters available"
+      stx id)
+  #/expect (list-all setters #/lambda (setter) #/eq? #f setter) #t
+    (raise-syntax-error #f
+      "not an immutable structure type"
+      stx id)
+  ; TODO: Also verify that `struct:foo`, `make-foo`, `foo?`, and
+  ; `getters` all belong to the same structure type and that the
+  ; `getters` are exhaustive and arranged in the correct order.
+  ; Otherwise, this could create a dex that doesn't behave
+  ; consistently with other dexes for the same structure type.
+  #/list struct:foo make-foo foo? #/reverse getters))
 
 
 
@@ -148,6 +189,24 @@
   #/expect result (just #/ordering-eq) result
     second))
 
+(define/contract (lt-autodex a b <?)
+  (-> any/c any/c (-> any/c any/c boolean?) dex-result?)
+  (if (<? a b) (make-ordering-private-lt)
+  #/if (<? b a) (make-ordering-private-gt)
+  #/ordering-eq))
+
+(define/contract (lt-autocline a b <?)
+  (-> any/c any/c (-> any/c any/c boolean?) dex-result?)
+  (if (<? a b) (ordering-lt)
+  #/if (<? b a) (ordering-gt)
+  #/ordering-eq))
+
+(define (maybe-compare-aligned-lists as bs maybe-compare-elems)
+  (expect (list as bs) (list (cons a as) (cons b bs))
+    (just #/ordering-eq)
+  #/maybe-ordering-or (maybe-compare-elems a b)
+  #/maybe-compare-aligned-lists as bs maybe-compare-elems))
+
 
 ; ===== Names, dexes, and dexables ===================================
 
@@ -160,12 +219,6 @@
 (define/contract (name? x)
   (-> any/c boolean?)
   (name-internal? x))
-
-(define/contract (lt-autodex a b <?)
-  (-> any/c any/c (-> any/c any/c boolean?) dex-result?)
-  (if (<? a b) (make-ordering-private-lt)
-  #/if (<? b a) (make-ordering-private-gt)
-  #/ordering-eq))
 
 ; TODO: Test this implementation very thoroughly. We need to know what
 ; happens when this module is used through diamond dependencies, what
@@ -576,13 +629,7 @@
       #/maybe-ordering-or
         (just
         #/struct-type-descriptors-autodex a-descriptor b-descriptor)
-      #/begin
-        (define (aligned-lists-autodex as bs elem-autodex)
-          (expect (list as bs) (list (cons a as) (cons b bs))
-            (just #/ordering-eq)
-          #/maybe-ordering-or (elem-autodex a b)
-          #/aligned-lists-autodex as bs elem-autodex))
-      #/aligned-lists-autodex a-fields b-fields
+      #/maybe-compare-aligned-lists a-fields b-fields
       #/lambda (a-field b-field)
         (dissect a-field (list a-getter a-position a-dex)
         #/dissect b-field (list b-getter b-position b-dex)
@@ -615,46 +662,6 @@
         #/maybe-ordering-or (compare-by-dex dex (getter a) (getter b))
         #/next fields)))
   ])
-
-; TODO: Move this somewhere better.
-(define-for-syntax (get-immutable-root-ancestor-struct-info stx id)
-  (w- struct-info (syntax-local-value id)
-  #/expect (struct-info? struct-info) #t
-    (raise-syntax-error #f
-      "not an identifier with struct-info attached"
-      stx id)
-  #/dissect (extract-struct-info struct-info)
-    (list struct:foo make-foo foo? getters setters super)
-  #/expect super #t
-    (raise-syntax-error #f
-      (nextlet super super
-        (mat super #f
-          ; The super-type is unknown.
-          "not the root super-type in a structure type hierarchy"
-        #/dissect (extract-struct-info #/syntax-local-value super)
-          (list _ _ _ _ _ super-super)
-        #/expect super-super #t (next super-super)
-        ; There is no super-type beyond this one.
-        #/format
-          "not the root super-type in a structure type hierarchy, which in this case would be ~s"
-          (syntax-e super)))
-      stx id)
-  #/expect
-    (list-all getters #/lambda (getter) #/not #/eq? #f getter)
-    #t
-    (raise-syntax-error #f
-      "not a structure type with all of its getters available"
-      stx id)
-  #/expect (list-all setters #/lambda (setter) #/eq? #f setter) #t
-    (raise-syntax-error #f
-      "not an immutable structure type"
-      stx id)
-  ; TODO: Also verify that `struct:foo`, `make-foo`, `foo?`, and
-  ; `getters` all belong to the same structure type and that the
-  ; `getters` are exhaustive and arranged in the correct order.
-  ; Otherwise, this could create a dex that doesn't behave
-  ; consistently with other dexes for the same structure type.
-  #/list struct:foo make-foo foo? #/reverse getters))
 
 (define-syntax dex-struct-by-field-position
 #/lambda (stx) #/syntax-parse stx #/
@@ -1028,3 +1035,116 @@
 (define/contract (cline-fix dexable-unwrap)
   (-> (dexableof #/-> cline? cline?) cline?)
   (cline-encapsulated #/cline-internals-fix dexable-unwrap))
+
+
+(struct-easy "a cline-internals-struct"
+  (cline-internals-struct descriptor counts? fields)
+  #:other
+  
+  #:methods gen:cline-internals
+  [
+    
+    (define (cline-internals-tag this)
+      'cline-struct)
+    
+    (define (cline-internals-autoname this)
+      (dissect this (cline-internals-struct descriptor counts? fields)
+      #/list 'cline-struct descriptor
+      #/list-fmap fields #/dissectfn (list getter position cline)
+        (list position #/autoname-cline cline)))
+    
+    (define (cline-internals-autodex this other)
+      (dissect this
+        (cline-internals-struct a-descriptor a-counts? a-fields)
+      #/dissect other
+        (cline-internals-struct b-descriptor b-counts? b-fields)
+      #/maybe-ordering-or
+        (just
+        #/struct-type-descriptors-autodex a-descriptor b-descriptor)
+      #/maybe-compare-aligned-lists a-fields b-fields
+      #/lambda (a-field b-field)
+        (dissect a-field (list a-getter a-position a-cline)
+        #/dissect b-field (list b-getter b-position b-cline)
+        #/maybe-ordering-or
+          (just #/lt-autodex a-position b-position <)
+        #/compare-by-dex dex-cline a-cline b-cline)))
+    
+    (define (cline-internals-in? this x)
+      (dissect this (cline-internals-struct descriptor counts? fields)
+      #/counts? x))
+    
+    (define (cline-internals-dex this)
+      (dissect this (cline-internals-struct descriptor counts? fields)
+      #/dex-internals-struct descriptor counts?
+      #/list-fmap fields #/dissectfn (list getter position cline)
+        (list getter position #/get-dex-from-cline cline)))
+    
+    (define (cline-internals-call this a b)
+      (dissect this (cline-internals-struct descriptor counts? fields)
+      #/expect (counts? a) #t (nothing)
+      #/expect (counts? b) #t (nothing)
+      #/nextlet fields fields
+        (expect fields (cons field fields) (just #/ordering-eq)
+        #/dissect field (list getter position cline)
+        #/maybe-ordering-or
+          (compare-by-cline cline (getter a) (getter b))
+        #/next fields)))
+  ])
+
+(define-syntax cline-struct-by-field-position
+#/lambda (stx) #/syntax-parse stx #/
+  (_ struct-tag:id [field-position:nat field-cline:expr] ...)
+  (dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
+    (list struct:foo make-foo foo? getters)
+  #/w- fields (desyntax-list #'#/[field-position field-cline] ...)
+  #/w- n (length getters)
+  #/expect (= n (length fields)) #t
+    (raise-syntax-error #f
+      (format "expected ~s clines, got ~s"
+        n
+        (length fields))
+      stx)
+  #/w- seen (make-hasheq)
+  #/syntax-protect
+    #`(cline-encapsulated #/cline-internals-struct #,struct:foo #,foo?
+      #/list
+        #,@(list-fmap fields #/lambda (field)
+             (dissect (desyntax-list field)
+               (list position-stx cline)
+             #/w- position (syntax-e position-stx)
+             #/expect (< position n) #t
+               (raise-syntax-error #f
+                 (format
+                   "expected a field position less than ~s, got ~s"
+                   n
+                   position)
+                 stx position-stx)
+             #/expect (hash-has-key? seen position) #f
+               (raise-syntax-error #f
+                 "duplicate field position"
+                 stx position-stx)
+             #/begin (hash-set! seen position #t)
+               #`(list
+                   #,(list-ref getters position)
+                   #,position-stx
+                   #,cline))))))
+
+(define-syntax cline-struct #/lambda (stx) #/syntax-parse stx #/
+  (_ struct-tag:id field-cline:expr ...)
+  (dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
+    (list struct:foo make-foo foo? getters)
+  #/w- fields (desyntax-list #'#/field-cline ...)
+  #/w- n (length getters)
+  #/expect (= n (length fields)) #t
+    (raise-syntax-error #f
+      (format "expected ~s clines, got ~s"
+        n
+        (length fields))
+      stx)
+  #/syntax-protect
+    #`(cline-encapsulated #/cline-internals-struct #,struct:foo #,foo?
+      #/list
+        #,@(list-kv-map (map list fields getters)
+           #/lambda (position field)
+             (dissect field (list cline getter)
+               #`(list #,getter #,position #,cline))))))
