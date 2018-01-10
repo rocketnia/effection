@@ -617,7 +617,7 @@
     
     (define (dex-internals-autoname this)
       (dissect this (dex-internals-struct descriptor counts? fields)
-      #/list 'dex-struct descriptor
+      #/list* 'dex-struct descriptor
       #/list-fmap fields #/dissectfn (list getter position dex)
         (list position #/autoname-dex dex)))
     
@@ -1049,7 +1049,7 @@
     
     (define (cline-internals-autoname this)
       (dissect this (cline-internals-struct descriptor counts? fields)
-      #/list 'cline-struct descriptor
+      #/list* 'cline-struct descriptor
       #/list-fmap fields #/dissectfn (list getter position cline)
         (list position #/autoname-cline cline)))
     
