@@ -351,7 +351,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
-  When compared by @racket[dex-cline], each @racket[cline-struct] value is @racket[ordering-eq] to the equivalent @racket[cline-struct-by-field-position] value.
+  When compared by @racket[dex-cline], each @tt{cline-struct} value is @racket[ordering-eq] to the equivalent @racket[cline-struct-by-field-position] value.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to the similarly constructed @racket[dex-struct].
 }
