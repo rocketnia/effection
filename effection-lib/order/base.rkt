@@ -26,7 +26,7 @@
 
 (require #/only-in lathe dissect dissectfn expect mat next nextlet w-)
 
-(require #/only-in effection/maybe/base just nothing maybe/c)
+(require #/only-in effection/maybe/base just nothing maybe/c maybe?)
 
 (require "../private/util.rkt")
 
@@ -75,6 +75,18 @@
   cline-fix
   cline-struct-by-field-position
   cline-struct)
+
+
+; ==== Merges ====
+
+(provide merge?)
+(provide call-merge)
+(provide dex-merge)
+
+(provide
+  merge-by-dex
+  merge-by-own-method
+  merge-fix)
 
 
 
@@ -420,10 +432,8 @@
     (define (dex-internals-compare this a b)
       (expect a (dex-encapsulated a) (nothing)
       #/expect b (dex-encapsulated b) (nothing)
-      #/w- a-tag (super-tag a)
-      #/w- b-tag (super-tag b)
-      #/if (symbol<? a-tag b-tag) (just #/ordering-lt)
-      #/if (symbol<? b-tag a-tag) (just #/ordering-gt)
+      #/w- tag super-tag
+      #/maybe-ordering-or (just #/lt-autodex (tag a) (tag b) symbol<?)
       #/super-autodex a b))
   ])
 
@@ -786,10 +796,8 @@
     (define (dex-internals-compare this a b)
       (expect a (cline-encapsulated a) (nothing)
       #/expect b (cline-encapsulated b) (nothing)
-      #/w- a-tag (cline-internals-tag a)
-      #/w- b-tag (cline-internals-tag b)
-      #/if (symbol<? a-tag b-tag) (just #/ordering-lt)
-      #/if (symbol<? b-tag a-tag) (just #/ordering-gt)
+      #/w- tag cline-internals-tag
+      #/maybe-ordering-or (just #/lt-autodex (tag a) (tag b) symbol<?)
       #/cline-internals-autodex a b))
   ])
 
@@ -1148,3 +1156,187 @@
            #/lambda (position field)
              (dissect field (list cline getter)
                #`(list #,getter #,position #,cline))))))
+
+
+
+; ===== Merges =======================================================
+
+(define-generics merge-internals
+  (merge-internals-tag merge-internals)
+  (merge-internals-autoname merge-internals)
+  (merge-internals-autodex merge-internals other)
+  (merge-internals-call merge-internals a b))
+
+(struct-easy "a merge-encapsulated" (merge-encapsulated internals))
+
+(define/contract (merge? x)
+  (-> any/c boolean?)
+  (merge-encapsulated? x))
+
+(define/contract (autoname-merge merge)
+  (-> merge? any)
+  (dissect merge (merge-encapsulated internals)
+  #/merge-internals-autoname internals))
+
+(define/contract (call-merge merge a b)
+  (-> merge? any/c any/c maybe?)
+  (dissect merge (merge-encapsulated internals)
+  #/merge-internals-call internals a b))
+
+
+(struct-easy "a dex-internals-merge" (dex-internals-merge)
+  #:other
+  
+  #:methods gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'dex-merge)
+    
+    (define (dex-internals-autoname this)
+      'dex-merge)
+    
+    (define (dex-internals-autodex this other)
+      (just #/ordering-eq))
+    
+    (define (dex-internals-in? this x)
+      (merge? x))
+    
+    (define (dex-internals-name-of this x)
+      (if (merge? x)
+        (just #/name-internal #/autoname-merge x)
+        (nothing)))
+    
+    (define (dex-internals-compare this a b)
+      (expect a (merge-encapsulated a) (nothing)
+      #/expect b (merge-encapsulated b) (nothing)
+      #/w- tag merge-internals-tag
+      #/maybe-ordering-or (just #/lt-autodex (tag a) (tag b) symbol<?)
+      #/merge-internals-autodex a b))
+  ])
+
+(define/contract dex-merge dex?
+  (dex-encapsulated #/dex-internals-merge))
+
+
+(struct-easy "a merge-internals-by-dex" (merge-internals-by-dex dex)
+  #:other
+  
+  #:methods gen:merge-internals
+  [
+    
+    (define (merge-internals-tag this)
+      'merge-by-dex)
+    
+    (define (merge-internals-autoname this)
+      (dissect this (merge-internals-by-dex dex)
+      #/list 'merge-by-dex #/autoname-dex dex))
+    
+    (define (merge-internals-autodex this other)
+      (dissect this (merge-internals-by-dex a)
+      #/dissect other (merge-internals-by-dex b)
+      #/compare-by-dex dex-dex a b))
+    
+    (define (merge-internals-call this a b)
+      (dissect this (merge-internals-by-dex dex)
+      #/mat (compare-by-dex dex a b) (just #/ordering-eq)
+        (just a)
+        (nothing)))
+  ])
+
+(define/contract (merge-by-dex dex)
+  (-> dex? merge?)
+  (merge-encapsulated #/merge-internals-by-dex dex))
+
+
+(struct-easy "a merge-internals-by-own-method"
+  (merge-internals-by-own-method dexable-get-method)
+  #:other
+  
+  #:methods gen:merge-internals
+  [
+    
+    (define (merge-internals-tag this)
+      'merge-by-own-method)
+    
+    (define (merge-internals-autoname this)
+      (dissect this
+        (merge-internals-by-own-method #/dexable dex get-method)
+      #/list 'merge-by-own-method
+        (autoname-dex dex)
+        (name-of dex get-method)))
+    
+    (define (merge-internals-autodex this other)
+      (dissect this (merge-internals-by-own-method a)
+      #/dissect other (merge-internals-by-own-method b)
+      #/compare-dexables a b))
+    
+    (define (merge-internals-call this a b)
+      (dissect this
+        (merge-internals-by-own-method #/dexable dex get-method)
+      #/expect (get-method a) (just a-method) (nothing)
+      #/expect (get-method b) (just b-method) (nothing)
+      #/expect (compare-by-dex dex-merge a-method b-method)
+        (just #/ordering-eq)
+        (raise-arguments-error 'merge-by-own-method
+          "A merge-by-own-method obtained two different methods from the two values being compared"
+          "get-method" get-method
+          "a" a
+          "b" b
+          "a-method" a-method
+          "b-method" b-method)
+      #/expect (call-merge a-method a b) (just result) (nothing)
+      #/expect (get-method result) (just result-method)
+        (raise-arguments-error 'merge-by-own-method
+          "A merge-by-own-method could not obtain a method from its merge result"
+          "get-method" get-method
+          "method" a-method
+          "a" a
+          "b" b
+          "result" result)
+      #/expect (compare-by-dex dex-merge a-method result-method)
+        (just #/ordering-eq)
+        (raise-arguments-error 'merge-by-own-method
+          "A merge-by-own-method obtained two different methods from its input and its output"
+          "get-method" get-method
+          "a" a
+          "b" b
+          "result" result
+          "a-and-b-method" a-method
+          "result-method" result-method)
+      #/just result))
+  ])
+
+(define/contract (merge-by-own-method dexable-get-method)
+  (-> (dexableof #/-> any/c #/maybe/c merge?) merge?)
+  (merge-encapsulated
+  #/merge-internals-by-own-method dexable-get-method))
+
+
+(struct-easy "a merge-internals-fix"
+  (merge-internals-fix dexable-unwrap)
+  #:other
+  
+  #:methods gen:merge-internals
+  [
+    
+    (define (merge-internals-tag this)
+      'merge-fix)
+    
+    (define (merge-internals-autoname this)
+      (dissect this (merge-internals-fix #/dexable dex unwrap)
+      #/list 'merge-fix (autoname-dex dex) (name-of dex unwrap)))
+    
+    (define (merge-internals-autodex this other)
+      (dissect this (merge-internals-fix a)
+      #/dissect other (merge-internals-fix b)
+      #/compare-dexables a b))
+    
+    (define (merge-internals-call this a b)
+      (dissect this (merge-internals-fix #/dexable dex unwrap)
+      #/call-merge (unwrap #/merge-encapsulated this) a b))
+  ])
+
+(define/contract (merge-fix dexable-unwrap)
+  (-> (dexableof #/-> merge? merge?) merge?)
+  (merge-encapsulated #/merge-internals-fix dexable-unwrap))

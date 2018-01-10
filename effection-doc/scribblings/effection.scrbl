@@ -355,3 +355,46 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to the similarly constructed @racket[dex-struct].
 }
+
+
+@subsection[#:tag "merges"]{Merges}
+
+@defproc[(merge? [x any/c]) boolean?]{
+  Returns whether the given value is a merge.
+}
+
+@defproc[(call-merge [merge merge?] [a any/c] [b any/c]) maybe?]{
+  Given a merge and two values, combines those values according to the merge. The result is @racket[(nothing)] if either value is outside the merge's domain. Otherwise, the result is @racket[(just _value)] for some @var[value] that's also in the merge's domain.
+  
+  If the input values are observationally equal to Effection-safe code (especially if there is some dex by which they are @racket[ordering-eq]), then the result will be observationally equal to them both.
+}
+
+@defthing[dex-merge dex?]{
+  A dex that compares merges.
+}
+
+
+@defproc[(merge-by-dex [dex dex?]) merge?]{
+  Returns a merge that merges any values that are already @racket[ordering-eq] according the given dex. The result of the merge is @racket[ordering-eq] to both of the inputs.
+  
+  When compared by @racket[dex-merge], all @tt{merge-by-dex} values are @racket[ordering-eq] if their dexes are.
+}
+
+@defproc[
+  (merge-by-own-method
+    [dexable-get-method (dexableof (-> any/c (maybe/c merge?)))])
+  merge?
+]{
+  Given a dexable function, returns a merge that works by invoking that function with each value to get @racket[(just _merge)] or @racket[(nothing)], verifying that the two @var[merge] values are the same, invoking that merge value to get a merge result of @racket[(just _result)] or @racket[(nothing)]. If the result is @racket[(just _result)], this does a final check before returning: It invokes the function on the output @racket[result] to verify that it obtains the same @var[merge] value that was obtained from the inputs. This ensures that the operation is associative.
+  
+  When compared by @racket[dex-merge], all @tt{merge-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
+}
+
+@defproc[
+  (merge-fix [dexable-unwrap (dexableof (-> merge? merge?))])
+  merge?
+]{
+  Given a dexable function, returns a merge that works by passing itself to the function and then invoking the resulting merge.
+  
+  When compared by @racket[dex-merge], all @tt{merge-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
+}
