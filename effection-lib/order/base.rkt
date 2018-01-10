@@ -77,18 +77,29 @@
   cline-struct)
 
 
-; ==== Merges ====
+; ==== Merges and fuses ====
 
 (provide merge?)
+(provide fuse?)
 (provide call-merge)
+(provide call-fuse)
 (provide dex-merge)
+(provide dex-fuse)
+
+(provide fuse-by-merge)
+
+(provide merge-by-dex)
 
 (provide
-  merge-by-dex
   merge-by-own-method
   merge-fix
   merge-struct-by-field-position
   merge-struct)
+(provide
+  fuse-by-own-method
+  fuse-fix
+  fuse-struct-by-field-position
+  fuse-struct)
 
 
 
@@ -567,7 +578,7 @@
       #/expect (compare-by-dex dex-dex a-method b-method)
         (just #/ordering-eq)
         (raise-arguments-error 'dex-by-own-method
-          "A dex-by-own-method obtained two different methods from the two values being compared"
+          "obtained two different methods from the two values being compared"
           "get-method" get-method
           "a" a
           "b" b
@@ -675,10 +686,10 @@
         #/next fields)))
   ])
 
-(define-syntax dex-struct-by-field-position
-#/lambda (stx) #/syntax-parse stx #/
-  (_ struct-tag:id [field-position:nat field-dex:expr] ...)
-  (dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
+(define-syntax dex-struct-by-field-position #/lambda (stx)
+  (syntax-parse stx #/
+    (_ struct-tag:id [field-position:nat field-dex:expr] ...)
+  #/dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
     (list struct:foo make-foo foo? getters)
   #/w- fields (desyntax-list #'#/[field-position field-dex] ...)
   #/w- n (length getters)
@@ -713,9 +724,9 @@
                    #,position-stx
                    #,dex))))))
 
-(define-syntax dex-struct #/lambda (stx) #/syntax-parse stx #/
-  (_ struct-tag:id field-dex:expr ...)
-  (dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
+(define-syntax dex-struct #/lambda (stx)
+  (syntax-parse stx #/ (_ struct-tag:id field-dex:expr ...)
+  #/dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
     (list struct:foo make-foo foo? getters)
   #/w- fields (desyntax-list #'#/field-dex ...)
   #/w- n (length getters)
@@ -984,7 +995,7 @@
       #/expect (compare-by-dex dex-cline a-method b-method)
         (just #/ordering-eq)
         (raise-arguments-error 'cline-by-own-method
-          "A cline-by-own-method obtained two different methods from the two values being compared"
+          "obtained two different methods from the two values being compared"
           "get-method" get-method
           "a" a
           "b" b
@@ -1101,10 +1112,10 @@
         #/next fields)))
   ])
 
-(define-syntax cline-struct-by-field-position
-#/lambda (stx) #/syntax-parse stx #/
-  (_ struct-tag:id [field-position:nat field-cline:expr] ...)
-  (dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
+(define-syntax cline-struct-by-field-position #/lambda (stx)
+  (syntax-parse stx #/
+    (_ struct-tag:id [field-position:nat field-cline:expr] ...)
+  #/dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
     (list struct:foo make-foo foo? getters)
   #/w- fields (desyntax-list #'#/[field-position field-cline] ...)
   #/w- n (length getters)
@@ -1139,9 +1150,9 @@
                    #,position-stx
                    #,cline))))))
 
-(define-syntax cline-struct #/lambda (stx) #/syntax-parse stx #/
-  (_ struct-tag:id field-cline:expr ...)
-  (dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
+(define-syntax cline-struct #/lambda (stx)
+  (syntax-parse stx #/ (_ struct-tag:id field-cline:expr ...)
+  #/dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
     (list struct:foo make-foo foo? getters)
   #/w- fields (desyntax-list #'#/field-cline ...)
   #/w- n (length getters)
@@ -1161,13 +1172,13 @@
 
 
 
-; ===== Merges =======================================================
+; ===== Merges and fuses =============================================
 
-(define-generics merge-internals
-  (merge-internals-tag merge-internals)
-  (merge-internals-autoname merge-internals)
-  (merge-internals-autodex merge-internals other)
-  (merge-internals-call merge-internals a b))
+(define-generics furge-internals
+  (furge-internals-tag furge-internals)
+  (furge-internals-autoname furge-internals)
+  (furge-internals-autodex furge-internals other)
+  (furge-internals-call furge-internals a b))
 
 (struct-easy "a merge-encapsulated" (merge-encapsulated internals))
 
@@ -1178,12 +1189,28 @@
 (define/contract (autoname-merge merge)
   (-> merge? any)
   (dissect merge (merge-encapsulated internals)
-  #/merge-internals-autoname internals))
+  #/cons 'merge #/furge-internals-autoname internals))
 
 (define/contract (call-merge merge a b)
   (-> merge? any/c any/c maybe?)
   (dissect merge (merge-encapsulated internals)
-  #/merge-internals-call internals a b))
+  #/furge-internals-call internals a b))
+
+(struct-easy "a fuse-encapsulated" (fuse-encapsulated internals))
+
+(define/contract (fuse? x)
+  (-> any/c boolean?)
+  (fuse-encapsulated? x))
+
+(define/contract (autoname-fuse fuse)
+  (-> fuse? any)
+  (dissect fuse (fuse-encapsulated internals)
+  #/cons 'fuse #/furge-internals-autoname internals))
+
+(define/contract (call-fuse fuse a b)
+  (-> fuse? any/c any/c maybe?)
+  (dissect fuse (fuse-encapsulated internals)
+  #/furge-internals-call internals a b))
 
 
 (struct-easy "a dex-internals-merge" (dex-internals-merge)
@@ -1212,35 +1239,99 @@
     (define (dex-internals-compare this a b)
       (expect a (merge-encapsulated a) (nothing)
       #/expect b (merge-encapsulated b) (nothing)
-      #/w- tag merge-internals-tag
+      #/w- tag furge-internals-tag
       #/maybe-ordering-or (just #/lt-autodex (tag a) (tag b) symbol<?)
-      #/merge-internals-autodex a b))
+      #/furge-internals-autodex a b))
   ])
 
 (define/contract dex-merge dex?
   (dex-encapsulated #/dex-internals-merge))
 
 
-(struct-easy "a merge-internals-by-dex" (merge-internals-by-dex dex)
+(struct-easy "a dex-internals-fuse" (dex-internals-fuse)
   #:other
   
-  #:methods gen:merge-internals
+  #:methods gen:dex-internals
   [
     
-    (define (merge-internals-tag this)
-      'merge-by-dex)
+    (define (dex-internals-tag this)
+      'dex-fuse)
     
-    (define (merge-internals-autoname this)
-      (dissect this (merge-internals-by-dex dex)
-      #/list 'merge-by-dex #/autoname-dex dex))
+    (define (dex-internals-autoname this)
+      'dex-fuse)
     
-    (define (merge-internals-autodex this other)
-      (dissect this (merge-internals-by-dex a)
-      #/dissect other (merge-internals-by-dex b)
+    (define (dex-internals-autodex this other)
+      (just #/ordering-eq))
+    
+    (define (dex-internals-in? this x)
+      (fuse? x))
+    
+    (define (dex-internals-name-of this x)
+      (if (fuse? x)
+        (just #/name-internal #/autoname-fuse x)
+        (nothing)))
+    
+    (define (dex-internals-compare this a b)
+      (expect a (fuse-encapsulated a) (nothing)
+      #/expect b (fuse-encapsulated b) (nothing)
+      #/w- tag furge-internals-tag
+      #/maybe-ordering-or (just #/lt-autodex (tag a) (tag b) symbol<?)
+      #/furge-internals-autodex a b))
+  ])
+
+(define/contract dex-fuse dex?
+  (dex-encapsulated #/dex-internals-fuse))
+
+
+(struct-easy "a fuse-internals-by-merge"
+  (fuse-internals-by-merge merge)
+  #:other
+  
+  #:methods gen:furge-internals
+  [
+    
+    (define (furge-internals-tag this)
+      'fuse-by-merge)
+    
+    (define (furge-internals-autoname this)
+      (dissect this (fuse-internals-by-merge merge)
+      #/list 'fuse-by-merge #/autoname-merge merge))
+    
+    (define (furge-internals-autodex this other)
+      (dissect this (fuse-internals-by-merge a)
+      #/dissect other (fuse-internals-by-merge b)
+      #/compare-by-dex dex-merge a b))
+    
+    (define (furge-internals-call this a b)
+      (dissect this (fuse-internals-by-merge merge)
+      #/call-merge merge a b))
+  ])
+
+(define/contract (fuse-by-merge merge)
+  (-> merge? fuse?)
+  (fuse-encapsulated #/fuse-internals-by-merge merge))
+
+
+(struct-easy "a furge-internals-by-dex" (furge-internals-by-dex dex)
+  #:other
+  
+  #:methods gen:furge-internals
+  [
+    
+    (define (furge-internals-tag this)
+      'furge-by-dex)
+    
+    (define (furge-internals-autoname this)
+      (dissect this (furge-internals-by-dex dex)
+      #/list 'furge-by-dex #/autoname-dex dex))
+    
+    (define (furge-internals-autodex this other)
+      (dissect this (furge-internals-by-dex a)
+      #/dissect other (furge-internals-by-dex b)
       #/compare-by-dex dex-dex a b))
     
-    (define (merge-internals-call this a b)
-      (dissect this (merge-internals-by-dex dex)
+    (define (furge-internals-call this a b)
+      (dissect this (furge-internals-by-dex dex)
       #/mat (compare-by-dex dex a b) (just #/ordering-eq)
         (just a)
         (nothing)))
@@ -1248,58 +1339,65 @@
 
 (define/contract (merge-by-dex dex)
   (-> dex? merge?)
-  (merge-encapsulated #/merge-internals-by-dex dex))
+  (merge-encapsulated #/furge-internals-by-dex dex))
+
+; TODO: See if we want to export this.
+(define/contract (fuse-by-dex dex)
+  (-> dex? fuse?)
+  (fuse-encapsulated #/furge-internals-by-dex dex))
 
 
-(struct-easy "a merge-internals-by-own-method"
-  (merge-internals-by-own-method dexable-get-method)
+(struct-easy "a furge-internals-by-own-method"
+  (furge-internals-by-own-method
+    error-name dex-furge call-furge dexable-get-method)
   #:other
   
-  #:methods gen:merge-internals
+  #:methods gen:furge-internals
   [
     
-    (define (merge-internals-tag this)
-      'merge-by-own-method)
+    (define (furge-internals-tag this)
+      'furge-by-own-method)
     
-    (define (merge-internals-autoname this)
+    (define (furge-internals-autoname this)
       (dissect this
-        (merge-internals-by-own-method #/dexable dex get-method)
-      #/list 'merge-by-own-method
+        (furge-internals-by-own-method _ _ _ #/dexable dex get-method)
+      #/list 'furge-by-own-method
         (autoname-dex dex)
         (name-of dex get-method)))
     
-    (define (merge-internals-autodex this other)
-      (dissect this (merge-internals-by-own-method a)
-      #/dissect other (merge-internals-by-own-method b)
+    (define (furge-internals-autodex this other)
+      (dissect this (furge-internals-by-own-method _ _ _ a)
+      #/dissect other (furge-internals-by-own-method _ _ _ b)
       #/compare-dexables a b))
     
-    (define (merge-internals-call this a b)
+    (define (furge-internals-call this a b)
       (dissect this
-        (merge-internals-by-own-method #/dexable dex get-method)
+        (furge-internals-by-own-method error-name dex-furge call-furge
+        #/dexable dex get-method)
       #/expect (get-method a) (just a-method) (nothing)
       #/expect (get-method b) (just b-method) (nothing)
-      #/expect (compare-by-dex dex-merge a-method b-method)
+      #/expect (compare-by-dex dex-furge a-method b-method)
         (just #/ordering-eq)
-        (raise-arguments-error 'merge-by-own-method
-          "A merge-by-own-method obtained two different methods from the two values being compared"
+        (raise-arguments-error error-name
+          "obtained two different methods from the two input values"
           "get-method" get-method
           "a" a
           "b" b
           "a-method" a-method
           "b-method" b-method)
-      #/expect (call-merge a-method a b) (just result) (nothing)
+      #/expect (call-furge a-method a b) (just result) (nothing)
       #/expect (get-method result) (just result-method)
-        (raise-arguments-error 'merge-by-own-method
-          "A merge-by-own-method could not obtain a method from its merge result"
+        (raise-arguments-error error-name
+          "could not obtain a method from the result value"
           "get-method" get-method
           "method" a-method
           "a" a
           "b" b
           "result" result)
-      #/expect (compare-by-dex dex-merge a-method result-method)
+      #/expect (compare-by-dex dex-furge a-method result-method)
         (just #/ordering-eq)
-        (raise-arguments-error 'merge-by-own-method
-          "A merge-by-own-method obtained two different methods from its input and its output"
+        (raise-arguments-error error-name
+          "obtained two different methods from the input and the output"
           "get-method" get-method
           "a" a
           "b" b
@@ -1311,77 +1409,94 @@
 
 (define/contract (merge-by-own-method dexable-get-method)
   (-> (dexableof #/-> any/c #/maybe/c merge?) merge?)
-  (merge-encapsulated
-  #/merge-internals-by-own-method dexable-get-method))
+  (merge-encapsulated #/furge-internals-by-own-method
+    'merge-by-own-method dex-merge call-merge dexable-get-method))
+
+(define/contract (fuse-by-own-method dexable-get-method)
+  (-> (dexableof #/-> any/c #/maybe/c fuse?) fuse?)
+  (fuse-encapsulated #/furge-internals-by-own-method
+    'fuse-by-own-method dex-fuse call-fuse dexable-get-method))
 
 
-(struct-easy "a merge-internals-fix"
-  (merge-internals-fix dexable-unwrap)
+(struct-easy "a furge-internals-fix"
+  (furge-internals-fix call-furge furge-encapsulated dexable-unwrap)
   #:other
   
-  #:methods gen:merge-internals
+  #:methods gen:furge-internals
   [
     
-    (define (merge-internals-tag this)
-      'merge-fix)
+    (define (furge-internals-tag this)
+      'furge-fix)
     
-    (define (merge-internals-autoname this)
-      (dissect this (merge-internals-fix #/dexable dex unwrap)
-      #/list 'merge-fix (autoname-dex dex) (name-of dex unwrap)))
+    (define (furge-internals-autoname this)
+      (dissect this (furge-internals-fix _ _ #/dexable dex unwrap)
+      #/list 'furge-fix (autoname-dex dex) (name-of dex unwrap)))
     
-    (define (merge-internals-autodex this other)
-      (dissect this (merge-internals-fix a)
-      #/dissect other (merge-internals-fix b)
+    (define (furge-internals-autodex this other)
+      (dissect this (furge-internals-fix _ _ a)
+      #/dissect other (furge-internals-fix _ _ b)
       #/compare-dexables a b))
     
-    (define (merge-internals-call this a b)
-      (dissect this (merge-internals-fix #/dexable dex unwrap)
-      #/call-merge (unwrap #/merge-encapsulated this) a b))
+    (define (furge-internals-call this a b)
+      (dissect this
+        (furge-internals-fix call-furge furge-encapsulated
+        #/dexable dex unwrap)
+      #/call-furge (unwrap #/furge-encapsulated this) a b))
   ])
 
 (define/contract (merge-fix dexable-unwrap)
   (-> (dexableof #/-> merge? merge?) merge?)
-  (merge-encapsulated #/merge-internals-fix dexable-unwrap))
+  (merge-encapsulated
+  #/furge-internals-fix call-merge merge-encapsulated dexable-unwrap))
+
+(define/contract (fuse-fix dexable-unwrap)
+  (-> (dexableof #/-> fuse? fuse?) fuse?)
+  (fuse-encapsulated
+  #/furge-internals-fix call-fuse fuse-encapsulated dexable-unwrap))
 
 
-(struct-easy "a merge-internals-struct"
-  (merge-internals-struct descriptor constructor counts? fields)
+(struct-easy "a furge-internals-struct"
+  (furge-internals-struct
+    autoname-furge dex-furge call-furge
+    descriptor constructor counts? fields)
   #:other
   
-  #:methods gen:merge-internals
+  #:methods gen:furge-internals
   [
     
-    (define (merge-internals-tag this)
-      'merge-struct-by-field-position)
+    (define (furge-internals-tag this)
+      'furge-struct-by-field-position)
     
-    (define (merge-internals-autoname this)
+    (define (furge-internals-autoname this)
       (dissect this
-        (merge-internals-struct descriptor constructor counts? fields)
-      #/list* 'merge-struct-by-field-position descriptor
-      #/list-fmap fields #/dissectfn (list getter position merge)
-        (list position #/autoname-merge merge)))
+        (furge-internals-struct
+          autoname-furge _ _ descriptor constructor counts? fields)
+      #/list* 'furge-struct-by-field-position descriptor
+      #/list-fmap fields #/dissectfn (list getter position furge)
+        (list position #/autoname-furge furge)))
     
-    (define (merge-internals-autodex this other)
+    (define (furge-internals-autodex this other)
       (dissect this
-        (merge-internals-struct
-          a-descriptor a-constructor a-counts? a-fields)
+        (furge-internals-struct
+          _ dex-furge _ a-descriptor a-constructor a-counts? a-fields)
       #/dissect other
-        (merge-internals-struct
-          b-descriptor a-constructor b-counts? b-fields)
+        (furge-internals-struct
+          _ _ _ b-descriptor a-constructor b-counts? b-fields)
       #/maybe-ordering-or
         (just
         #/struct-type-descriptors-autodex a-descriptor b-descriptor)
       #/maybe-compare-aligned-lists a-fields b-fields
       #/lambda (a-field b-field)
-        (dissect a-field (list a-getter a-position a-merge)
-        #/dissect b-field (list b-getter b-position b-merge)
+        (dissect a-field (list a-getter a-position a-furge)
+        #/dissect b-field (list b-getter b-position b-furge)
         #/maybe-ordering-or
           (just #/lt-autodex a-position b-position <)
-        #/compare-by-dex dex-merge a-merge b-merge)))
+        #/compare-by-dex dex-furge a-furge b-furge)))
     
-    (define (merge-internals-call this a b)
+    (define (furge-internals-call this a b)
       (dissect this
-        (merge-internals-struct descriptor constructor counts? fields)
+        (furge-internals-struct
+          _ _ call-furge descriptor constructor counts? fields)
       #/expect (counts? a) #t (nothing)
       #/expect (counts? b) #t (nothing)
       #/w- n (length fields)
@@ -1389,33 +1504,39 @@
         (expect fields (cons field fields)
           (apply constructor #/build-list n #/lambda (i)
             (hash-ref args i))
-        #/dissect field (list getter position merge)
+        #/dissect field (list getter position furge)
         #/next fields
         #/hash-set args position
-          (call-merge merge (getter a) (getter b)))))
+          (call-furge furge (getter a) (getter b)))))
   ])
 
-(define-syntax merge-struct-by-field-position
-#/lambda (stx) #/syntax-parse stx #/
-  (_ struct-tag:id [field-position:nat field-merge:expr] ...)
-  (dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
+(define-for-syntax
+  (expand-furge-struct-by-field-position
+    stx furges-message furge-encapsulated-id autoname-furge-id
+    dex-furge-id call-furge-id)
+  (syntax-parse stx #/
+    (_ struct-tag:id [field-position:nat field-furge:expr] ...)
+  #/dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
     (list struct:foo make-foo foo? getters)
-  #/w- fields (desyntax-list #'#/[field-position field-merge] ...)
+  #/w- fields (desyntax-list #'#/[field-position field-furge] ...)
   #/w- n (length getters)
   #/expect (= n (length fields)) #t
     (raise-syntax-error #f
-      (format "expected ~s merges, got ~s"
+      (format "expected ~s ~a, got ~s"
         n
+        furges-message
         (length fields))
       stx)
   #/w- seen (make-hasheq)
   #/syntax-protect
-    #`(merge-encapsulated
-      #/merge-internals-struct #,struct:foo #,make-foo #,foo?
+    #`(#,furge-encapsulated-id
+      #/furge-internals-struct
+        #,autoname-furge-id #,dex-furge-id #,call-furge-id
+        #,struct:foo #,make-foo #,foo?
       #/list
         #,@(list-fmap fields #/lambda (field)
              (dissect (desyntax-list field)
-               (list position-stx merge)
+               (list position-stx furge)
              #/w- position (syntax-e position-stx)
              #/expect (< position n) #t
                (raise-syntax-error #f
@@ -1432,25 +1553,47 @@
                #`(list
                    #,(list-ref getters position)
                    #,position-stx
-                   #,merge))))))
+                   #,furge))))))
 
-(define-syntax merge-struct #/lambda (stx) #/syntax-parse stx #/
-  (_ struct-tag:id field-merge:expr ...)
-  (dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
+(define-syntax merge-struct-by-field-position #/lambda (stx)
+  (expand-furge-struct-by-field-position stx "merges"
+    #'merge-encapsulated #'autoname-merge #'dex-merge #'call-merge))
+
+(define-syntax fuse-struct-by-field-position #/lambda (stx)
+  (expand-furge-struct-by-field-position stx "fuses"
+    #'fuse-encapsulated #'autoname-fuse #'dex-fuse #'call-fuse))
+
+(define-for-syntax
+  (expand-furge-struct
+    stx furges-message furge-encapsulated-id autoname-furge-id
+    dex-furge-id call-furge-id)
+  (syntax-parse stx #/ (_ struct-tag:id field-furge:expr ...)
+  #/dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
     (list struct:foo make-foo foo? getters)
-  #/w- fields (desyntax-list #'#/field-merge ...)
+  #/w- fields (desyntax-list #'#/field-furge ...)
   #/w- n (length getters)
   #/expect (= n (length fields)) #t
     (raise-syntax-error #f
-      (format "expected ~s merges, got ~s"
+      (format "expected ~s ~a, got ~s"
         n
+        furges-message
         (length fields))
       stx)
   #/syntax-protect
-    #`(merge-encapsulated
-      #/merge-internals-struct #,struct:foo #,make-foo #,foo?
+    #`(#,furge-encapsulated-id
+      #/furge-internals-struct
+        #,autoname-furge-id #,dex-furge-id #,call-furge-id
+        #,struct:foo #,make-foo #,foo?
       #/list
         #,@(list-kv-map (map list fields getters)
            #/lambda (position field)
-             (dissect field (list merge getter)
-               #`(list #,getter #,position #,merge))))))
+             (dissect field (list furge getter)
+               #`(list #,getter #,position #,furge))))))
+
+(define-syntax merge-struct #/lambda (stx)
+  (expand-furge-struct stx "merges"
+    #'merge-encapsulated #'autoname-merge #'dex-merge #'call-merge))
+
+(define-syntax fuse-struct #/lambda (stx)
+  (expand-furge-struct stx "fuses"
+    #'fuse-encapsulated #'autoname-fuse #'dex-fuse #'call-fuse))

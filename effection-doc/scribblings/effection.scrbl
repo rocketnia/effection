@@ -357,20 +357,38 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 }
 
 
-@subsection[#:tag "merges"]{Merges}
+@subsection[#:tag "merges-and-fuses"]{Merges and fuses}
 
-@defproc[(merge? [x any/c]) boolean?]{
-  Returns whether the given value is a merge.
+Effection offers a non-exhaustive but extensive selection of "merges" and "fuses." These are values which can be compared for equality with like values (using @racket[dex-merge] and @racket[dex-fuse]), and they represent operations of two arguments (invocable using @racket[call-merge] and @racket[call-fuse]).
+
+Merges represent operations that are commutative, associative, and idempotent, or in other words exactly the kind of operation that can operate on a (nonempty and finite) unordered set of inputs.
+
+Fuses represent operations that are commutative and associative (and not necessarily idempotent). A fuse is ideal for operating on a (nonempty and finite) unordered @emph{multiset} of inputs.
+
+The idempotence of a merge operation is such enough that if the two inputs to the merge are @racket[order-eq] by any dex, the result will be @racket[order-eq] to them both by the same dex.
+
+
+@deftogether[(
+  @defproc[(merge? [x any/c]) boolean?]
+  @defproc[(fuse? [x any/c]) boolean?]
+)]{
+  Returns whether the given value is a merge/fuse.
 }
 
-@defproc[(call-merge [merge merge?] [a any/c] [b any/c]) maybe?]{
-  Given a merge and two values, combines those values according to the merge. The result is @racket[(nothing)] if either value is outside the merge's domain. Otherwise, the result is @racket[(just _value)] for some @var[value] that's also in the merge's domain.
+@deftogether[(
+  @defproc[(call-merge [merge merge?] [a any/c] [b any/c]) maybe?]
+  @defproc[(call-fuse [fuse fuse?] [a any/c] [b any/c]) maybe?]
+)]{
+  Given a merge/fuse and two values, combines those values according to the merge/fuse. The result is @racket[(nothing)] if either value is outside the merge's/fuse's domain. Otherwise, the result is @racket[(just _value)] for some @var[value] that's also in the domain.
   
-  If the input values are observationally equal to Effection-safe code (especially if there is some dex by which they are @racket[ordering-eq]), then the result will be observationally equal to them both.
+  For @tt{call-merge}, if there is any dex for which the input values are @racket[ordering-eq], then the result will be @racket[ordering-eq] to them both.
 }
 
-@defthing[dex-merge dex?]{
-  A dex that compares merges.
+@deftogether[(
+  @defthing[dex-merge dex?]
+  @defthing[dex-fuse dex?]
+)]{
+  A dex that compares merges/fuses.
 }
 
 
@@ -380,47 +398,80 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   When compared by @racket[dex-merge], all @tt{merge-by-dex} values are @racket[ordering-eq] if their dexes are.
 }
 
-@defproc[
-  (merge-by-own-method
-    [dexable-get-method (dexableof (-> any/c (maybe/c merge?)))])
-  merge?
-]{
-  Given a dexable function, returns a merge that works by invoking that function with each value to get @racket[(just _merge)] or @racket[(nothing)], verifying that the two @var[merge] values are the same, invoking that merge value to get a merge result of @racket[(just _result)] or @racket[(nothing)]. If the result is @racket[(just _result)], this does a final check before returning: It invokes the function on the output @racket[result] to verify that it obtains the same @var[merge] value that was obtained from the inputs. This ensures that the operation is associative.
+@defproc[(fuse-by-merge [merge merge?]) fuse?]{
+  Returns a fuse that fuses values by merging them using the given merge.
   
-  When compared by @racket[dex-merge], all @tt{merge-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
+  When compared by @racket[dex-fuse], all @tt{fuse-by-merge} values are @racket[ordering-eq] if their merges are.
 }
 
-@defproc[
-  (merge-fix [dexable-unwrap (dexableof (-> merge? merge?))])
-  merge?
-]{
-  Given a dexable function, returns a merge that works by passing itself to the function and then invoking the resulting merge.
+@deftogether[(
+  @defproc[
+    (merge-by-own-method
+      [dexable-get-method (dexableof (-> any/c (maybe/c merge?)))])
+    merge?
+  ]
+  @defproc[
+    (fuse-by-own-method
+      [dexable-get-method (dexableof (-> any/c (maybe/c fuse?)))])
+    fuse?
+  ]
+)]{
+  Given a dexable function, returns a fuse that works by invoking that function with each value to get @racket[(just _method)] or @racket[(nothing)], verifying that the two @var[method] values are the same, and invoking that merge/fuse value to get a result of @racket[(just _result)] or @racket[(nothing)]. If the result is @racket[(just _result)], this does a final check before returning it: It invokes the method-getting function on the @racket[result] to verify that it obtains the same @var[method] value that was obtained from the inputs. This ensures that the operation is associative.
   
-  When compared by @racket[dex-merge], all @tt{merge-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
+  When compared by @racket[dex-merge]/@racket[dex-fuse], all @tt{merge-by-own-method}/@tt{fuse-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
 }
 
-@defform[
-  (merge-struct-by-field-position struct-id
-    [field-position-nat merge-expr]
-    ...)
-  #:contracts ([merge-expr merge?])
-]{
-  Returns a merge that merges instances of the structure type named by @racket[struct-id], and whose field values can be merged by the merges produced by the @racket[merge-expr] expressions.
+@deftogether[(
+  @defproc[
+    (merge-fix [dexable-unwrap (dexableof (-> merge? merge?))])
+    merge?
+  ]
+  @defproc[
+    (fuse-fix [dexable-unwrap (dexableof (-> fuse? fuse?))])
+    fuse?
+  ]
+)]{
+  Given a dexable function, returns a merge/fuse that works by passing itself to the function and then invoking the resulting merge/fuse.
   
-  Each @racket[field-position-nat] must be a distinct number indicating which field should be checked by the associated merge, and there must be an entry for every field.
+  When compared by @racket[dex-merge]/@racket[dex-fuse], all @tt{merge-fix}/@tt{fuse-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
+}
+
+@deftogether[(
+  @defform[
+    (merge-struct-by-field-position struct-id
+      [field-position-nat field-method-expr]
+      ...)
+    #:contracts ([field-method-expr merge?])
+  ]
+  @defform[
+    (fuse-struct-by-field-position struct-id
+      [field-position-nat fuse-expr]
+      ...)
+    #:contracts ([field-method-expr fuse?])
+  ]
+)]{
+  Returns a merge/fuse that combines instances of the structure type named by @racket[struct-id], and whose field values can be combined by the merges/fuses produced by the @racket[field-method-expr] expressions.
+  
+  Each @racket[field-position-nat] must be a distinct number indicating which field should be checked by the associated merge/fuse, and there must be an entry for every field.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
-  When compared by @racket[dex-merge], all @tt{merge-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[merge-expr] values are @racket[ordering-eq].
+  When compared by @racket[dex-merge]/@racket[dex-fuse], all @tt{merge-struct-by-field-position}/@tt{fuse-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[field-method-expr] values are @racket[ordering-eq].
 }
 
-@defform[
-  (merge-struct struct-id merge-expr ...)
-  #:contracts ([merge-expr merge?])
-]{
-  Returns a merge that merges instances of the structure type named by @racket[struct-id], and whose field values can be merged by the merges produced by the @racket[merge-expr] expressions.
+@deftogether[(
+  @defform[
+    (merge-struct struct-id field-method-expr ...)
+    #:contracts ([field-method-expr merge?])
+  ]
+  @defform[
+    (fuse-struct struct-id field-method-expr ...)
+    #:contracts ([field-method-expr fuse?])
+  ]
+)]{
+  Returns a merge/fuse that combines instances of the structure type named by @racket[struct-id], and whose field values can be combined by the merges/fuses produced by the @racket[field-method-expr] expressions.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
-  When compared by @racket[dex-merge], each @tt{merge-struct} value is @racket[ordering-eq] to the equivalent @racket[merge-struct-by-field-position] value.
+  When compared by @racket[dex-merge]/@racket[dex-fuse], each @tt{merge-struct}/@tt{fuse-struct} value is @racket[ordering-eq] to the equivalent @racket[merge-struct-by-field-position]/@racket[fuse-struct-by-field-position] value.
 }
