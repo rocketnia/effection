@@ -398,3 +398,29 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   When compared by @racket[dex-merge], all @tt{merge-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
 }
+
+@defform[
+  (merge-struct-by-field-position struct-id
+    [field-position-nat merge-expr]
+    ...)
+  #:contracts ([merge-expr merge?])
+]{
+  Returns a merge that merges instances of the structure type named by @racket[struct-id], and whose field values can be merged by the merges produced by the @racket[merge-expr] expressions.
+  
+  Each @racket[field-position-nat] must be a distinct number indicating which field should be checked by the associated merge, and there must be an entry for every field.
+  
+  A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
+  
+  When compared by @racket[dex-merge], all @tt{merge-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[merge-expr] values are @racket[ordering-eq].
+}
+
+@defform[
+  (merge-struct struct-id merge-expr ...)
+  #:contracts ([merge-expr merge?])
+]{
+  Returns a merge that merges instances of the structure type named by @racket[struct-id], and whose field values can be merged by the merges produced by the @racket[merge-expr] expressions.
+  
+  A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
+  
+  When compared by @racket[dex-merge], each @tt{merge-struct} value is @racket[ordering-eq] to the equivalent @racket[merge-struct-by-field-position] value.
+}

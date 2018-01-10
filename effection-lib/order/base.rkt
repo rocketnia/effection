@@ -86,7 +86,9 @@
 (provide
   merge-by-dex
   merge-by-own-method
-  merge-fix)
+  merge-fix
+  merge-struct-by-field-position
+  merge-struct)
 
 
 
@@ -1393,7 +1395,6 @@
           (call-merge merge (getter a) (getter b)))))
   ])
 
-; TODO: Document and provide this.
 (define-syntax merge-struct-by-field-position
 #/lambda (stx) #/syntax-parse stx #/
   (_ struct-tag:id [field-position:nat field-merge:expr] ...)
@@ -1433,7 +1434,6 @@
                    #,position-stx
                    #,merge))))))
 
-; TODO: Document and provide this.
 (define-syntax merge-struct #/lambda (stx) #/syntax-parse stx #/
   (_ struct-tag:id field-merge:expr ...)
   (dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
