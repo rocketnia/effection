@@ -1,0 +1,15 @@
+; TODO: Document which Effection utilities with callbacks call their callbacks in tail position.
+
+(define (run-monadic-effects monadic-effects-body) ...)
+(define (monadic-effects-pure result) ...)
+(define (monadic-effects-bind monadic-effects-intermediate intermediate-to-monadic-effects) ...)
+(define-simple-macro (monadic-effects-handle-struct (struct-type-id:id field-var:id ...) then:expr monadic-effects:expr) ...)
+(define (monadic-effects-send-to-handler value-to-handle) ...)
+(define (monadic-effects-with-no-handlers monadic-effects-body) ...)
+
+; TODO: Can we consider "monadic effects" to be hypersnippets of degree 1? Would `...-handle-struct` make sense as a degree-2 hypersnippet where the degree-1 holes are operations where the handler goes out of scope temporarily? Can we express `...-with-no-handlers` as an operation that looks up a dynamically scoped binding containing a degree-1-hole-entering operation and invokes it, where that operation is a fuse of the degree-1-hole-entering operations of all the `...-handle-struct` operations underway?
+
+; TODO: Is there any we'll want to have closures that "capture" the handlers that existed when they were made and then reinstall them during their body?
+
+; TODO: The current idea is that if a programmer tries to introduce a handler for a struct type that is already handled, that's an error. Can we make handlers fusable functions instead somehow? That would be especially good for explaining how the `...-with-no-handlers` operation can invoke a bunch of degree-1-hole-operations fused together.
+ 
