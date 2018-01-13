@@ -12,4 +12,97 @@
 ; TODO: Is there any we'll want to have closures that "capture" the handlers that existed when they were made and then reinstall them during their body?
 
 ; TODO: The current idea is that if a programmer tries to introduce a handler for a struct type that is already handled, that's an error. Can we make handlers fusable functions instead somehow? That would be especially good for explaining how the `...-with-no-handlers` operation can invoke a bunch of degree-1-hole-operations fused together.
- 
+
+; TODO: Oops, change `cline-struct` so it verifies every field is in the cline's domain rather than exiting early.
+
+; TODO: Perhaps we should have a variant of `cline-struct` where later field clines are allowed to depend on earlier field values, since those clines will never be used except when the earlier field values are equal.
+
+
+Consider calling a pure higher-order operation like `map`, but `map` itself is untrusted, and the caller code wants to make sure it's pure up to the purity of its callback. The caller runs `map` in a pure region -- but because the callback itself may be impure, that pure region is of hypermonad degree not 1 but 2. Curious.
+
+Consider further that if the implementation of `map` itself wants its callback to be pure, it will run its callback in a (degree-1) pure region. If the caller we were describing was using one of these purity-enforcing `map` operations by mistake, there should be an error in one of two places: Either when the caller tries to open a degree-1 hole in their degree-2 pure region, or when the caller finally tries to take advantage of that hole to run a degree-0 side effect. The degree-0 side effect certainly should not be able to happen.
+
+The act of entering that degree-1 pure region will already open a degree-1 hole in almost all degree-2 regions, namely the kind of degree-2 regions where degree-0 custom side effect handlers are in scope. It would make sense for it to open a degree-1 hole in a degree-2 pure region as well, which would make the caller's attempt to open a hole in their own region fail because they're not currently in that region; they're already in such a hole.
+
+
+
+There are a number of different notionis of purity that a "pure region" could retreat to in Effection. Effection ranges from Racket-style procedural side effects to some very pure code, but there are stages in between. First we consider all the effects at play:
+
+  * Nontrivial performance costs; time and space footprint that may exceed what the outside world is willing to provide offhand. This draws the outside world's attention in a way that can motivate them to study the program's intermediate execution state, run approximative simulations on it, make optimizations to it, or pull the plug on it without that interaction having been anticipated by the language designer or the programmer. And if these interactions are common enough, programmers may anticipate them, leading the culture around a language to assign a more impure semantics to a language than the semantics it was originally designed to have.
+  
+  * Nontermination, or at least computation that is not *known* to terminate. While nontrivial performance merely encourages the outside world to find creative interactions with the program, the expectation that a program will never terminate all but forces it. For nonterminating programs that were not written to be interactive, pulling the plug is a common outcome. Programs which do not have to terminate commonly include run time errors, parts of the program which do not terminate as usual but which often prepare at least an informal message to be discovered by a supervising system as it pulls the plug.
+  
+  * Dynamic loading; reading information from the outside world that the programmer expects to be identical every time it's requested.
+  
+  * Indeterminism; reading information from the outside world that may be inconsistent between requests.
+  
+  * Performance indeterminism; space-time footprint that may be inconsistent between executions of the same subcomputation.
+  
+  * Accumulation; setting up information that will be eventually be bundled with the computation's overall result value as they're both written to the outside world.
+  
+  * Writing to a concurrent world; writing information to the outside world, then observing that since the program is still running, the outside world must not have pulled the plug in response to that action. (This knowledge is mostly meaningful when indeterministic operations are available to read information from the outside world, but there may be a few odd uses for this effect on its own, like a program that commands its plug to pull itself.)
+
+Some of those effects subsume others:
+
+  * Nontermination implies nontrivial performance costs. (Nontermination *is* nontrivially taxing of patience.)
+  
+  * Indeterminism implies dynamic loading. (A deterministic dynamic loading system can be supplied to programmers in the form of an indeterministic-looking API.)
+  
+  * Performance indeterminism implies nontrivial performance costs. (Otherwise we wouldn't care enough to notice the indeterminism.)
+  
+  * Indeterminism implies performance indeterminism. (A program can branch on an indeterministic value and into subprograms that have completely different performance.)
+  
+  * Writing to a concurrent world implies accumulation. (An accumulation API can be presented to programmers in the form of a writing API.)
+
+Here's a more succinct illustration of that. To represent the implication graph as a forest, "Nontrivial performance costs" appears twice:
+
+  * Nontermination
+    * Nontrivial performance costs
+  * Indeterminism
+    * Performance indeterminism
+      * Nontrivial performance costs
+    * Dynamic loading
+  * Writing to a concurrent world
+    * Accumulation
+
+There are a few more observations that we'll use to simplify this:
+
+While there might be ways to prohibit nontermination, Effection, being an untyped lambda calculus, seems like a poor place to achieve that. The same is true of performance indeterminism, since a JIT like Racket's would be hard to live without. Someday it would be nice to tinker with these, but this may be a job for another library or another language, especially a typed one.
+
+There seems to be little if any value in the ability to write to a concurrent world without using indeterminism to read from it again, so for Effection we'll suppose that every program that has access to "Writing to a concurrent world" also has access to "Indeterminism."
+
+Finally, there's another way to think about dynamic loading. Reading deterministic information from the outside world is not unusual for pure code at all. Before the lifetime of the running program begins, its own source code and the language implementation it will run on are both part of the "outside world," and we may consider them to still exist there. So when the program dynamically loads some piece of information, if we regard that information as belonging to the outside world it's impure, but if we regard it as belonging to the language design as interpreted by the language implementation, then it is just as pure for the program to look up that information as it is for the program to refer to language primitives like `lambda` by name. So we will consider dynamic loading to be a designated extension point for the language.
+
+With that in mind, Effection's implication graph is much simpler:
+
+  * Indeterminism + Writing to a concurrent world
+    * Indeterminism
+    * Accumulation
+
+This means there are only a few levels of purity in Effection code:
+
+  * (Just nontrivial performance costs, nontermination, and dynamic loading)
+  
+  * Indeterminism
+  
+  * Accumulation
+  
+  * Indeterminism + Accumulation
+  
+  * Indeterminism + Writing to a concurrent world
+
+Based on this list, we may want to design ways to make custom effect handlers for indeterminism, accumulation, and writing effects along with corresponding operators that unwind those to get back to pure regions.
+
+There are a few complications:
+
+Accessing an effect handler is itself indeterministic.
+
+For one thing, the indeterminism of handled effects makes the idea of accumulation handlers pretty awkward unless they're "Indeterminism + Accumulation" handlers. It's possible deterministic accumulation code will only be able to have its effects handled by a system that has interpreter privileges over it.
+
+The indeterminism of handled effects also leads to the slightly absurd situation that we may want not only a pure region that unwinds past all custom indeterminism handlers, but also a pure region that unwinds past the very ability to make dynamically scoped effect handlers at all. Or should that ability be available pervasively using a dynamic load?
+
+Since our notions of indeterminism and writing are mixed in with the idea of "outside world" systems acting concurrently with the evaluation strategy, any handler for these is incomplete without some kind of concurrency, or at least a hidden state value.
+
+It is curious to consider higher-degree variations of these effects. Higher-degree accumulation might accumulate a higher-degree data structure generalizing a list or set. Higher-degree indeterminism might allow custom openers of pure regions and custom installers of effect handlers. Higher-degree writing might facilitate nested logging, exposing the current stack trace to the world, or corraling a subcomputation's access to resources.
+
+Hmm... Could higher-degree writing effects establish interpreter priveleges? I suppose a program could *request* interpreter privileges from the outside world, and the outside world is ultimately in a position to grant them, but that sets a messy precedent since this feature would not offer the outside world any easily comprehensible information about what kind of security is at stake.
