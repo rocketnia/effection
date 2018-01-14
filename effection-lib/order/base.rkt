@@ -695,7 +695,22 @@
         ; We do a tail call if we can.
         #/mat fields (list) (compare-by-dex dex (getter a) (getter b))
         
-        #/maybe-ordering-or (compare-by-dex dex (getter a) (getter b))
+        #/w- result (compare-by-dex dex (getter a) (getter b))
+        #/expect result (just #/ordering-eq)
+          (mat result (nothing) (nothing)
+          ; We have a potential result to use, but first we check that
+          ; the rest of the field values belong to their respective
+          ; dexes' domains. If they don't, this structure instance is
+          ; not part part of this dex's domain, so the result is
+          ; `(nothing)`.
+          #/nextlet fields fields
+            (expect fields (cons field fields) result
+            #/dissect field (list getter position dex)
+            #/expect
+              (and (in-dex? dex #/getter a) (in-dex? dex #/getter b))
+              #t
+              (nothing)
+            #/next fields))
         #/next fields)))
   ])
 
@@ -1134,8 +1149,24 @@
         #/mat fields (list)
           (compare-by-cline cline (getter a) (getter b))
         
-        #/maybe-ordering-or
-          (compare-by-cline cline (getter a) (getter b))
+        #/w- result (compare-by-cline cline (getter a) (getter b))
+        #/expect result (just #/ordering-eq)
+          (mat result (nothing) (nothing)
+          ; We have a potential result to use, but first we check that
+          ; the rest of the field values belong to their respective
+          ; clines' domains. If they don't, this structure instance is
+          ; not part part of this cline's domain, so the result is
+          ; `(nothing)`.
+          #/nextlet fields fields
+            (expect fields (cons field fields) result
+            #/dissect field (list getter position cline)
+            #/expect
+              (and
+                (in-cline? cline #/getter a)
+                (in-cline? cline #/getter b))
+              #t
+              (nothing)
+            #/next fields))
         #/next fields)))
   ])
 

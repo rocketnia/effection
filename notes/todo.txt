@@ -11,8 +11,6 @@
 
 ; TODO: The current idea is that if a programmer tries to introduce a handler for a struct type that is already handled, that's an error. Can we make handlers fusable functions instead somehow? That would be especially good for explaining how the `...-with-no-handlers` operation can invoke a bunch of degree-1-hole-operations fused together.
 
-; TODO: Oops, change `cline-struct` so it verifies every field is in the cline's domain rather than exiting early.
-
 ; TODO: Perhaps we should have a variant of `cline-struct` where later field clines are allowed to depend on earlier field values, since those clines will never be used except when the earlier field values are equal.
 
 

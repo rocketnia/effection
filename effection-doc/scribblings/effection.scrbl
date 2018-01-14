@@ -225,7 +225,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   Each @racket[field-position-nat] must be a distinct number indicating which field should be checked by the associated dex, and there must be an entry for every field.
   
-  For the sake of nontermination, error, and performance concerns, this dex computes by attempting the given dexes in the order they appear in this call. The last dex, if any, is attempted as a tail call.
+  For the sake of nontermination, error, and performance concerns, this dex computes by attempting the given dexes in the order they appear in this call. If a dex before the last one determines a non-@racket[ordering-eq] result, the following dexes are only checked to be sure their domains contain the respective field values. Otherwise, the last dex, if any, is attempted as a tail call.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
@@ -353,7 +353,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 ]{
   Returns a cline that compares instances of the structure type named by @racket[struct-id], and whose field values can be compared by the clines produced by the @racket[cline-expr] expressions. The comparison is lexicographic, with the most significant comparisons being the @racket[cline-expr] values that appear earliest in this call.
   
-  For the sake of nontermination, error, and performance concerns, this cline computes by attempting the given clines in the order they appear in this call. The last cline, if any, is attempted as a tail call.
+  For the sake of nontermination, error, and performance concerns, this cline computes by attempting the given clines in the order they appear in this call. If a cline before the last one determines a non-@racket[ordering-eq] result, the following clines are only checked to be sure their domains contain the respective field values. Otherwise, the last cline, if any, is attempted as a tail call.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
