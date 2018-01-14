@@ -1,5 +1,3 @@
-; TODO: Document which Effection utilities with callbacks call their callbacks in tail position.
-
 (define (run-monadic-effects monadic-effects-body) ...)
 (define (monadic-effects-pure result) ...)
 (define (monadic-effects-bind monadic-effects-intermediate intermediate-to-monadic-effects) ...)

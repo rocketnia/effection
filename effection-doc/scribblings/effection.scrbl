@@ -158,6 +158,8 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 
 @defproc[(compare-dexables [a valid-dexable?] [b valid-dexable?]) (maybe/c dex-result?)]{
   Compares the two given well-formed @racket[dexable] values to see if they have the same @racket[dexable-dex] and the same @racket[dexable-value]. If they have the same dex, this returns a @racket[just] of a @racket[dex-result?]; otherwise, this returns @racket[(nothing)].
+  
+  The dex's @racket[compare-by-dex] behavior is called as a tail call when comparing the values.
 }
 
 @defproc[(name-of-dexable [x valid-dexable?]) name?]{
@@ -192,6 +194,8 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   For the sake of nontermination, error, and performance concerns, this attempts to compute the result using @racket[dex-for-trying-first] before it moves on to @racket[dex-for-trying-second].
   
+  The invocation of @racket[dex-for-trying-second] is a tail call.
+  
   When compared by @racket[dex-dex], all @tt{dex-default} values are @racket[ordering-eq] if their @racket[dex-for-trying-first] values are and their @racket[dex-for-trying-second] values are.
 }
 
@@ -200,13 +204,13 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
     [dexable-get-method (dexableof (-> any/c (maybe/c dex?)))])
   dex?
 ]{
-  Given a dexable function, returns a dex that works by invoking that function with each value to get @racket[(just _dex)] or @racket[(nothing)], verifying that the two @var[dex] values are the same, and then proceeding to invoke that value.
+  Given a dexable function, returns a dex that works by invoking that function with each value to get @racket[(just _dex)] or @racket[(nothing)], verifying that the two @var[dex] values are the same, and then proceeding to tail-call that dex value.
   
   When compared by @racket[dex-dex], all @tt{dex-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
 }
 
 @defproc[(dex-fix [dexable-unwrap (dexableof (-> dex? dex?))]) dex?]{
-  Given a dexable function, returns a dex that works by passing itself to the function and then invoking the resulting dex.
+  Given a dexable function, returns a dex that works by passing itself to the function and then tail-calling the resulting dex.
   
   When compared by @racket[dex-dex], all @tt{dex-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
 }
@@ -221,7 +225,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   Each @racket[field-position-nat] must be a distinct number indicating which field should be checked by the associated dex, and there must be an entry for every field.
   
-  For the sake of nontermination, error, and performance concerns, this dex computes by attempting the given dexes in the order they appear in this call.
+  For the sake of nontermination, error, and performance concerns, this dex computes by attempting the given dexes in the order they appear in this call. The last dex, if any, is attempted as a tail call.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
@@ -234,7 +238,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 ]{
   Returns a dex that compares instances of the structure type named by @racket[struct-id], and whose field values can be compared by the dexes produced by the @racket[dex-expr] expressions.
   
-  For the sake of nontermination, error, and performance concerns, this dex computes by attempting the given dexes in the order they appear in this call.
+  For the sake of nontermination, error, and performance concerns, this dex computes by attempting the given dexes in the order they appear in this call. The last dex, if any, is attempted as a tail call.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
@@ -271,7 +275,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 
 
 @defproc[(cline-by-dex [dex dex?]) cline?]{
-  Returns a cline that compares values according the given dex. Since the dex never returns the "candidly precedes" or "candidly follows" results, this cline doesn't either.
+  Returns a cline that compares values by tail-calling the given dex. Since the dex never returns the "candidly precedes" or "candidly follows" results, this cline doesn't either.
   
   When compared by @racket[dex-cline], all @tt{cline-by-dex} values are @racket[ordering-eq] if their dexes are.
   
@@ -294,6 +298,8 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   For the sake of nontermination, error, and performance concerns, this attempts to compute the result using @racket[cline-for-trying-first] before it moves on to @racket[cline-for-trying-second].
   
+  The invocation of @racket[cline-for-trying-second] is a tail call.
+  
   When compared by @racket[dex-cline], all @tt{cline-default} values are @racket[ordering-eq] if their @racket[cline-for-trying-first] values are and their @racket[cline-for-trying-second] values are.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to the similarly constructed @racket[dex-default].
@@ -304,7 +310,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
     [dexable-get-method (dexableof (-> any/c (maybe/c cline?)))])
   cline?
 ]{
-  Given a dexable function, returns a cline that works by invoking that function with each value to get @racket[(just _cline)] or @racket[(nothing)], verifying that the two @var[cline] values are the same, and then proceeding to invoke that value.
+  Given a dexable function, returns a cline that works by invoking that function with each value to get @racket[(just _cline)] or @racket[(nothing)], verifying that the two @var[cline] values are the same, and then proceeding to tail-call that value.
   
   When compared by @racket[dex-cline], all @tt{cline-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
   
@@ -315,7 +321,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   (cline-fix [dexable-unwrap (dexableof (-> cline? cline?))])
   cline?
 ]{
-  Given a dexable function, returns a cline that works by passing itself to the function and then invoking the resulting cline.
+  Given a dexable function, returns a cline that works by passing itself to the function and then tail-calling the resulting cline.
   
   When compared by @racket[dex-cline], all @tt{cline-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
   
@@ -332,7 +338,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   Each @racket[field-position-nat] must be a distinct number indicating which field should be checked by the associated cline, and there must be an entry for every field.
   
-  For the sake of nontermination, error, and performance concerns, this cline computes by attempting the given clines in the order they appear in this call.
+  For the sake of nontermination, error, and performance concerns, this cline computes by attempting the given clines in the order they appear in this call. The last cline, if any, is attempted as a tail call.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
@@ -347,7 +353,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 ]{
   Returns a cline that compares instances of the structure type named by @racket[struct-id], and whose field values can be compared by the clines produced by the @racket[cline-expr] expressions. The comparison is lexicographic, with the most significant comparisons being the @racket[cline-expr] values that appear earliest in this call.
   
-  For the sake of nontermination, error, and performance concerns, this cline computes by attempting the given clines in the order they appear in this call.
+  For the sake of nontermination, error, and performance concerns, this cline computes by attempting the given clines in the order they appear in this call. The last cline, if any, is attempted as a tail call.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
@@ -431,7 +437,7 @@ The idempotence of a merge operation is such enough that if the two inputs to th
     fuse?
   ]
 )]{
-  Given a dexable function, returns a merge/fuse that works by passing itself to the function and then invoking the resulting merge/fuse.
+  Given a dexable function, returns a merge/fuse that works by passing itself to the function and then tail-calling the resulting merge/fuse.
   
   When compared by @racket[dex-merge]/@racket[dex-fuse], all @tt{merge-fix}/@tt{fuse-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
 }
