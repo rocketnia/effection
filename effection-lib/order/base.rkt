@@ -662,7 +662,15 @@
     
     (define (dex-internals-in? this x)
       (dissect this (dex-internals-struct descriptor counts? fields)
-      #/counts? x))
+      #/and (counts? x)
+      #/nextlet fields fields
+        (expect fields (cons field fields) #t
+        ; TODO: See if we should make the last field comparison a tail
+        ; call. That would involve checking to see if `fields` is an
+        ; empty list here.
+        #/dissect field (list getter position dex)
+        #/and (in-dex? dex #/getter x)
+        #/next fields)))
     
     (define (dex-internals-name-of this x)
       (dissect this (dex-internals-struct descriptor counts? fields)
@@ -681,6 +689,9 @@
       #/expect (counts? b) #t (nothing)
       #/nextlet fields fields
         (expect fields (cons field fields) (just #/ordering-eq)
+        ; TODO: See if we should make the last field comparison a tail
+        ; call. That would involve checking to see if `fields` is an
+        ; empty list here.
         #/dissect field (list getter position dex)
         #/maybe-ordering-or (compare-by-dex dex (getter a) (getter b))
         #/next fields)))
@@ -1092,7 +1103,15 @@
     
     (define (cline-internals-in? this x)
       (dissect this (cline-internals-struct descriptor counts? fields)
-      #/counts? x))
+      #/and (counts? x)
+      #/nextlet fields fields
+        (expect fields (cons field fields) #t
+        ; TODO: See if we should make the last field comparison a tail
+        ; call. That would involve checking to see if `fields` is an
+        ; empty list here.
+        #/dissect field (list getter position cline)
+        #/and (in-cline? cline #/getter x)
+        #/next fields)))
     
     (define (cline-internals-dex this)
       (dissect this (cline-internals-struct descriptor counts? fields)
@@ -1106,6 +1125,9 @@
       #/expect (counts? b) #t (nothing)
       #/nextlet fields fields
         (expect fields (cons field fields) (just #/ordering-eq)
+        ; TODO: See if we should make the last field comparison a tail
+        ; call. That would involve checking to see if `fields` is an
+        ; empty list here.
         #/dissect field (list getter position cline)
         #/maybe-ordering-or
           (compare-by-cline cline (getter a) (getter b))
