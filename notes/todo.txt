@@ -4,7 +4,36 @@
 
 
 
-; TODO: Perhaps we should have a variant of `cline-struct` where later field clines are allowed to depend on earlier field values, since those clines will never be used except when the earlier field values are equal.
+; TODO: Replace `dex-struct-by-field-position` and `cline-struct-by-field-position` with more expressive variants where later field-comparing methods are allowed to depend on earlier field values (the ones which have already been verified to be equal).
+
+(struct dependent-sum (tag value))
+
+; Here's an example of what `dex-struct/d` could be. The example for `cline-struct/d` would be basically the same.
+
+(dex-struct/d (dependent-sum t-field v-field)
+  
+  ; This causes the `tag` field to be compared according to
+  ; `dex-symbol`. If this comparison results in `ordering-eq`, then
+  ; `t-val` is set to the common value and we proceed.
+  (compare t-val t-field dex-symbol)
+  
+  ; This just defines another variable for use in future fields. We're
+  ; not really using it for its best purpose here, but it'll be good
+  ; as a way to avoid repeating a computation in multiple
+  ; `(field ...)` sections.
+  (define int-type 'int)
+  
+  ; Now this can depend on the bindings of `t-val` and `int-type`.
+  ; Since we have no use for the value even if it's equal, we use the
+  ; `_` pattern to ignore it here.
+  (compare _ v-field
+    (mat t-val 'symbol dex-symbol
+    #/mat t-val int-type dex-int
+    #/error "Expected t-val to be 'symbol or 'int")))
+
+; It's tempting to go even further and define something like `dex-mat` that's just like the above example except that `(dependent-sum t-field v-field)` can be replaced with a nested pattern match. Heck, if `dex-nat` also allows the pattern to be a variable by itself, then we replace `dex-by-own-method` at the same time.
+
+; One complication lurking in this example is, how do we determine that two `dex-struct/d` values are equal? Unlike `dex-by-own-method`, the example here doesn't make the dependent expressions dexable. Either we should make them start in an isolated scope where only some dexable values are supplied from outside, or we should make this somewhat more difficult to actually use by requiring first-class dexable functions to be passed in.
 
 
 
