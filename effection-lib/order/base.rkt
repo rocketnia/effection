@@ -236,9 +236,9 @@
 ; ===== Names, dexes, and dexables ===================================
 
 ; Internally, we represent name values as data made of structure type
-; descriptors, exact nonnegative integers, symbols, empty lists, and
-; cons cells, and for sorting purposes, we consider them to ascend in
-; that order.
+; descriptors, exact nonnegative integers, interned symbols, empty
+; lists, and cons cells, and for sorting purposes, we consider them to
+; ascend in that order.
 (struct-easy "a name" (name-internal rep))
 
 (define/contract (name? x)
@@ -286,11 +286,14 @@
       #/make-ordering-private-gt)
     #/mat b (list) (make-ordering-private-lt)
     
-    ; Handle the symbols.
-    #/if (symbol? a)
-      (if (symbol? b) (lt-autodex a b symbol<?)
+    ; Handle the interned symbols.
+    #/w- interned-symbol?
+      (lambda (x)
+        (and (symbol? x) (symbol-interned? x)))
+    #/if (interned-symbol? a)
+      (if (interned-symbol? b) (lt-autodex a b symbol<?)
       #/make-ordering-private-gt)
-    #/if (symbol? b) (make-ordering-private-lt)
+    #/if (interned-symbol? b) (make-ordering-private-lt)
     
     ; Handle the exact nonnegative integers.
     #/if (exact-nonnegative-integer? a)
