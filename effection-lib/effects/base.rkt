@@ -13,9 +13,24 @@
 (require "../private/util.rkt")
 
 
-; TODO: Implement this file. We have a partial rationale and partial
-; plan laid out in notes/todo.txt, and the file
+; TODO: Implement, document, and provide these.
+
+;(provide pure/c!r!)
+;(provide #/struct-out leaf-r)
+;(provide holes-r/c leaf-r/c computation-r/c)
+;(provide return!r bind!r)
+;(provide run!r! purely!r)
+
+;(provide
+;  read-value!r with-fusable-value-reader!r fusing-value-reader!r)
+;(provide handler? handle!r with-first-handler!r)
+;(provide gensym!r)
+
+; TODO: Implement more effects than this. We have a partial rationale
+; and partial plan laid out in notes/todo.txt, and the file
 ; notes/original-notes.txt contains some earlier notes on the subject.
+; These should guide the design and could serve as a starting point
+; for the documentation.
 
 
 
@@ -29,6 +44,10 @@
   c)
 
 (struct-easy "a leaf-r" (leaf-r degree holes-to-value))
+
+; TODO: Implement, document, and provide versions of `computation-r?`
+; and `computation-r-degree` that do not satisfy
+; `struct-predicate-procedure?` or `struct-accessor-procedure?`.
 (struct-easy "a computation-r"
   (computation-r degree unsafe-holes-to-value!r!))
 
