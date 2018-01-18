@@ -20,9 +20,11 @@
 
 
 ; TODO: Implement this. Given a contract that accepts procedure
-; values, it should return a contract that wraps those procedures so
-; they establish a pure region for the extent of their body.
-(define/contract (pure/c c)
+; values, it should return a contract that wraps a procedure so it
+; opens a degree-1 `purely!r` region, calls the original procedure,
+; then closes the region (by opening a degree-0 hole in it) before
+; returning.
+(define/contract (pure/c!r! c)
   (-> contract? contract?)
   c)
 
@@ -47,8 +49,8 @@
     [degree (and/c exact-nonnegative-integer? degree/c)]
     [holes-to-value (degree)
       (mat value/c-maybe (just value/c)
-        (pure/c #/-> (holes-r/c degree) value/c)
-        (pure/c #/-> (holes-r/c degree) any))]))
+        (pure/c!r! #/-> (holes-r/c degree) value/c)
+        (pure/c!r! #/-> (holes-r/c degree) any))]))
 
 (define/contract (computation-r/c degree/c value/c-maybe)
   (-> contract? (maybe/c contract?) contract?)
@@ -70,7 +72,7 @@
       [prefix (computation-r/c any/c #/nothing)]
       [leaf-to-suffix (prefix)
         (w- d (=/c #/computation-r-degree prefix)
-        #/pure/c #/->
+        #/pure/c!r! #/->
           (leaf-r/c d #/nothing)
           (computation-r/c d #/nothing))])
   #/_ (prefix)
