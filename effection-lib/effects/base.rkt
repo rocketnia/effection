@@ -2,10 +2,12 @@
 
 
 (require #/only-in racket/contract/base
-  -> ->i =/c and/c any any/c contract? listof struct/dc)
+  -> ->i =/c and/c any any/c contract? listof struct/c struct/dc)
+(require #/only-in racket/contract/combinator
+  blame? make-chaperone-contract)
 (require #/only-in racket/contract/region define/contract)
 
-(require #/only-in lathe expect mat next nextlet w-)
+(require #/only-in lathe dissect dissectfn expect mat next nextlet w-)
 
 (require #/only-in effection/maybe/base just nothing maybe/c)
 (require #/only-in effection/order/base fuse? name?)
@@ -13,13 +15,82 @@
 (require "../private/util.rkt")
 
 
+; TODO:
+;
+; Whoops. Big whoops. Most of the utilities in these "indeterminism
+; effects," which should be restricted to reading data from the
+; outside world, actually rely on writing data to a concurrent outside
+; world as well as reading from it.
+;
+; In particular, our effects for opening degree-0 holes definitely
+; count as writing to a concurrent outside world because we positively
+; expect to observe different effect behaviors before and after them,
+; where "before" and "after" are based on Racket's left-to-right
+; evaluation strategy.
+;
+; All our degree-greater-than-0 effects count as writing to a
+; concurrent outside world too, for the same reason. This could be
+; ameliorated by merely having `run!r!` take a thunk to call, call it
+; inside the newly established region, and close the region again
+; afterward.
+;
+; However, if we permit degree-1 regions but not degree-0 ones, we are
+; just be pushing off the problem to a higher degree where it can be
+; more poorly understood. The impurity we've accidentally introduced
+; to these "indeterminism effects" is that they now depend on Racket's
+; left-to-right evaluation strategy. If we redesign the API to avoid
+; having any degree-0 hole-opening effects, then we no longer depend
+; on Racket's left-to-right evaluation strategy, but we may still rely
+; on a subtler analogue, Racket's root-to-leaf-and-back evaluation
+; strategy. In particular, if a variant of Racket were to use an
+; evaluation strategy that systematically evaluated certain
+; expressions under lambdas or conditionals before calling the lambda
+; or testing the condition, then naturally any side effects of those
+; expressions which interacted with a concurrent outside world would
+; interact at that time. The active call stack (the ledger of ongoing
+; degree-1 regions) at that time would be much different than in
+; standard Racket, causing different degree-1 effects to be in force,
+; so our degree-1 effects do in fact cause the program's behavior to
+; depend on the evaluation strategy.
+;
+; The effect systems are the feature of the Effection library that
+; everything revolves around, the main thing (if anything) that makes
+; the Effection library a self-contained project with a well-defined
+; scope. The baseline purity layer of quasi-determinism is also pretty
+; well-defined. If indeterminism effects are too pure an effect model
+; to permit the use of dynamically scoped effect handlers, then our
+; clearest option is to find an effect model impure enough to let us
+; continue.
+;
+; Nevertheless, it does seem like a shame to take on even a little bit
+; of dependence on the evaluation strategy. Maybe we can compromise
+; by offering a way to mark out a pure region where evaluation
+; strategy dependence is forbidden for degrees lower than a specified
+; number, but is still permitted for higher degrees. But what would it
+; even look like to forbid degree-1 evaluation strategy sensitivity,
+; and what would it even look like to have degree-2 evaluation
+; strategy sensitivity? Could we generalize the degree-0 sensitivity
+; prohibition strategy by using hypersnippet-shaped syntax (Punctaffy)
+; somehow?
+;
+; Another dimension to this is that perhaps the interpreter isn't the
+; only place that can determine the evaluation strategy. Perhaps some
+; kind of lexical syntax can make explicit the dependencies between
+; its parts, even though it does not make explicit the dependencies
+; between any of the function implementation internals it calls at run
+; time. But... regular old lexical scope is pretty much that, right?
+
 ; TODO: Implement, document, and provide these.
 
+;(provide #/struct-out holes-r-and-value)
+;(provide #/rename-out
+;  [-computation-r? computation-r?]
+;  [-computation-r-degree computation-r-degree])
 ;(provide pure/c!r!)
-;(provide #/struct-out leaf-r)
-;(provide holes-r/c leaf-r/c computation-r/c)
+;(provide holes-r/c computation-r/c)
 ;(provide return!r bind!r)
-;(provide run!r! purely!r)
+;(provide run!r!)
+;(provide purely!r)
 
 ;(provide
 ;  read-value!r with-fusable-value-reader!r fusing-value-reader!r)
@@ -34,22 +105,53 @@
 
 
 
-; TODO: Implement this. Given a contract that accepts procedure
-; values, it should return a contract that wraps a procedure so it
-; opens a degree-1 `purely!r` region, calls the original procedure,
-; then closes the region (by opening a degree-0 hole in it) before
-; returning.
+(struct-easy "a holes-r-and-value" (holes-r-and-value holes value))
+
+(struct-easy "a computation-r"
+  (computation-r degree unsafe-run!r!))
+
+; A version of `computation-r?` that does not satisfy
+; `struct-predicate-procedure?`.
+(define/contract (-computation-r? x)
+  (-> any/c boolean?)
+  (computation-r? x))
+
+; A version of `computation-r-degree` that does not satisfy
+; `struct-accessor-procedure?`.
+(define/contract (-computation-r-degree computation)
+  (-> -computation-r? exact-nonnegative-integer?)
+  (computation-r-degree computation))
+
+(define/contract (before-and-after-projection before after)
+  (-> (-> any) (-> any) #/-> blame? #/-> procedure?
+    (and/c chaperone? procedure?))
+  (lambda (b) #/lambda (proc)
+    (chaperone-procedure proc
+    #/make-keyword-procedure
+    #/lambda (kw-key-list kw-val-list . positional-args)
+      (w- state (before)
+      #/w- wrap-results
+        (lambda results
+          (after state)
+          (apply values results))
+      #/mat kw-val-list (list)
+        (apply values wrap-results positional-args)
+        (apply values wrap-results kw-val-list positional-args)))))
+
+; Given a contract that accepts procedure values, this returns a
+; contract that wraps a procedure so it opens a degree-1 `purely!r`
+; region, calls the original procedure, then closes the region (by
+; opening a degree-0 hole in it) before returning.
 (define/contract (pure/c!r! c)
   (-> contract? contract?)
-  c)
-
-(struct-easy "a leaf-r" (leaf-r degree holes-to-value))
-
-; TODO: Implement, document, and provide versions of `computation-r?`
-; and `computation-r-degree` that do not satisfy
-; `struct-predicate-procedure?` or `struct-accessor-procedure?`.
-(struct-easy "a computation-r"
-  (computation-r degree unsafe-holes-to-value!r!))
+  (and/c c
+  #/make-chaperone-contract
+    #:name 'pure/c!r!
+    #:first-order procedure?
+    #:projection
+    (before-and-after-projection
+      (lambda () #/run!r! #/purely!r 1)
+      (dissectfn (holes-r-and-value (list hole) _) #/run!r! hole))))
 
 (define/contract (holes-r/c degree)
   (-> exact-nonnegative-integer? contract?)
@@ -62,48 +164,47 @@
         #/and (= degree i)
         #/next holes #/add1 i)))))
 
-(define/contract (leaf-r/c degree/c value/c-maybe)
-  (-> contract? (maybe/c contract?) contract?)
-  (struct/dc leaf-r
-    [degree (and/c exact-nonnegative-integer? degree/c)]
-    [holes-to-value (degree)
-      (mat value/c-maybe (just value/c)
-        (pure/c!r! #/-> (holes-r/c degree) value/c)
-        (pure/c!r! #/-> (holes-r/c degree) any))]))
-
 (define/contract (computation-r/c degree/c value/c-maybe)
   (-> contract? (maybe/c contract?) contract?)
   (struct/dc computation-r
     [degree (and/c exact-nonnegative-integer? degree/c)]
-    [unsafe-holes-to-value!r! (degree)
+    [unsafe-run!r! (degree)
       (mat value/c-maybe (just value/c)
-        (-> (holes-r/c degree) value/c)
-        (-> (holes-r/c degree) any))]))
+        (-> #/struct/c holes-r-and-value any/c value/c)
+        (-> any))]))
 
-(define/contract (return!r leaf)
-  (->i ([leaf (leaf-r/c any/c #/nothing)])
-    [_ (leaf) (computation-r/c (=/c #/leaf-r-degree leaf) #/nothing)])
-  'TODO)
+(define/contract (return!r degree leaf)
+  (->i ([degree exact-nonnegative-integer?] [leaf any/c])
+    [_ (degree) (computation-r/c (=/c degree) #/nothing)])
+  (computation-r degree #/lambda ()
+    (w- holes
+      ; NOTE: These hole effects do nothing but return `(void)`. They
+      ; don't even verify that they're used in the right context.
+      ; That's intentional; it helps make sure `return!r` doesn't add
+      ; any effects beyond whatever is already there.
+      (build-list degree #/lambda (i)
+        (return!r i #/void))
+    #/holes-r-and-value holes leaf)))
 
-(define/contract (bind!r prefix leaf-to-suffix)
+(define/contract (bind!r prefix holes-and-leaf-to-suffix)
   (->i
     (
       [prefix (computation-r/c any/c #/nothing)]
-      [leaf-to-suffix (prefix)
-        (w- d (=/c #/computation-r-degree prefix)
+      [holes-and-leaf-to-suffix (prefix)
+        (w- d (computation-r-degree prefix)
         #/pure/c!r! #/->
-          (leaf-r/c d #/nothing)
-          (computation-r/c d #/nothing))])
+          (struct/c holes-r-and-value (holes-r/c d) any/c)
+          (computation-r/c (=/c d) #/nothing))])
   #/_ (prefix)
-    (computation-r/c (=/c #/computation-r-degree prefix)
-    #/nothing))
-  'TODO)
+    (computation-r/c (=/c #/computation-r-degree prefix) #/nothing))
+  (dissect prefix (computation-r degree unsafe-run!r!)
+  #/computation-r degree #/lambda ()
+    (run!r! #/holes-and-leaf-to-suffix #/unsafe-run!r!)))
 
 (define/contract (run!r! computation)
-  (->i ([computation (computation-r/c any/c #/nothing)])
-  #/_ (computation)
-    (leaf-r/c (=/c #/computation-r-degree computation) #/nothing))
-  'TODO)
+  (-> (computation-r/c any/c #/nothing) any)
+  (dissect computation (computation-r degree unsafe-run!r!)
+  #/unsafe-run!r!))
 
 ; A degree-N indeterminism effect which opens a degree-N hole in every
 ; instance of almost any effect that actually uses indeterminism, even
