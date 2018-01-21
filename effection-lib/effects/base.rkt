@@ -79,6 +79,191 @@
 ; its parts, even though it does not make explicit the dependencies
 ; between any of the function implementation internals it calls at run
 ; time. But... regular old lexical scope is pretty much that, right?
+;
+; ~~ more thoughts ~~
+;
+; Instead of calling our effects "r" (e.g. `run!r`) for "read," as
+; though we could still separate indeterminism effects ("read") from
+; "write to a concurrent outside world" effects ("write"), let's
+; simply call them "h" for "handler effects" for now. It's a little
+; bit self-referential, but it's not quite clear what kind of effects
+; they'll need to be yet, and the ability to implement effect handlers
+; is their motivating feature, so the name is apt.
+;
+; To establish a degree-1 dynamic extent that binds a dynamically
+; scoped effect of degree 0, we merely need to pass in a state value;
+; pass in an effect handler that will receive a state value and return
+; a state value and a result value; and receive a final state value as
+; the result.
+;
+;   (struct my-degree-0-effect-struct (a b c))
+;   
+;   (dissect
+;     (run!h! #/with-effect!h
+;       "fa"
+;       (handle-lambda state (my-degree-0-effect-struct a b c)
+;         (handler-result (string-append state "la") (+ a b c)))
+;     (holes-h-and-value (list h0) (list))
+;   #/begin (run!h! #/handle!h 0 #/my-degree-0-effect-struct 1 2 3)
+;   #/begin (run!h! #/handle!h 0 #/my-degree-0-effect-struct 1 2 3)
+;   #/dissect (run!h! h0) (holes-h-and-value (list) "falala")
+;     ...)
+;
+; To do the same thing at one degree higher -- a custom degree-1
+; effect available in a degree-2 region -- we need to pass in a state
+; value; pass in a degree-1 effect handler that will receive a state
+; value and return a state value, a result value, and a degree-0
+; effect handler that will receive a state value and return a state
+; value and a result value; pass in a degree-0 effect handler; and
+; receive a final state value as the result.
+;
+; Er... something like that. It'll be easier to figure it out by
+; writing the code:
+;
+;   ; This pseudocode doesn't use quite the same hypothetical language
+;   ; features as the previous pseudocode does. For instance,
+;   ; `handle-lambda` no longer takes the state parameter itself;
+;   ; instead it returns a list of functions that act as state
+;   ; transformers. And the `handler-result` struct contains an extra
+;   ; field to contain a list of state transformers to run when holes
+;   ; are opened in that hole.
+;   
+;   (struct my-degree-0-effect ())
+;   (struct my-degree-1-effect ())
+;   
+;   (dissect
+;     (run!h! #/with-effect!h
+;       
+;       ; The initial state value.
+;       "fa"
+;       
+;       ; The immediate result value of this effect
+;       "FA"
+;       
+;       ; Handlers for the holes of this region.
+;       (list
+;         (lambda (state)
+;           (handler-result (list) (string-append state "mi") #/list))
+;         (lambda (state)
+;           (handler-result (string-append state "ti") "TI" #/list
+;             (lambda (state)
+;               (handler-result (string-append state "do") "DO"
+;               #/list)))))
+;       
+;       ; Handlers for custom effects.
+;       (list
+;         (handle-lambda (my-degree-0-effect)
+;           (lambda (state)
+;             (handler-result (string-append state "re") "RE"
+;             #/list)))
+;         (handle-lambda (my-degree-1-effect)
+;           (lambda (state)
+;             (handler-result (string-append state "so") "SO" #/list
+;               (lambda (state)
+;                 (handler-result (string-append state "la") "LA"
+;                 #/list))))))
+;     (holes-h-and-value (list h0a h1a) "FA")
+;   #/dissect (run!h! #/handle!h 1 #/my-degree-1-effect)
+;     (holes-h-and-value (list h0b) "SO")
+;   #/dissect (run!h! #/handle!h 1 #/my-degree-1-effect)
+;     (holes-h-and-value (list h0c) "SO")
+;   #/dissect (run!h! h1a) (holes-h-and-value (list h0d) "TI")
+;   #/dissect (run!h! h0d) (holes-h-and-value (list h0d) "DO")
+;   #/dissect (run!h! h0c) (holes-h-and-value (list) "LA")
+;   #/dissect (run!h! h0b) (holes-h-and-value (list) "LA")
+;   #/dissect (run!h! #/handle!h 1 #/my-degree-1-effect)
+;     (holes-h-and-value (list h0e) "SO")
+;   #/dissect (run!h! #/handle!h 0 #/my-degree-0-effect)
+;     (holes-h-and-value (list) "RE")
+;   #/dissect (run!h! h0d) (holes-h-and-value (list) "LA")
+;   #/dissect (run!h! h0a)
+;     (holes-h-and-value (list) "fasosotidolasorelami")
+;     ...)
+;
+; Pretty wild.
+;
+; Thinking about that compromise again -- the "pure region where
+; evaluation strategy dependence is forbidden for degrees lower than a
+; specified number"... It seems like forbidding degree-0 evaluation
+; strategy sensitivity would mean that we have to regard degree-0
+; effects as orderless, like a set. Forbidding degree-1 sensitivity
+; would probably make degree-0 effects even more trivial; here are a
+; few incomplete rationales as to why:
+;
+;   * It's ambiguous whether the code should evaluate expressions
+;     under lambdas, and Racket in practice does not, so we will not
+;     know if we missed any degree-0 effects that could have been
+;     observed that way. Even if we could know, any code that relies
+;     on that knowledge is degree-1-sensitive.
+;
+;   * It's ambiguous whether degree-0 effects whose results are
+;     ignored should really execute at all. Code that relies on this
+;     assumption either way is degree-1-sensitive.
+;
+;   * Perhaps most decisively of all, once we forbid degree-1
+;     sensitivity, it's ambiguous whether the body of a degree-1
+;     region should be evaluated before or after figuring out what
+;     the boundary of the region means. So if the boundary tries to
+;     introduce a degree-1 dynamic extent for a degree-0 effect
+;     handler, we might have already evaluated the body without that
+;     effect handler installed.
+;
+; This does leave behind a possible kind of degree-0 effect: The kind
+; that reads a value from the outside world, blocking until the answer
+; is available. When the result is not needed, it's okay not to run
+; the effect at all. When it is needed, some hypothetical evaluation
+; strategies would get stuck and error out, and some would continue
+; evaluating elsewhere until they discovered a handler for that effect
+; which they could invoke to proceed, so in particular, the third
+; point above ("body ... evaluated before or after figuring out what
+; the boundary of the region means") would not apply. Strangely, we
+; seem to have wound up at something almost exactly like Cene's
+; `follow-heart` effects, with the possible difference/innovation that
+; it might still make sense to have effect handlers which handle
+; these.
+;
+; The behavior of degree-1 effects once we ban degree-1-sensitivity
+; seems similarly trivial: We can't be sure the evaluation strategy
+; even executes any of the degree-1 effects in a computation before it
+; gets what it needs, and we can't have their effects depend on their
+; degree-0 or degree-1 juxtaposition on the timeline with respect to
+; each other (or with respect to degree-0 effects). Altogether they
+; form an orderless set where any of the elements (degree-1 regions)
+; may be undiscovered, and each of them has a trivial degree-0 hole
+; that may be undiscovered itself. I think what this means is that the
+; operation to begin the degree-1 region must do nothing but read from
+; the outside world, and the operation to open its degree-0 hole...
+; must do nothing but read from the outside world, possibly depending
+; on information from the first operation (but that information could
+; be propagated equivalently using lexical scope and lambda
+; encapsulation anyway). Hmm, do degree-1 effects serve the same
+; purpose as degree-0 effects then, when degree-1-sensitivity is
+; banned? Is it possible degree-1-insensitivity trivializes degree-2
+; effects as well, meaning we really only have to deal with
+; degree-0-sensitive code; degree-0-insensitive but degree-1-sensitive
+; code; and pure code?
+;
+; If we really have only those three levels of purity, then we already
+; have the impurest and purest covered, and we're not going to find
+; any effect handlers for `follow-heart`-style pure side effects. We
+; might be done once we add the middle kind of purity.
+;
+; How about some actionables in this TODO?
+;
+;   * Rename all these utilities to use "h" instead of "r," connoting
+;     that they're "handler effects," as opposed to read-only
+;     "indeterminism effects."
+;
+;   * Implement `with-effect!h` as explored above.
+;
+;   * See if we can design operations like `with-effect!h` and
+;     `purely!r`, but for the case where the pure code is fully pure
+;     and the impure code is only degree-1-sensitive.
+;
+;   * See if we can design operations like `with-effect!h` and
+;     `purely!r`, but for the case where the pure code is
+;     only-degree-1-sensitive code and the impure code is
+;     degree-0-sensitive code.
 
 ; TODO: Implement, document, and provide these.
 
