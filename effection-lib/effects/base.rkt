@@ -17,10 +17,11 @@
 
 ; TODO:
 ;
-; Whoops. Big whoops. Most of the utilities in these "indeterminism
-; effects," which should be restricted to reading data from the
-; outside world, actually rely on writing data to a concurrent outside
-; world as well as reading from it.
+; Whoops. Big whoops. What we've implmented in this file at the moment
+; is an attempt at "indeterminism effects," which were supposed to be
+; restricted to reading data from the outside world. They actually
+; rely on writing data to a concurrent outside world as well as
+; reading from it.
 ;
 ; In particular, our effects for opening degree-0 holes definitely
 ; count as writing to a concurrent outside world because we positively
@@ -30,7 +31,7 @@
 ;
 ; All our degree-greater-than-0 effects count as writing to a
 ; concurrent outside world too, for the same reason. This could be
-; ameliorated by merely having `run!r!` take a thunk to call, call it
+; ameliorated by merely having `run!h!` take a thunk to call, call it
 ; inside the newly established region, and close the region again
 ; afterward.
 ;
@@ -82,11 +83,11 @@
 ;
 ; ~~ more thoughts ~~
 ;
-; Instead of calling our effects "r" (e.g. `run!r`) for "read," as
-; though we could still separate indeterminism effects ("read") from
-; "write to a concurrent outside world" effects ("write"), let's
-; simply call them "h" for "handler effects" for now. It's a little
-; bit self-referential, but it's not quite clear what kind of effects
+; We were calling our effects "r" (e.g. `run!r!`) for "read," as
+; though we could separate indeterminism effects ("read") from "write
+; to a concurrent outside world" effects ("write"), but for now, we're
+; calling them "h" for "handler effects." It's a little bit
+; self-referential, but it's not quite clear what kind of effects
 ; they'll need to be yet, and the ability to implement effect handlers
 ; is their motivating feature, so the name is apt.
 ;
@@ -250,37 +251,33 @@
 ;
 ; How about some actionables in this TODO?
 ;
-;   * Rename all these utilities to use "h" instead of "r," connoting
-;     that they're "handler effects," as opposed to read-only
-;     "indeterminism effects."
-;
 ;   * Implement `with-effect!h` as explored above.
 ;
 ;   * See if we can design operations like `with-effect!h` and
-;     `purely!r`, but for the case where the pure code is fully pure
+;     `purely!h`, but for the case where the pure code is fully pure
 ;     and the impure code is only degree-1-sensitive.
 ;
 ;   * See if we can design operations like `with-effect!h` and
-;     `purely!r`, but for the case where the pure code is
+;     `purely!h`, but for the case where the pure code is
 ;     only-degree-1-sensitive code and the impure code is
 ;     degree-0-sensitive code.
 
 ; TODO: Implement, document, and provide these.
 
-;(provide #/struct-out holes-r-and-value)
+;(provide #/struct-out holes-h-and-value)
 ;(provide #/rename-out
-;  [-computation-r? computation-r?]
-;  [-computation-r-degree computation-r-degree])
-;(provide pure/c!r!)
-;(provide holes-r/c computation-r/c)
-;(provide return!r bind!r)
-;(provide run!r!)
-;(provide purely!r)
+;  [-computation-h? computation-h?]
+;  [-computation-h-degree computation-h-degree])
+;(provide pure/c!h!)
+;(provide holes-h/c computation-h/c)
+;(provide return!h bind!h)
+;(provide run!h!)
+;(provide purely!h)
 
 ;(provide
-;  read-value!r with-fusable-value-reader!r fusing-value-reader!r)
-;(provide handler? handle!r with-first-handler!r)
-;(provide gensym!r)
+;  read-value!h with-fusable-value-reader!h fusing-value-reader!h)
+;(provide handler? handle!h with-first-handler!h)
+;(provide gensym!h)
 
 ; TODO: Implement more effects than this. We have a partial rationale
 ; and partial plan laid out in notes/todo.txt, and the file
@@ -290,22 +287,22 @@
 
 
 
-(struct-easy "a holes-r-and-value" (holes-r-and-value holes value))
+(struct-easy "a holes-h-and-value" (holes-h-and-value holes value))
 
-(struct-easy "a computation-r"
-  (computation-r degree unsafe-run!r!))
+(struct-easy "a computation-h"
+  (computation-h degree unsafe-run!h!))
 
-; A version of `computation-r?` that does not satisfy
+; A version of `computation-h?` that does not satisfy
 ; `struct-predicate-procedure?`.
-(define/contract (-computation-r? x)
+(define/contract (-computation-h? x)
   (-> any/c boolean?)
-  (computation-r? x))
+  (computation-h? x))
 
-; A version of `computation-r-degree` that does not satisfy
+; A version of `computation-h-degree` that does not satisfy
 ; `struct-accessor-procedure?`.
-(define/contract (-computation-r-degree computation)
-  (-> -computation-r? exact-nonnegative-integer?)
-  (computation-r-degree computation))
+(define/contract (-computation-h-degree computation)
+  (-> -computation-h? exact-nonnegative-integer?)
+  (computation-h-degree computation))
 
 (define/contract (before-and-after-projection before after)
   (-> (-> any) (-> any) #/-> blame? #/-> procedure?
@@ -324,72 +321,72 @@
         (apply values wrap-results kw-val-list positional-args)))))
 
 ; Given a contract that accepts procedure values, this returns a
-; contract that wraps a procedure so it opens a degree-1 `purely!r`
+; contract that wraps a procedure so it opens a degree-1 `purely!h`
 ; region, calls the original procedure, then closes the region (by
 ; opening a degree-0 hole in it) before returning.
-(define/contract (pure/c!r! c)
+(define/contract (pure/c!h! c)
   (-> contract? contract?)
   (and/c c
   #/make-chaperone-contract
-    #:name 'pure/c!r!
+    #:name 'pure/c!h!
     #:first-order procedure?
     #:projection
     (before-and-after-projection
-      (lambda () #/run!r! #/purely!r 1)
-      (dissectfn (holes-r-and-value (list hole) _) #/run!r! hole))))
+      (lambda () #/run!h! #/purely!h 1)
+      (dissectfn (holes-h-and-value (list hole) _) #/run!h! hole))))
 
-(define/contract (holes-r/c degree)
+(define/contract (holes-h/c degree)
   (-> exact-nonnegative-integer? contract?)
-  (and/c (listof computation-r?)
+  (and/c (listof computation-h?)
     (lambda (holes)
       (and (= degree #/length holes)
       #/nextlet holes holes i 0
         (expect holes (cons hole holes) #t
-        #/expect hole (computation-r degree _) #f
+        #/expect hole (computation-h degree _) #f
         #/and (= degree i)
         #/next holes #/add1 i)))))
 
-(define/contract (computation-r/c degree/c value/c-maybe)
+(define/contract (computation-h/c degree/c value/c-maybe)
   (-> contract? (maybe/c contract?) contract?)
-  (struct/dc computation-r
+  (struct/dc computation-h
     [degree (and/c exact-nonnegative-integer? degree/c)]
-    [unsafe-run!r! (degree)
+    [unsafe-run!h! (degree)
       (mat value/c-maybe (just value/c)
-        (-> #/struct/c holes-r-and-value any/c value/c)
+        (-> #/struct/c holes-h-and-value any/c value/c)
         (-> any))]))
 
-(define/contract (return!r degree leaf)
+(define/contract (return!h degree leaf)
   (->i ([degree exact-nonnegative-integer?] [leaf any/c])
-    [_ (degree) (computation-r/c (=/c degree) #/nothing)])
-  (computation-r degree #/lambda ()
+    [_ (degree) (computation-h/c (=/c degree) #/nothing)])
+  (computation-h degree #/lambda ()
     (w- holes
       ; NOTE: These hole effects do nothing but return `(void)`. They
       ; don't even verify that they're used in the right context.
-      ; That's intentional; it helps make sure `return!r` doesn't add
+      ; That's intentional; it helps make sure `return!h` doesn't add
       ; any effects beyond whatever is already there.
       (build-list degree #/lambda (i)
-        (return!r i #/void))
-    #/holes-r-and-value holes leaf)))
+        (return!h i #/void))
+    #/holes-h-and-value holes leaf)))
 
-(define/contract (bind!r prefix holes-and-leaf-to-suffix)
+(define/contract (bind!h prefix holes-and-leaf-to-suffix)
   (->i
     (
-      [prefix (computation-r/c any/c #/nothing)]
+      [prefix (computation-h/c any/c #/nothing)]
       [holes-and-leaf-to-suffix (prefix)
-        (w- d (computation-r-degree prefix)
-        #/pure/c!r! #/->
-          (struct/c holes-r-and-value (holes-r/c d) any/c)
-          (computation-r/c (=/c d) #/nothing))])
+        (w- d (computation-h-degree prefix)
+        #/pure/c!h! #/->
+          (struct/c holes-h-and-value (holes-h/c d) any/c)
+          (computation-h/c (=/c d) #/nothing))])
   #/_ (prefix)
-    (computation-r/c (=/c #/computation-r-degree prefix) #/nothing))
-  (dissect prefix (computation-r degree unsafe-run!r!)
-  #/computation-r degree #/lambda ()
-    (run!r! #/holes-and-leaf-to-suffix #/unsafe-run!r!)))
+    (computation-h/c (=/c #/computation-h-degree prefix) #/nothing))
+  (dissect prefix (computation-h degree unsafe-run!h!)
+  #/computation-h degree #/lambda ()
+    (run!h! #/holes-and-leaf-to-suffix #/unsafe-run!h!)))
 
-(define/contract (run!r! computation)
-  (-> (computation-r/c any/c #/nothing) any)
-  (dissect computation (computation-r degree unsafe-run!r!)
-  #/unsafe-run!r!))
+(define/contract (run!h! computation)
+  (-> (computation-h/c any/c #/nothing) any)
+  (dissect computation (computation-h degree unsafe-run!h!)
+  #/unsafe-run!h!))
 
 ; A degree-N indeterminism effect which opens a degree-N hole in every
 ; instance of almost any effect that actually uses indeterminism, even
@@ -409,9 +406,9 @@
 ; the effects which open their holes, the effects which open those
 ; effects' holes, and so on:
 ;
-;   * `purely!r`
-;   * `with-fusable-value-reader!r`
-;   * `fusing-value-reader!r`
+;   * `purely!h`
+;   * `with-fusable-value-reader!h`
+;   * `fusing-value-reader!h`
 ;   * (TODO: Add to this list as appropriate.)
 ;
 ; (The rationale is that each of these effects actually aggregates
@@ -423,11 +420,11 @@
 ;
 ; The place this ends up after opening holes in all those regions is a
 ; region that has essentially no custom effects at all, just the
-; built-in effects like `purely!r`, `with-fusable-value-reader!r`, and
-; `fusing-value-reader!r` themselves.
-(define/contract (purely!r degree)
+; built-in effects like `purely!h`, `with-fusable-value-reader!h`, and
+; `fusing-value-reader!h` themselves.
+(define/contract (purely!h degree)
   (->i ([degree exact-nonnegative-integer?])
-    [_ (degree) (computation-r/c (=/c degree) #/nothing)])
+    [_ (degree) (computation-h/c (=/c degree) #/nothing)])
   'TODO)
 
 ; NOTE: We could directly take a second-class approach to effect
@@ -441,19 +438,19 @@
 ; be fused by specifying a fuse to apply to their return values.)
 
 ; A degree-0 indeterminism effect that looks up a dynamic binding
-; established by degree-N uses of `with-fusable-value-reader!r` and
-; `fusing-value-reader!r`.
-(define/contract (read-value!r degree key)
+; established by degree-N uses of `with-fusable-value-reader!h` and
+; `fusing-value-reader!h`.
+(define/contract (read-value!h degree key)
   (-> exact-nonnegative-integer? name?
-    (computation-r/c (=/c 0) #/nothing))
+    (computation-h/c (=/c 0) #/nothing))
   'TODO)
 
 ; A degree-N indeterminism effect which makes it so that except within
-; its holes, any `read-value!r` effects taking place that specify
+; its holes, any `read-value!h` effects taking place that specify
 ; degree N will return a certain value for the given key. If there's
 ; already a binding of this key, its fuse must be equal by `dex-fuse`
 ; to the given fuse, and the given value is fused into the existing
-; one to get the value seen by `read-value!r`. Otherwise, the new
+; one to get the value seen by `read-value!h`. Otherwise, the new
 ; binding's fuse is the given fuse, and its value is the given value.
 ;
 ; This actually opens a region of degree greater than N, but only N
@@ -461,39 +458,39 @@
 ; context of another similar effect of degree M greater than N, then
 ; degree-N-or-greater holes will be opened in this region when they're
 ; opened in that one. An effect is "similar" for these purposes if
-; it's any of the effects `purely!r` can open a hole in. This
+; it's any of the effects `purely!h` can open a hole in. This
 ; operation's hole effectss behave accordingly so that they can open
 ; holes in similar effects of ostensibly lower degree.
 ;
-(define/contract (with-fusable-value-reader!r degree key fuse val)
+(define/contract (with-fusable-value-reader!h degree key fuse val)
   (->i
     (
       [degree exact-nonnegative-integer?]
       [key name?]
       [fuse fuse?]
       [val any/c])
-    [_ (degree) (computation-r/c (=/c degree) #/nothing)])
+    [_ (degree) (computation-h/c (=/c degree) #/nothing)])
   'TODO)
 
 ; A degree-N indeterminism effect which makes it so that except within
-; its holes, any `read-value!r` effects taking place that specify
+; its holes, any `read-value!h` effects taking place that specify
 ; degree N will return a certain value for the given key. There must
 ; already be a binding of this key. The given value is fused into the
 ; existing one, via the binding's fuse value, to get the value seen by
-; `read-value!r`.
+; `read-value!h`.
 ;
 ; This actually opens a region of degree greater than N, but only N
 ; degrees of holes can be manually opened. If this call is made in the
 ; context of another similar effect of degree M greater than N, then
 ; degree-N-or-greater holes will be opened in this region when they're
 ; opened in that one. An effect is "similar" for these purposes if
-; it's any of the effects `purely!r` can open a hole in. This
+; it's any of the effects `purely!h` can open a hole in. This
 ; operation's hole effectss behave accordingly so that they can open
 ; holes in similar effects of ostensibly lower degree.
 ;
-(define/contract (fusing-value-reader!r degree key val)
+(define/contract (fusing-value-reader!h degree key val)
   (->i ([degree exact-nonnegative-integer?] [key name?] [val any/c])
-    [_ (degree) (computation-r/c (=/c #/add1 degree) #/nothing)])
+    [_ (degree) (computation-h/c (=/c #/add1 degree) #/nothing)])
   'TODO)
 
 
@@ -502,7 +499,7 @@
 ; which can only be consulted as long as they're in scope (i.e.
 ; impossible to capture as a first-class procedure value), we define a
 ; system of effect handlers based on storing all the handlers in a big
-; `fusing-value-reader!r` fusion under an obscure key.
+; `fusing-value-reader!h` fusion under an obscure key.
 
 ; TODO: Figure out how to represent handlers so we can verify they
 ; don't overlap with existing handlers. We probably need a handler
@@ -511,22 +508,22 @@
   (-> any/c boolean?)
   'TODO)
 
-(define/contract (handle!r degree custom-computation)
+(define/contract (handle!h degree custom-computation)
   (->i
     ([degree exact-nonnegative-integer?] [custom-computation any/c])
-    [_ (degree) (computation-r/c (=/c degree) #/nothing)])
+    [_ (degree) (computation-h/c (=/c degree) #/nothing)])
   'TODO)
 
-(define/contract (with-first-handler!r degree handler)
+(define/contract (with-first-handler!h degree handler)
   (->i ([degree exact-nonnegative-integer?] [handler handler?])
-    [_ (degree) (computation-r/c (=/c #/add1 degree) #/nothing)])
+    [_ (degree) (computation-h/c (=/c #/add1 degree) #/nothing)])
   'TODO)
 
 
 ; TODO: Implement and uncomment this.
-#;(define/contract gensym!r (computation-r/c (=/c 0) #/just symbol?)
+#;(define/contract gensym!h (computation-h/c (=/c 0) #/just symbol?)
   ; NOTE: Don't implement this as an ambient capability by defining
   ; it as part of the effect system. Just have this return something
-  ; that uses `handle!r` to use a gensym operation if one is in the
+  ; that uses `handle!h` to use a gensym operation if one is in the
   ; dynamic scope.
   'TODO)
