@@ -741,8 +741,7 @@
   'TODO)
 
 
-; TODO: Implement and uncomment this.
-#;(define/contract gensym!h
+(define/contract gensym!h
   (computation-h/c (=/c 1) (=/c 0) #/just symbol?)
   ; NOTE: Don't implement this as an ambient capability by defining
   ; it as part of the effect system. Just have this return something
@@ -753,4 +752,5 @@
   ; disallowed at usage time, this does not cause an error, because
   ; there are no *permitted* effects that this could conflict with.
   
-  'TODO)
+  (computation-h 1 0 #/lambda ()
+    'TODO))
