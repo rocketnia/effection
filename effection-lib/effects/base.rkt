@@ -2,7 +2,7 @@
 
 
 (require #/only-in racket/contract/base
-  -> ->i =/c and/c any any/c contract? listof struct/c struct/dc)
+  -> ->i =/c >=/c and/c any any/c contract? listof struct/c struct/dc)
 (require #/only-in racket/contract/combinator
   blame? make-chaperone-contract)
 (require #/only-in racket/contract/region define/contract)
@@ -255,11 +255,11 @@
 ;   * Implement `with-effect!h` as explored above.
 ;
 ;   * See if we can design operations like `with-effect!h` and
-;     `purely0!h`, but for the case where the pure code is fully pure
+;     `purely!h`, but for the case where the pure code is fully pure
 ;     and the impure code is only degree-1-sensitive.
 ;
 ;   * See if we can design operations like `with-effect!h` and
-;     `purely0!h`, but for the case where the pure code is
+;     `purely!h`, but for the case where the pure code is
 ;     only-degree-1-sensitive code and the impure code is
 ;     degree-0-sensitive code.
 
@@ -274,8 +274,9 @@
 ;(provide pure/c!h!)
 ;(provide holes-h/c computation-h/c)
 ;(provide return!h bind!h)
-;(provide run0!h!)
-;(provide purely0!h)
+;(provide run0!h! (struct-out run1-result) run1!h!)
+;(provide purely!h with-strategy-insensitivity!h)
+;(provide strategy-insensitively!h)
 
 ;(provide read-fusable!h init-fusable!h write-fusable!h)
 ;(provide handler? handle!h with-first-handler!h)
@@ -289,10 +290,12 @@
 
 
 
-(struct-easy "a holes-h-and-value" (holes-h-and-value holes value))
+(struct-easy "a holes-h-and-value" (holes-h-and-value holes value)
+  #:equal)
 
 (struct-easy "a computation-h"
-  (computation-h sensitivity-degree usage-degree unsafe-run!h!))
+  (computation-h sensitivity-degree usage-degree unsafe-run!h!)
+  #:equal)
 
 ; A version of `computation-h?` that does not satisfy
 ; `struct-predicate-procedure?`.
@@ -329,7 +332,7 @@
         (apply values wrap-results kw-val-list positional-args)))))
 
 ; Given a contract that accepts procedure values, this returns a
-; contract that wraps a procedure so it opens a degree-1 `purely0!h`
+; contract that wraps a procedure so it opens a degree-1 `purely!h`
 ; region, calls the original procedure, then closes the region (by
 ; opening a degree-0 hole in it) before returning.
 (define/contract (pure/c!h! c)
@@ -340,7 +343,7 @@
     #:first-order procedure?
     #:projection
     (before-and-after-projection
-      (lambda () #/run0!h! #/purely0!h 1)
+      (lambda () #/run0!h! #/purely!h 1)
       (dissectfn (holes-h-and-value (list hole) _) #/run0!h! hole))))
 
 (define/contract
@@ -471,17 +474,34 @@
 ; a degree-0-sensitive effect.
 
 (define/contract (run0!h! computation)
-  (-> (computation-h/c (=/c 0) any/c #/nothing) any)
-  ; TODO: Make this cause an error if degree-0 evaluation strategy
-  ; sensitivity is currently disallowed.
+  (-> (computation-h/c (>=/c 0) any/c #/nothing) any)
   (dissect computation
     (computation-h start-degree stop-degree unsafe-run!h!)
   #/unsafe-run!h!))
 
-; TODO: Implement variations of `run0!h!` for degree-1-sensitive and
-; higher-degree-sensitive effects.
+(struct-easy "a run1-result" (run1-result hole0-result body-result)
+  #:equal)
 
-; A degree-0-sensitive degree-N handler effect which opens a degree-N
+(define/contract (run1!h! computation body)
+  (->i
+    (
+      [computation (computation-h/c (>=/c 1) any/c #/nothing)]
+      [body (computation)
+        (->
+          (struct/c holes-h-and-value
+            (holes-h/c 1 1 #/computation-h-usage-degree computation)
+            any/c)
+          any)])
+    any)
+  (dissect computation
+    (computation-h start-degree stop-degree unsafe-run!h!)
+  #/dissect (unsafe-run!h!)
+    (holes-h-and-value (cons hole0 hole1+) value)
+  #/w- body-result (body #/holes-h-and-value hole1+ value)
+  #/dissect (run0!h! hole0) (holes-h-and-value (list) hole0-result)
+  #/run1-result hole0-result body-result))
+
+; A degree-1-sensitive degree-N handler effect which opens a degree-N
 ; hole in every instance of almost any effect that actually uses
 ; handler effects, even the ones that have degree N or less, which
 ; ostensibly wouldn't permit degree-N holes. (The rationale is that
@@ -499,7 +519,7 @@
 ; the effects which open their holes, the effects which open those
 ; effects' holes, and so on:
 ;
-;   * `purely0!h`
+;   * `purely!h`
 ;   * `init-fusable!h`
 ;   * `write-fusable!h`
 ;   * (TODO: Add to this list as appropriate.)
@@ -513,12 +533,57 @@
 ;
 ; The place this ends up after opening holes in all those regions is a
 ; region that has essentially no custom effects at all, just the
-; built-in effects like `purely0!h`, `init-fusable!h`, and
+; built-in effects like `purely!h`, `init-fusable!h`, and
 ; `write-fusable!h` themselves.
 ;
-(define/contract (purely0!h degree)
-  (->i ([degree exact-nonnegative-integer?])
-    [_ (degree) (computation-h/c (=/c 0) (=/c degree) #/nothing)])
+; Inside that region, this allows `allowed-sensitivity-degree`-degree
+; sensitivity to the evaluation strategy, even if that's more
+; permissive than the caller at the time this computation is useed.
+; However, if the caller does not allow degree-1 sensitivity at the
+; time this computation is used, this raises an error, so it cannot be
+; used to reintroduce degree-1 sensitivity.
+;
+(define/contract (purely!h usage-degree allowed-sensitivity-degree)
+  (->i
+    (
+      [usage-degree exact-nonnegative-integer?]
+      [allowed-sensitivity-degree exact-nonnegative-integer?])
+  #/_ (usage-degree)
+    (computation-h/c (=/c 1) (=/c usage-degree) #/nothing))
+  ; TODO: Make this cause an error if degree-1 evaluation strategy
+  ; sensitivity is disallowed at usage time.
+  'TODO)
+
+(define/contract
+  (with-strategy-insensitivity!h
+    usage-degree allowed-sensitivity-degree)
+  (->i
+    (
+      [usage-degree exact-nonnegative-integer?]
+      [allowed-sensitivity-degree exact-nonnegative-integer?])
+    
+    ; We require either that there are no degree-1-or-greater holes in
+    ; the affected dynamic extent, or that if there are, there is
+    ; still degree-1-sensitivity so that their contents are not
+    ; evaluated prematurely.
+    #:pre (usage-degree allowed-sensitivity-degree)
+    (or
+      (<= usage-degree 1)
+      (<= allowed-sensitivity-degree 1))
+    
+  #/_ (usage-degree)
+    (computation-h/c
+      (=/c #/if (= 0 usage-degree) 0 1)
+      (=/c usage-degree)
+    #/nothing))
+  ; TODO: Make this cause an error at usage time if the evaluation
+  ; strategy sensitivity requirements are not met.
+  ;
+  ; TODO: Clarify what the requirements are. Also revisit some of the
+  ; other "TODO: Make this cause an error" comments because we may
+  ; have failed to say to cause an error if the operation requires
+  ; degree-1-sensitivity and it isn't available. We seem to have
+  ; focused on degree 0 exclusively.
   'TODO)
 
 ; NOTE: We could directly take a second-class approach to effect
@@ -543,6 +608,10 @@
   #/_ (scope-degree)
     (computation-h/c (=/c #/if (= 0 scope-degree) 0 1) (=/c 0)
     #/nothing))
+  ; NOTE: Even if degree-0 evaluation strategy sensitivity is
+  ; disallowed at usage time and `scope-degree` is 0, this does not
+  ; cause an error, because there are no *permitted* effects that this
+  ; could conflict with.
   'TODO)
 
 ; A degree-N indeterminism effect which makes it so that except within
@@ -561,7 +630,7 @@
 ; context of another similar effect of degree greater than N, then
 ; degree-N-or-greater holes will be opened in this region when they're
 ; opened in that one. An effect is "similar" for these purposes if
-; it's any of the effects `purely0!h` can open a hole in. This
+; it's any of the effects `purely!h` can open a hole in. This
 ; operation's hole effectss behave accordingly so that they can open
 ; holes in similar effects of ostensibly lower degree.
 ;
@@ -577,6 +646,8 @@
         (=/c #/if (= 0 scope-degree) 0 1)
         (=/c scope-degree)
       #/nothing)])
+  ; TODO: Make this cause an error if degree-0 evaluation strategy
+  ; sensitivity is disallowed at usage time and `scope-degree` is 0.
   'TODO)
 
 ; A degree-N indeterminism effect which makes it so that except within
@@ -591,7 +662,7 @@
 ; context of another similar effect of degree greater than N, then
 ; degree-N-or-greater holes will be opened in this region when they're
 ; opened in that one. An effect is "similar" for these purposes if
-; it's any of the effects `purely0!h` can open a hole in. This
+; it's any of the effects `purely!h` can open a hole in. This
 ; operation's hole effectss behave accordingly so that they can open
 ; holes in similar effects of ostensibly lower degree.
 ;
@@ -609,6 +680,8 @@
         (=/c #/if (= 0 scope-degree) 0 1)
         (=/c scope-degree)
       #/nothing)])
+  ; TODO: Make this cause an error if degree-0 evaluation strategy
+  ; sensitivity is disallowed at usage time and `scope-degree` is 0.
   'TODO)
 
 
@@ -638,6 +711,10 @@
         (=/c #/if (= 0 scope-degree) 0 1)
         (=/c scope-degree)
       #/nothing)])
+  ; NOTE: Even if degree-0 evaluation strategy sensitivity is
+  ; disallowed at usage time and `scope-degree` is 0, this does not
+  ; cause an error, because there are no *permitted* effects that this
+  ; could conflict with.
   'TODO)
 
 ; TODO: See if we should still have `with-first-handler!h` if we're
@@ -659,6 +736,8 @@
         (=/c #/if (= 0 scope-degree) 0 1)
         (=/c scope-degree)
       #/nothing)])
+  ; TODO: Make this cause an error if degree-0 evaluation strategy
+  ; sensitivity is disallowed at usage time and `scope-degree` is 0.
   'TODO)
 
 
@@ -669,4 +748,9 @@
   ; it as part of the effect system. Just have this return something
   ; that uses `handle!h` to use a gensym operation if one is in the
   ; dynamic scope.
+  
+  ; NOTE: Even if degree-1 evaluation strategy sensitivity is
+  ; disallowed at usage time, this does not cause an error, because
+  ; there are no *permitted* effects that this could conflict with.
+  
   'TODO)
