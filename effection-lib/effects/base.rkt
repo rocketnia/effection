@@ -290,6 +290,7 @@
 
 
 
+(define effects-state-semaphore* (make-semaphore 1))
 (define current-sensitivity-degree (make-parameter 0))
 
 
@@ -610,12 +611,12 @@
       ; the hole effects to have the same sensitivity degree as the
       ; original effect. Figure out what to do about this.
       #/list #/computation-h 1 0 #/lambda ()
-        ; TODO: Make the reading and modification of `done` and
-        ; `(current-sensitivity-degree)` thread-safe.
-        (when done
-          (error "attempted to close a with-strategy-sensitivity!h effect that was already closed"))
-        (set! done #t)
-        (current-sensitivity-degree old-sensitivity-degree)
+        (call-with-semaphore effects-state-semaphore* #/lambda ()
+          ; TODO: Improve this error message.
+          (when done
+            (error "attempted to close a with-strategy-sensitivity!h effect that was already closed"))
+          (set! done #t)
+          (current-sensitivity-degree old-sensitivity-degree))
         (void))
     #/void)))
 
