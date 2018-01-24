@@ -531,16 +531,16 @@
 ; built-in effects like `purely!h`, `init-fusable!h`, and
 ; `write-fusable!h` themselves.
 ;
-(define/contract (purely!h usage-degree)
-  (->i ([usage-degree exact-nonnegative-integer?])
-  #/_ (usage-degree)
+(define/contract (purely!h degree)
+  (->i ([degree exact-nonnegative-integer?])
+  #/_ (degree)
     (computation-h/c
-      (=/c #/if (= 0 usage-degree) 0 1)
-      (=/c usage-degree)
+      (=/c #/if (= 0 degree) 0 1)
+      (=/c degree)
     #/nothing))
   ; TODO: Make this cause an error at usage time if evaluation
-  ; strategy sensitivity of degree 1 is disallowed, or if the
-  ; `usage-degree` is 0 and degree-0 sensitivity is disallowed.
+  ; strategy sensitivity of degree 1 is disallowed, or if the `degree`
+  ; is 0 and degree-0 sensitivity is disallowed.
   'TODO)
 
 ; A degree-N handler effect which allows evaluation strategy
@@ -643,7 +643,7 @@
       #/nothing)])
   ; TODO: Make this cause an error at usage time if evaluation
   ; strategy sensitivity of degree 1 is disallowed, or if the
-  ; `usage-degree` is 0 and degree-0 sensitivity is disallowed.
+  ; `scope-degree` is 0 and degree-0 sensitivity is disallowed.
   'TODO)
 
 ; A degree-N indeterminism effect which makes it so that except within
@@ -678,7 +678,7 @@
       #/nothing)])
   ; TODO: Make this cause an error at usage time if evaluation
   ; strategy sensitivity of degree 1 is disallowed, or if the
-  ; `usage-degree` is 0 and degree-0 sensitivity is disallowed.
+  ; `scope-degree` is 0 and degree-0 sensitivity is disallowed.
   'TODO)
 
 
@@ -735,7 +735,7 @@
       #/nothing)])
   ; TODO: Make this cause an error at usage time if evaluation
   ; strategy sensitivity of degree 1 is disallowed, or if the
-  ; `usage-degree` is 0 and degree-0 sensitivity is disallowed.
+  ; `scope-degree` is 0 and degree-0 sensitivity is disallowed.
   'TODO)
 
 
