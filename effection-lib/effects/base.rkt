@@ -468,11 +468,6 @@
         high-degree-suffix-holes)
       leaf))))
 
-; TODO: Implement some kind of operation to add evaluation strategy
-; sensitivity to an effect that doesn't already have it. For instance,
-; it should let a programmer convert a degree-1-sensitive effect into
-; a degree-0-sensitive effect.
-
 (define/contract (run0!h! computation)
   (-> (computation-h/c (>=/c 0) any/c #/nothing) any)
   (dissect computation
@@ -501,15 +496,15 @@
   #/dissect (run0!h! hole0) (holes-h-and-value (list) hole0-result)
   #/run1-result hole0-result body-result))
 
-; A degree-1-sensitive degree-N handler effect which opens a degree-N
-; hole in every instance of almost any effect that actually uses
-; handler effects, even the ones that have degree N or less, which
-; ostensibly wouldn't permit degree-N holes. (The rationale is that
-; all our handler effects actually have degree greater than the
-; program could ever detect, essentially infinite, but clients are
-; required to discard all but a client-specified finite number of the
-; hole effects, using the other hole effects only indirectly via a
-; built-in operation like this one.)
+; A degree-N handler effect which opens a degree-N hole in every
+; instance of almost any effect that actually uses handler effects,
+; even the ones that have degree N or less, which ostensibly wouldn't
+; permit degree-N holes. (The rationale is that all our handler
+; effects actually have degree greater than the program could ever
+; detect, essentially infinite, but clients are required to discard
+; all but a client-specified finite number of the hole effects, using
+; the other hole effects only indirectly via a built-in operation like
+; this one.)
 ;
 ; Almost all effects that are designed to be handled in custom ways
 ; use indeterminism to look up those handlers, which is a nontrivial
@@ -536,24 +531,29 @@
 ; built-in effects like `purely!h`, `init-fusable!h`, and
 ; `write-fusable!h` themselves.
 ;
-; Inside that region, this allows `allowed-sensitivity-degree`-degree
-; sensitivity to the evaluation strategy, even if that's more
-; permissive than the caller at the time this computation is useed.
-; However, if the caller does not allow degree-1 sensitivity at the
-; time this computation is used, this raises an error, so it cannot be
-; used to reintroduce degree-1 sensitivity.
-;
-(define/contract (purely!h usage-degree allowed-sensitivity-degree)
-  (->i
-    (
-      [usage-degree exact-nonnegative-integer?]
-      [allowed-sensitivity-degree exact-nonnegative-integer?])
+(define/contract (purely!h usage-degree)
+  (->i ([usage-degree exact-nonnegative-integer?])
   #/_ (usage-degree)
-    (computation-h/c (=/c 1) (=/c usage-degree) #/nothing))
-  ; TODO: Make this cause an error if degree-1 evaluation strategy
-  ; sensitivity is disallowed at usage time.
+    (computation-h/c
+      (=/c #/if (= 0 usage-degree) 0 1)
+      (=/c usage-degree)
+    #/nothing))
+  ; TODO: Make this cause an error at usage time if evaluation
+  ; strategy sensitivity of degree 1 is disallowed, or if the
+  ; `usage-degree` is 0 and degree-0 sensitivity is disallowed.
   'TODO)
 
+; A degree-N handler effect which allows evaluation strategy
+; sensitivity of the given degree inside its region.
+;
+; If the region is degree 0, this effect depends on degree-0
+; sensitivity to open the region (so that the expressions inside the
+; region aren't evaluated prematurely). The same is true for degree 1.
+; This means that in practice, this is useful in the context of
+; degree-0- or degree-1-sensitive code, but degree-1-insensitive code
+; cannot use this, and hence cannot reintroduce degree 1 sensitivity
+; or degree 0 sensitivity this way.
+;
 (define/contract
   (with-strategy-insensitivity!h
     usage-degree allowed-sensitivity-degree)
@@ -576,14 +576,9 @@
       (=/c #/if (= 0 usage-degree) 0 1)
       (=/c usage-degree)
     #/nothing))
-  ; TODO: Make this cause an error at usage time if the evaluation
-  ; strategy sensitivity requirements are not met.
-  ;
-  ; TODO: Clarify what the requirements are. Also revisit some of the
-  ; other "TODO: Make this cause an error" comments because we may
-  ; have failed to say to cause an error if the operation requires
-  ; degree-1-sensitivity and it isn't available. We seem to have
-  ; focused on degree 0 exclusively.
+  ; TODO: Make this cause an error at usage time if evaluation
+  ; strategy sensitivity of degree 1 is disallowed, or if the
+  ; `usage-degree` is 0 and degree-0 sensitivity is disallowed.
   'TODO)
 
 ; NOTE: We could directly take a second-class approach to effect
@@ -646,8 +641,9 @@
         (=/c #/if (= 0 scope-degree) 0 1)
         (=/c scope-degree)
       #/nothing)])
-  ; TODO: Make this cause an error if degree-0 evaluation strategy
-  ; sensitivity is disallowed at usage time and `scope-degree` is 0.
+  ; TODO: Make this cause an error at usage time if evaluation
+  ; strategy sensitivity of degree 1 is disallowed, or if the
+  ; `usage-degree` is 0 and degree-0 sensitivity is disallowed.
   'TODO)
 
 ; A degree-N indeterminism effect which makes it so that except within
@@ -680,8 +676,9 @@
         (=/c #/if (= 0 scope-degree) 0 1)
         (=/c scope-degree)
       #/nothing)])
-  ; TODO: Make this cause an error if degree-0 evaluation strategy
-  ; sensitivity is disallowed at usage time and `scope-degree` is 0.
+  ; TODO: Make this cause an error at usage time if evaluation
+  ; strategy sensitivity of degree 1 is disallowed, or if the
+  ; `usage-degree` is 0 and degree-0 sensitivity is disallowed.
   'TODO)
 
 
@@ -736,8 +733,9 @@
         (=/c #/if (= 0 scope-degree) 0 1)
         (=/c scope-degree)
       #/nothing)])
-  ; TODO: Make this cause an error if degree-0 evaluation strategy
-  ; sensitivity is disallowed at usage time and `scope-degree` is 0.
+  ; TODO: Make this cause an error at usage time if evaluation
+  ; strategy sensitivity of degree 1 is disallowed, or if the
+  ; `usage-degree` is 0 and degree-0 sensitivity is disallowed.
   'TODO)
 
 
