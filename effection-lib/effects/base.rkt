@@ -275,7 +275,7 @@
 ;(provide holes-h/c computation-h/c)
 ;(provide return!h bind!h)
 ;(provide run0!h! (struct-out run1-result) run1!h!)
-;(provide purely!h with-strategy-insensitivity!h)
+;(provide purely!h with-strategy-sensitivity!h)
 ;(provide strategy-insensitively!h)
 
 ;(provide read-fusable!h init-fusable!h write-fusable!h)
@@ -533,8 +533,10 @@
 ; effects' holes, and so on:
 ;
 ;   * `purely!h`
+;   * `with-strategy-sensitivity!h`
 ;   * `init-fusable!h`
 ;   * `write-fusable!h`
+;   * `with-first-handler!h`
 ;   * (TODO: Add to this list as appropriate.)
 ;
 ; (The rationale is that each of these effects actually aggregates
@@ -571,7 +573,7 @@
 ; or degree 0 sensitivity this way.
 ;
 (define/contract
-  (with-strategy-insensitivity!h
+  (with-strategy-sensitivity!h
     usage-degree allowed-sensitivity-degree)
   (->i
     (
@@ -593,7 +595,29 @@
       (=/c usage-degree)
     #/nothing))
   (unsafe-nontrivial-computation-1!h usage-degree #/lambda ()
-    'TODO))
+    (w- old-sensitivity-degree (current-sensitivity-degree)
+    #/w- done #f
+    #/begin (current-sensitivity-degree allowed-sensitivity-degree)
+    ; TODO: This result only contains information about how to open
+    ; degree-0 holes (and only if the `usage-degree` is nonzero). It
+    ; doesn't contain any information about how to open and close
+    ; higher-degree holes like the ones that should be opened by
+    ; `purity!h`. Figure out how to return that kind of information.
+    #/holes-h-and-value
+      (mat usage-degree 0 (list)
+      ; TODO: This is actually a degree-0-sensitive effect, but we
+      ; can't have it declare itself to be one because we expect all
+      ; the hole effects to have the same sensitivity degree as the
+      ; original effect. Figure out what to do about this.
+      #/list #/computation-h 1 0 #/lambda ()
+        ; TODO: Make the reading and modification of `done` and
+        ; `(current-sensitivity-degree)` thread-safe.
+        (when done
+          (error "attempted to close a with-strategy-sensitivity!h effect that was already closed"))
+        (set! done #t)
+        (current-sensitivity-degree old-sensitivity-degree)
+        (void))
+    #/void)))
 
 ; NOTE: We could directly take a second-class approach to effect
 ; handlers, where we bind not a first-class value but instead a
