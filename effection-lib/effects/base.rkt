@@ -268,9 +268,7 @@
 ;(provide #/struct-out holes-h-and-value)
 ;(provide #/rename-out
 ;  [-computation-h? computation-h?]
-;  [-computation-h-sensitivity-degree
-;    computation-h-sensitivity-degree]
-;  [-computation-h-usage-degree computation-h-usage-degree])
+;  [-computation-h-degree computation-h-degree])
 ;(provide pure/c!h!)
 ;(provide holes-h/c computation-h/c)
 ;(provide return!h bind!h)
@@ -298,8 +296,7 @@
 (struct-easy "a holes-h-and-value" (holes-h-and-value holes value)
   #:equal)
 
-(struct-easy "a computation-h"
-  (computation-h sensitivity-degree usage-degree unsafe-run!h!)
+(struct-easy "a computation-h" (computation-h degree unsafe-run!h!)
   #:equal)
 
 ; A version of `computation-h?` that does not satisfy
@@ -308,17 +305,11 @@
   (-> any/c boolean?)
   (computation-h? x))
 
-; A version of `computation-h-sensitivity-degree` that does not
-; satisfy `struct-accessor-procedure?`.
-(define/contract (-computation-h-sensitivity-degree computation)
-  (-> -computation-h? exact-nonnegative-integer?)
-  (computation-h-sensitivity-degree computation))
-
-; A version of `computation-h-usage-degree` that does not satisfy
+; A version of `computation-h-degree` that does not satisfy
 ; `struct-accessor-procedure?`.
-(define/contract (-computation-h-usage-degree computation)
+(define/contract (-computation-h-degree computation)
   (-> -computation-h? exact-nonnegative-integer?)
-  (computation-h-usage-degree computation))
+  (computation-h-degree computation))
 
 (define/contract (before-and-after-projection before after)
   (-> (-> any) (-> any) #/-> blame? #/-> procedure?
@@ -351,132 +342,73 @@
       (lambda () #/run0!h! #/purely!h 1)
       (dissectfn (holes-h-and-value (list hole) _) #/run0!h! hole))))
 
-(define/contract
-  (holes-h/c sensitivity-degree usage-start-degree usage-stop-degree)
-  (->
-    exact-nonnegative-integer?
-    exact-nonnegative-integer?
-    exact-nonnegative-integer?
-    contract?)
+(define/contract (holes-h/c start-degree stop-degree)
+  (-> exact-nonnegative-integer? exact-nonnegative-integer? contract?)
   (and/c (listof computation-h?)
     (lambda (holes)
-      (and (= (- usage-stop-degree usage-start-degree) #/length holes)
-      #/nextlet holes holes i usage-start-degree
+      (and (= (- stop-degree start-degree) #/length holes)
+      #/nextlet holes holes i start-degree
         (expect holes (cons hole holes) #t
-        #/expect hole
-          (computation-h hole-sensitivity-degree hole-usage-degree _)
-          #f
-        #/and (= sensitivity-degree hole-sensitivity-degree)
-        #/and (= hole-usage-degree i)
+        #/expect hole (computation-h degree _) #f
+        #/and (= degree i)
         #/next holes #/add1 i)))))
 
-(define/contract
-  (computation-h/c sensitivity-degree/c usage-degree/c value/c-maybe)
-  (-> contract? contract? (maybe/c contract?) contract?)
+(define/contract (computation-h/c degree/c value/c-maybe)
+  (-> contract? (maybe/c contract?) contract?)
   (struct/dc computation-h
-    [sensitivity-degree
-      (and/c exact-nonnegative-integer? sensitivity-degree/c)]
-    [usage-degree (and/c exact-nonnegative-integer? usage-degree/c)]
-    [unsafe-run!h! (sensitivity-degree usage-degree)
+    [degree (and/c exact-nonnegative-integer? degree/c)]
+    [unsafe-run!h! (degree)
       (mat value/c-maybe (just value/c)
-        (-> #/struct/c holes-h-and-value
-          (holes-h/c sensitivity-degree 0 usage-degree)
-          value/c)
+        (-> #/struct/c holes-h-and-value (holes-h/c 0 degree) value/c)
         (-> any))]))
 
-(define/contract
-  (return!h sensitivity-degree usage-degree holes-and-leaf)
+(define/contract (return!h degree holes-and-leaf)
   (->i
     (
-      [sensitivity-degree exact-nonnegative-integer?]
-      [usage-degree exact-nonnegative-integer?]
-      [holes-and-leaf (sensitivity-degree usage-degree)
-        (struct/c holes-h-and-value
-          (holes-h/c sensitivity-degree
-            (max 0 #/- usage-degree sensitivity-degree)
-            usage-degree)
-          any/c)])
-    [_ (sensitivity-degree usage-degree)
-      (computation-h/c (=/c sensitivity-degree) (=/c usage-degree)
-      #/nothing)])
-  (dissect holes-and-leaf (holes-h-and-value holes leaf)
-  #/computation-h sensitivity-degree usage-degree #/lambda ()
-    #/holes-h-and-value
-      ; NOTE: These hole effects do nothing but what the client has
-      ; them do. They don't even verify that they're used in the right
-      ; context, e.g. that a hole isn't opened while another hole is
-      ; in progress. That's intentional; it helps make sure `return!h`
-      ; doesn't add any effects of its own, so that it's a proper
-      ; identity element.
-      (append
-        (build-list sensitivity-degree #/lambda (i)
-          (return!h sensitivity-degree i
-          #/holes-h-and-value (list) #/void))
-        holes)
-      leaf))
+      [degree exact-nonnegative-integer?]
+      [holes-and-leaf (degree)
+        (struct/c holes-h-and-value (holes-h/c 0 degree) any/c)])
+    [_ (degree) (computation-h/c (=/c degree) #/nothing)])
+  (computation-h degree #/lambda ()
+    ; NOTE: These hole effects do nothing but what the client has them
+    ; do. They don't even verify that they're used in the right
+    ; context, e.g. that a hole isn't opened while another hole is in
+    ; progress. That's intentional; it helps make sure `return!h`
+    ; doesn't add any effects of its own, so that it's a proper
+    ; identity element.
+    holes-and-leaf))
 
 (define/contract (bind!h prefix holes-and-leaf-to-suffix)
   (->i
     (
-      [prefix (computation-h/c any/c any/c #/nothing)]
+      [prefix (computation-h/c any/c #/nothing)]
       [holes-and-leaf-to-suffix (prefix)
-        (w- ds (computation-h-sensitivity-degree prefix)
-        #/w- du (computation-h-usage-degree prefix)
+        (w- d (computation-h-degree prefix)
+        
+        ; NOTE: Since this function is wrapped in `pure/c!h!`, the
+        ; evaluation strategy sensitivity returns to 0 for the dynamic
+        ; extent of the call. And since that happens, it's appropriate
+        ; to pass in a degree-0 hole effect. We don't have to do
+        ; anything special to hide the degree-0 hole effect from this
+        ; function and process it automatically, even if the `bind!h`
+        ; effect is executed with `run1!h!`.
+        ;
+        ; TODO: We should see if we can change the effect
+        ; continuations into efficient queues as seen in the "freer
+        ; monads" papers.
+        ;
         #/pure/c!h! #/->
-          (struct/c holes-h-and-value
-            (holes-h/c ds (max 0 #/- du ds) du)
-            any/c)
-          (computation-h/c (=/c ds) (=/c du) #/nothing))])
+          (struct/c holes-h-and-value (holes-h/c 0 d) any/c)
+          (computation-h/c (=/c d) #/nothing))])
   #/_ (prefix)
-    (w- ds (computation-h-sensitivity-degree prefix)
-    #/w- du (computation-h-usage-degree prefix)
-    #/computation-h/c (=/c ds) (=/c du) #/nothing))
-  (dissect prefix
-    (computation-h sensitivity-degree usage-degree unsafe-run!h!)
-  #/computation-h sensitivity-degree usage-degree #/lambda ()
-    (dissect (unsafe-run!h!) (holes-h-and-value holes leaf)
-    #/begin
-      (define-values
-        (low-degree-prefix-holes high-degree-prefix-holes)
-        (split-at holes #/min sensitivity-degree usage-degree))
-    (dissect
-      (holes-and-leaf-to-suffix
-      #/holes-h-and-value high-degree-prefix-holes leaf)
-      (computation-h sensitivity-degree usage-degree unsafe-run!h!)
-    
-    ; TODO: Since we don't tail-call `unsafe-run!h!` here, we
-    ; essentially have no tail calls at all in this monad. It's likely
-    ; that our implementation will turn out to use no effects in these
-    ; low-degree holes anyway, aside from perhaps some state changes
-    ; and assertions meant to verify that the hole "brackets" are
-    ; matched up properly, which is still something that we would not
-    ; need to carefully concatenate here. If that's the case, we
-    ; should stop tracking the low-degree hole effects altogether and
-    ; make this a tail call.
-    ;
-    ; TODO: While we're at it, we should see if we can change the
-    ; effect continuations into efficient queues as seen in the "freer
-    ; monads" papers. That's probably a separate task, but hey, we
-    ; might notice a way to accomplish it earlier when we take care of
-    ; this tail call.
-    ;
-    #/dissect (unsafe-run!h!) (holes-h-and-value holes leaf)
-    #/begin
-      (define-values
-        (low-degree-suffix-holes high-degree-suffix-holes)
-        (split-at holes #/min sensitivity-degree usage-degree))
-    #/holes-h-and-value
-      (append
-        (list-zip-map low-degree-prefix-holes low-degree-suffix-holes
-        #/lambda (prefix-hole suffix-hole)
-          (bind!h suffix-hole prefix-hole))
-        high-degree-suffix-holes)
-      leaf))))
+    (computation-h/c (=/c #/computation-h-degree prefix) #/nothing))
+  (dissect prefix (computation-h degree unsafe-run!h!)
+  #/computation-h degree #/lambda ()
+    (run0!h! #/holes-and-leaf-to-suffix #/unsafe-run!h!)))
 
 (define/contract (run0!h! computation)
-  (-> (computation-h/c (>=/c 0) any/c #/nothing) any)
-  (dissect computation
-    (computation-h start-degree stop-degree unsafe-run!h!)
+  (-> (computation-h/c any/c #/nothing) any)
+  (dissect computation (computation-h degree unsafe-run!h!)
   #/unsafe-run!h!))
 
 (struct-easy "a run1-result" (run1-result hole0-result body-result)
@@ -485,17 +417,15 @@
 (define/contract (run1!h! computation body)
   (->i
     (
-      [computation (computation-h/c (>=/c 1) any/c #/nothing)]
+      [computation (computation-h/c any/c #/nothing)]
       [body (computation)
         (->
           (struct/c holes-h-and-value
-            (holes-h/c 1 1 #/computation-h-usage-degree computation)
+            (holes-h/c 1 #/computation-h-degree computation)
             any/c)
           any)])
     any)
-  (dissect computation
-    (computation-h start-degree stop-degree unsafe-run!h!)
-  #/dissect (unsafe-run!h!)
+  (dissect (run0!h! computation)
     (holes-h-and-value (cons hole0 hole1+) value)
   #/w- body-result (body #/holes-h-and-value hole1+ value)
   #/dissect (run0!h! hole0) (holes-h-and-value (list) hole0-result)
@@ -504,10 +434,8 @@
 (define/contract
   (unsafe-nontrivial-computation-1!h degree unsafe-run!h!)
   (->i ([degree exact-nonnegative-integer?] [unsafe-run!h! (-> any)])
-  #/_ (degree)
-    (computation-h/c (=/c #/if (= 0 degree) 0 1) (=/c degree)
-    #/nothing))
-  (computation-h (if (= 0 degree) 0 1) degree #/lambda ()
+    [_ (degree) (computation-h/c (=/c degree) #/nothing)])
+  (computation-h degree #/lambda ()
     ; TODO: See if we can improve these error messages.
     (unless (<= (current-sensitivity-degree) #/if (= 0 degree) 0 1)
       (mat degree 0
@@ -554,11 +482,7 @@
 ;
 (define/contract (purely!h degree)
   (->i ([degree exact-nonnegative-integer?])
-  #/_ (degree)
-    (computation-h/c
-      (=/c #/if (= 0 degree) 0 1)
-      (=/c degree)
-    #/nothing))
+    [_ (degree) (computation-h/c (=/c degree) #/nothing)])
   (unsafe-nontrivial-computation-1!h degree #/lambda ()
     'TODO))
 
@@ -590,11 +514,7 @@
       (<= usage-degree 1)
       (<= allowed-sensitivity-degree 1))
     
-  #/_ (usage-degree)
-    (computation-h/c
-      (=/c #/if (= 0 usage-degree) 0 1)
-      (=/c usage-degree)
-    #/nothing))
+    [_ (usage-degree) (computation-h/c (=/c usage-degree) #/nothing)])
   (unsafe-nontrivial-computation-1!h usage-degree #/lambda ()
     (w- old-sensitivity-degree (current-sensitivity-degree)
     #/w- done #f
@@ -606,11 +526,10 @@
     ; `purity!h`. Figure out how to return that kind of information.
     #/holes-h-and-value
       (mat usage-degree 0 (list)
-      ; TODO: This is actually a degree-0-sensitive effect, but we
-      ; can't have it declare itself to be one because we expect all
-      ; the hole effects to have the same sensitivity degree as the
-      ; original effect. Figure out what to do about this.
-      #/list #/computation-h 1 0 #/lambda ()
+      #/list #/computation-h 0 #/lambda ()
+        ; TODO: See if we should verify here that the current code is
+        ; degree-0-sensitive. If we do, we should offer some way for
+        ; `run1!h!` to run it without requiring degree-0 sensitivity.
         (call-with-semaphore effects-state-semaphore* #/lambda ()
           ; TODO: Improve this error message.
           (when done
@@ -638,14 +557,13 @@
 ; the evaluation strategy. Otherwise, it's degree-1-sensitive.
 ;
 (define/contract (read-fusable!h scope-degree key)
-  (->i ([scope-degree exact-nonnegative-integer?] [key name?])
-  #/_ (scope-degree)
-    (computation-h/c (=/c #/if (= 0 scope-degree) 0 1) (=/c 0)
-    #/nothing))
+  (-> exact-nonnegative-integer? name?
+    (computation-h/c (=/c 0) #/nothing))
   ; NOTE: Even if degree-0 evaluation strategy sensitivity is
   ; disallowed at usage time and `scope-degree` is 0, this does not
   ; cause an error, because there are no *permitted* effects that this
-  ; could conflict with.
+  ; could conflict with. The same is true if degree-1 sensitivity is
+  ; disallowed and `scope-degree` is nonzero.
   'TODO)
 
 ; A degree-N indeterminism effect which makes it so that except within
@@ -675,11 +593,7 @@
       [key name?]
       [fuse fuse?]
       [val any/c])
-    [_ (scope-degree)
-      (computation-h/c
-        (=/c #/if (= 0 scope-degree) 0 1)
-        (=/c scope-degree)
-      #/nothing)])
+    [_ (scope-degree) (computation-h/c (=/c scope-degree) #/nothing)])
   (unsafe-nontrivial-computation-1!h scope-degree #/lambda ()
     'TODO))
 
@@ -708,11 +622,7 @@
       [scope-degree exact-nonnegative-integer?]
       [key name?]
       [val any/c])
-    [_ (scope-degree)
-      (computation-h/c
-        (=/c #/if (= 0 scope-degree) 0 1)
-        (=/c scope-degree)
-      #/nothing)])
+    [_ (scope-degree) (computation-h/c (=/c scope-degree) #/nothing)])
   (unsafe-nontrivial-computation-1!h scope-degree #/lambda ()
     'TODO))
 
@@ -738,15 +648,12 @@
       [scope-degree exact-nonnegative-integer?]
       [usage-degree exact-nonnegative-integer?]
       [custom-computation any/c])
-    [_ (scope-degree)
-      (computation-h/c
-        (=/c #/if (= 0 scope-degree) 0 1)
-        (=/c scope-degree)
-      #/nothing)])
+    [_ (scope-degree) (computation-h/c (=/c scope-degree) #/nothing)])
   ; NOTE: Even if degree-0 evaluation strategy sensitivity is
   ; disallowed at usage time and `scope-degree` is 0, this does not
   ; cause an error, because there are no *permitted* effects that this
-  ; could conflict with.
+  ; could conflict with. The same is true if degree-1 sensitivity is
+  ; disallowed and `scope-degree` is nonzero.
   'TODO)
 
 ; TODO: See if we should still have `with-first-handler!h` if we're
@@ -763,25 +670,24 @@
       [scope-degree exact-nonnegative-integer?]
       [usage-degree exact-nonnegative-integer?]
       [handler handler?])
-    [_ (scope-degree)
-      (computation-h/c
-        (=/c #/if (= 0 scope-degree) 0 1)
-        (=/c scope-degree)
-      #/nothing)])
+    [_ (scope-degree) (computation-h/c (=/c scope-degree) #/nothing)])
   (unsafe-nontrivial-computation-1!h scope-degree #/lambda ()
     'TODO))
 
 
 (define/contract gensym!h
-  (computation-h/c (=/c 1) (=/c 0) #/just symbol?)
+  (computation-h/c (=/c 0) #/just symbol?)
   ; NOTE: Don't implement this as an ambient capability by defining
   ; it as part of the effect system. Just have this return something
   ; that uses `handle!h` to use a gensym operation if one is in the
   ; dynamic scope.
   
-  ; NOTE: Even if degree-1 evaluation strategy sensitivity is
+  ; NOTE: This is sort of degree-1-sensitive since it will interact
+  ; with a degree-1 handler operation (TODO: Design that operation.),
+  ; but nevertheless if degree-1 evaluation strategy sensitivity is
   ; disallowed at usage time, this does not cause an error, because
-  ; there are no *permitted* effects that this could conflict with.
+  ; the handler operation will not be permitted, and hence there are
+  ; no *permitted* effects that this could conflict with.
   
-  (computation-h 1 0 #/lambda ()
+  (computation-h 0 #/lambda ()
     'TODO))
