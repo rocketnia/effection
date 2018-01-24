@@ -290,6 +290,10 @@
 
 
 
+(define current-sensitivity-degree (make-parameter 0))
+
+
+
 (struct-easy "a holes-h-and-value" (holes-h-and-value holes value)
   #:equal)
 
@@ -496,6 +500,20 @@
   #/dissect (run0!h! hole0) (holes-h-and-value (list) hole0-result)
   #/run1-result hole0-result body-result))
 
+(define/contract
+  (unsafe-nontrivial-computation-1!h degree unsafe-run!h!)
+  (->i ([degree exact-nonnegative-integer?] [unsafe-run!h! (-> any)])
+  #/_ (degree)
+    (computation-h/c (=/c #/if (= 0 degree) 0 1) (=/c degree)
+    #/nothing))
+  (computation-h (if (= 0 degree) 0 1) degree #/lambda ()
+    ; TODO: See if we can improve these error messages.
+    (unless (<= (current-sensitivity-degree) #/if (= 0 degree) 0 1)
+      (mat degree 0
+        (error "requires evaluation strategy sensitivity of 0, i.e. a fully linearized control flow")
+        (error "requires evaluation strategy sensitivity of 1, i.e. varying behavior based on the call stack")))
+    (unsafe-run!h!)))
+
 ; A degree-N handler effect which opens a degree-N hole in every
 ; instance of almost any effect that actually uses handler effects,
 ; even the ones that have degree N or less, which ostensibly wouldn't
@@ -538,10 +556,8 @@
       (=/c #/if (= 0 degree) 0 1)
       (=/c degree)
     #/nothing))
-  ; TODO: Make this cause an error at usage time if evaluation
-  ; strategy sensitivity of degree 1 is disallowed, or if the `degree`
-  ; is 0 and degree-0 sensitivity is disallowed.
-  'TODO)
+  (unsafe-nontrivial-computation-1!h degree #/lambda ()
+    'TODO))
 
 ; A degree-N handler effect which allows evaluation strategy
 ; sensitivity of the given degree inside its region.
@@ -576,10 +592,8 @@
       (=/c #/if (= 0 usage-degree) 0 1)
       (=/c usage-degree)
     #/nothing))
-  ; TODO: Make this cause an error at usage time if evaluation
-  ; strategy sensitivity of degree 1 is disallowed, or if the
-  ; `usage-degree` is 0 and degree-0 sensitivity is disallowed.
-  'TODO)
+  (unsafe-nontrivial-computation-1!h usage-degree #/lambda ()
+    'TODO))
 
 ; NOTE: We could directly take a second-class approach to effect
 ; handlers, where we bind not a first-class value but instead a
@@ -641,10 +655,8 @@
         (=/c #/if (= 0 scope-degree) 0 1)
         (=/c scope-degree)
       #/nothing)])
-  ; TODO: Make this cause an error at usage time if evaluation
-  ; strategy sensitivity of degree 1 is disallowed, or if the
-  ; `scope-degree` is 0 and degree-0 sensitivity is disallowed.
-  'TODO)
+  (unsafe-nontrivial-computation-1!h scope-degree #/lambda ()
+    'TODO))
 
 ; A degree-N indeterminism effect which makes it so that except within
 ; its holes, any `read-fusable!h` effects taking place that specify
@@ -676,10 +688,8 @@
         (=/c #/if (= 0 scope-degree) 0 1)
         (=/c scope-degree)
       #/nothing)])
-  ; TODO: Make this cause an error at usage time if evaluation
-  ; strategy sensitivity of degree 1 is disallowed, or if the
-  ; `scope-degree` is 0 and degree-0 sensitivity is disallowed.
-  'TODO)
+  (unsafe-nontrivial-computation-1!h scope-degree #/lambda ()
+    'TODO))
 
 
 
@@ -733,10 +743,8 @@
         (=/c #/if (= 0 scope-degree) 0 1)
         (=/c scope-degree)
       #/nothing)])
-  ; TODO: Make this cause an error at usage time if evaluation
-  ; strategy sensitivity of degree 1 is disallowed, or if the
-  ; `scope-degree` is 0 and degree-0 sensitivity is disallowed.
-  'TODO)
+  (unsafe-nontrivial-computation-1!h scope-degree #/lambda ()
+    'TODO))
 
 
 (define/contract gensym!h
