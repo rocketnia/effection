@@ -296,7 +296,8 @@
 (struct-easy "a holes-h-and-value" (holes-h-and-value holes value)
   #:equal)
 
-(struct-easy "a computation-h" (computation-h degree unsafe-run!h!)
+(struct-easy "a computation-h"
+  (computation-h degree unsafe-run0!h! unsafe-run1!h!)
   #:equal)
 
 ; A version of `computation-h?` that does not satisfy
@@ -349,17 +350,39 @@
       (and (= (- stop-degree start-degree) #/length holes)
       #/nextlet holes holes i start-degree
         (expect holes (cons hole holes) #t
-        #/expect hole (computation-h degree _) #f
+        #/expect hole (computation-h degree _ _) #f
         #/and (= degree i)
         #/next holes #/add1 i)))))
+
+(struct-easy "a method-run0-result"
+  (method-run0-result holes unsafe-unwind!r! unsafe-rewind!r! value)
+  #:equal)
+
+(struct-easy "a method-run1-result"
+  (method-run1-result
+    unsafe-finish!r! holes unsafe-unwind!r! unsafe-rewind!r! value)
+  #:equal)
 
 (define/contract (computation-h/c degree/c value/c-maybe)
   (-> contract? (maybe/c contract?) contract?)
   (struct/dc computation-h
     [degree (and/c exact-nonnegative-integer? degree/c)]
-    [unsafe-run!h! (degree)
+    [unsafe-run0!h! (degree)
       (mat value/c-maybe (just value/c)
-        (-> #/struct/c holes-h-and-value (holes-h/c 0 degree) value/c)
+        (-> #/struct/c method-run0-result
+          (holes-h/c 0 degree)
+          (-> any)
+          (-> any)
+          value/c)
+        (-> any))]
+    [unsafe-run1!h! (degree)
+      (mat value/c-maybe (just value/c)
+        (-> #/struct/c method-run1-result
+          (-> any)
+          (holes-h/c 1 degree)
+          (-> any)
+          (-> any)
+          value/c)
         (-> any))]))
 
 (define/contract (return!h degree holes-and-leaf)
@@ -369,14 +392,28 @@
       [holes-and-leaf (degree)
         (struct/c holes-h-and-value (holes-h/c 0 degree) any/c)])
     [_ (degree) (computation-h/c (=/c degree) #/nothing)])
-  (computation-h degree #/lambda ()
+  (dissect holes-and-leaf (holes-h-and-value holes leaf)
+  #/computation-h degree
     ; NOTE: These hole effects do nothing but what the client has them
     ; do. They don't even verify that they're used in the right
     ; context, e.g. that a hole isn't opened while another hole is in
     ; progress. That's intentional; it helps make sure `return!h`
     ; doesn't add any effects of its own, so that it's a proper
     ; identity element.
-    holes-and-leaf))
+    (lambda ()
+      (method-run0-result
+        holes
+        (lambda () #/void)
+        (lambda () #/void)
+        leaf))
+    (lambda ()
+      (dissect holes (cons hole!h holes)
+      #/method-run1-result
+        (lambda () #/run0!h! hole!h)
+        holes
+        (lambda () #/void)
+        (lambda () #/void)
+        leaf))))
 
 (define/contract (bind!h prefix holes-and-leaf-to-suffix)
   (->i
@@ -402,14 +439,78 @@
           (computation-h/c (=/c d) #/nothing))])
   #/_ (prefix)
     (computation-h/c (=/c #/computation-h-degree prefix) #/nothing))
-  (dissect prefix (computation-h degree unsafe-run!h!)
-  #/computation-h degree #/lambda ()
-    (run0!h! #/holes-and-leaf-to-suffix #/unsafe-run!h!)))
+  (dissect prefix (computation-h degree unsafe-run0!h! unsafe-run1!h!)
+  #/computation-h degree
+    (lambda ()
+      (dissect (unsafe-run0!h!)
+        (method-run0-result
+          holes prefix-unsafe-unwind!h! prefix-unsafe-rewind!h! leaf)
+      #/dissect
+        (unsafe-method-run0!h!
+        #/holes-and-leaf-to-suffix #/holes-h-and-value holes leaf)
+        (method-run0-result
+          holes suffix-unsafe-unwind!h! suffix-unsafe-rewind!h! leaf)
+      #/method-run0-result
+        holes
+        (lambda ()
+          (suffix-unsafe-unwind!h!)
+          (prefix-unsafe-unwind!h!))
+        (lambda ()
+          (prefix-unsafe-rewind!h!)
+          (suffix-unsafe-rewind!h!))
+        leaf))
+    (lambda ()
+      (dissect (unsafe-run1!h!)
+        (method-run1-result
+          prefix-unsafe-finish!h!
+          holes
+          prefix-unsafe-unwind!h!
+          prefix-unsafe-rewind!h!
+          leaf)
+      #/dissect
+        (unsafe-method-run1!h!
+        #/holes-and-leaf-to-suffix
+        #/holes-h-and-value
+          ; TODO: See if we should really be passing a dummy 0-degree
+          ; hole to the callback in this case.
+          (cons (return!h 0 #/holes-h-and-value (list) #/void) holes)
+          leaf)
+        (method-run1-result
+          suffix-unsafe-finish!h!
+          holes
+          suffix-unsafe-unwind!h!
+          suffix-unsafe-rewind!h!
+          leaf)
+      #/method-run1-result
+        (lambda ()
+          (suffix-unsafe-finish!h!)
+          (prefix-unsafe-finish!h!))
+        holes
+        (lambda ()
+          (suffix-unsafe-unwind!h!)
+          (prefix-unsafe-unwind!h!))
+        (lambda ()
+          (prefix-unsafe-rewind!h!)
+          (suffix-unsafe-rewind!h!))
+        leaf))))
+
+(define/contract (unsafe-method-run0!h! computation)
+  (-> (computation-h/c any/c #/nothing) any)
+  (dissect computation
+    (computation-h degree unsafe-run0!h! unsafe-run1!h!)
+  #/unsafe-run0!h!))
+
+(define/contract (unsafe-method-run1!h! computation)
+  (-> (computation-h/c any/c #/nothing) any)
+  (dissect computation
+    (computation-h degree unsafe-run0!h! unsafe-run1!h!)
+  #/unsafe-run1!h!))
 
 (define/contract (run0!h! computation)
   (-> (computation-h/c any/c #/nothing) any)
-  (dissect computation (computation-h degree unsafe-run!h!)
-  #/unsafe-run!h!))
+  (dissect (unsafe-method-run0!h! computation)
+    (method-run0-result holes unsafe-unwind!h! unsafe-rewind!h! leaf)
+  #/holes-h-and-value holes leaf))
 
 (struct-easy "a run1-result" (run1-result hole0-result body-result)
   #:equal)
@@ -425,18 +526,41 @@
             any/c)
           any)])
     any)
-  (dissect (run0!h! computation)
-    (holes-h-and-value (cons hole0 hole1+) value)
-  #/w- body-result (body #/holes-h-and-value hole1+ value)
-  #/dissect (run0!h! hole0) (holes-h-and-value (list) hole0-result)
+  (dissect (unsafe-method-run1!h! computation)
+    (method-run1-result
+      unsafe-finish!h! holes unsafe-unwind!h! unsafe-rewind!h! value)
+  #/w- body-result (body #/holes-h-and-value holes value)
+  #/w- hole0-result (unsafe-finish!h!)
   #/run1-result hole0-result body-result))
 
 (define/contract
   (unsafe-nontrivial-computation-1!h degree unsafe-run!h!)
   (->i ([degree exact-nonnegative-integer?] [unsafe-run!h! (-> any)])
     [_ (degree) (computation-h/c (=/c degree) #/nothing)])
+  ; TODO: See if we can improve these error messages.
+  (computation-h degree
+    (lambda ()
+      (unless (<= (current-sensitivity-degree) 0)
+        (mat degree 0
+          (error "requires evaluation strategy sensitivity of 0, i.e. a fully linearized control flow")
+          (error "using with run0!h! requires evaluation strategy sensitivity of 0, i.e. a fully linearized control flow")))
+      (dissect (unsafe-run!h!)
+        (method-run1-result
+          unsafe-finish!h!
+          holes
+          unsafe-unwind!h!
+          unsafe-rewind!h!
+          value)
+      #/mat degree 0
+        (method-run0-result
+          (list)
+          unsafe-unwind!h!
+          unsafe-rewind!h!
+          value)
+      (dissect 
+      ; TODO NOW
+      
   (computation-h degree #/lambda ()
-    ; TODO: See if we can improve these error messages.
     (unless (<= (current-sensitivity-degree) #/if (= 0 degree) 0 1)
       (mat degree 0
         (error "requires evaluation strategy sensitivity of 0, i.e. a fully linearized control flow")
