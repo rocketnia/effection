@@ -296,9 +296,157 @@
 
 
 
-(define effects-state-semaphore* (make-semaphore 1))
-(define current-sensitivity-degree (make-parameter 0))
+(struct-easy "a token" (token))
+(struct-easy "a hyperstack-frame"
+  (hyperstack-frame degree big-escape-id start! stop! locals escapes)
+  #:equal)
+(struct-easy "a hyperstack-escape"
+  (hyperstack-escape escape-id computation)
+  #:equal)
 
+(define (graduate-locals locals last-degree)
+  (nextlet locals locals
+    (expect locals (cons locals-hash locals)
+      ; TODO: Write a good error message. This is a contract violation
+      ; of this function, but it's an internal error of the caller.
+      (error "")
+    #/w- is-last
+      (hash-ref locals-hash 'is-last-populated-degree
+      #/lambda () 'not-found)
+    #/expect (eq? is-last #/null? locals) #t
+      ; TODO: Write a good error message. This is a contract violation
+      ; of this function, but it's an internal error of the caller.
+      (error "")
+    #/mat locals (list) (void)
+    #/next locals))
+  (dissect (reverse locals) (cons locals-hash past)
+  #/w- current-last-degree (length past)
+  #/if (< last-degree current-last-degree)
+    locals
+  #/append
+    (reverse past)
+    (list #/hash-set locals-hash 'is-last-populated-degree #f)
+    (build-list (- last-degree current-last-degree) #/lambda (i)
+      (w- d (+ 1 current-last-degree i)
+      #/hash
+        'is-last-populated-degree (= last-degree d)
+        'escapable-frames (list)))))
+
+(define pure-locals
+  (list #/hash
+    'is-last-populated-degree #t
+    'escapable-frames (list)
+    'current-sensitivity-degree 0))
+
+(define hyperstack-semaphore* (make-semaphore 1))
+(define hyperstack*
+  (hyperstack-frame 0 (token) (lambda () #/void) (lambda () #/void)
+    pure-locals (list)))
+
+(define (hash-ref-maybe hash key)
+  (if (hash-has-key? hash key)
+    (just #/hash-ref hash key)
+    (nothing)))
+
+(define (hyperstack-get-dynamic-scope hyperstack degree key)
+  (dissect hyperstack
+    (hyperstack-frame frame-degree beid start! stop! locals escapes)
+  #/if (<= degree frame-degree)
+    (hash-ref-maybe (list-ref locals degree) key)
+    (nothing)))
+
+(define (hyperstack-open-new-hole-one-at-a-time-volatile! degree id)
+  (w- hyperstack hyperstack*
+  #/dissect hyperstack
+    ; NOTE: The "o" stands for "original."
+    (hyperstack-frame
+      o-degree o-beid o-start! o-stop! o-locals o-escapes)
+  #/w- new-id (token)
+  #/w- graduated-locals (graduate-locals o-locals degree)
+  #/dissect
+    (if (< degree o-degree)
+      (dissect (list-ref o-escapes degree)
+        (just #/hyperstack-escape eid escape)
+      #/expect (eq? id eid) #t
+        ; TODO: Write this error case.
+        (error "")
+        escape)
+      (expect (eq? id o-beid) #t
+        ; TODO: Write this error case.
+        (error "")
+      #/hyperstack-frame
+        degree new-id o-stop! o-start! graduated-locals
+        (build-list degree #/lambda (i) #/nothing)))
+    ; NOTE: The "e" stands for "escape."
+    (hyperstack-frame
+      e-degree e-beid e-start! e-stop! e-locals e-escapes)
+  #/w- new-hyperstack
+    (hyperstack-frame e-degree e-beid e-start! e-stop!
+      ; As we restore the hyperstack frame, we also replace the
+      ; `escapable-frames` entries of its low-degree dynamic scope
+      ; tables so they have the proper sequence of escapes to help
+      ; holes and `purity!h` effects escape through multiple levels
+      ; of nesting.
+      (list-kv-map e-locals #/lambda (i locals-hash)
+        (if (< i degree)
+          (hash-set* locals-hash 'escapable-frames
+            (cons new-id
+            #/hash-ref (list-ref graduated-locals i)
+              'escapable-frames))
+          locals-hash))
+      ; As we restore the hyperstack frame, we populate all the
+      ; low-degree escapes (which have until now been redacted to
+      ; `(nothing)`) with copies of the hyperstack frame we're leaving
+      ; from. In the copies, we redact the low-degree escapes to
+      ; `(nothing)`.
+      (list-kv-map e-escapes #/lambda (i maybe-escape)
+        (if (< i degree)
+          (expect maybe-escape (nothing)
+            ; TODO: Write a good internal error message.
+            (error "")
+          #/just #/hyperstack-escape new-id #/hyperstack-frame
+            o-degree o-beid o-start! o-stop! o-locals
+            (list-kv-map o-escapes #/lambda (j maybe-escape)
+              (if (< j i)
+                (nothing)
+                maybe-escape)))
+          (expect maybe-escape (just escape)
+            ; TODO: Write a good internal error message.
+            (error "")
+          #/just escape))))
+  #/begin
+    (e-start!)
+    (set! hyperstack* new-hyperstack)
+    new-hyperstack))
+
+; TODO: See if we'll ever use this. Our hole effects themselves will
+; run inside a `call-with-semaphore` block already, so they'll use the
+; `...-volatile!` version if anything.
+(define (hyperstack-open-new-hole-one-at-a-time-atomic! degree id)
+  (call-with-semaphore hyperstack-semaphore* #/lambda ()
+    (hyperstack-open-new-hole-one-at-a-time-volatile! degree id)))
+
+(define (hyperstack-open-new-hole-chaining-volatile! degree id)
+  (w- frames
+    (hyperstack-get-dynamic-scope
+      hyperstack* degree 'escapable-frames)
+  #/expect (list-any frames #/lambda (frame-id) #/eq? id frame-id) #t
+    ; TODO: Write this error case.
+    (error "")
+  #/nextlet frames frames
+    (dissect frames (cons frame-id frames)
+    #/begin
+      (hyperstack-open-new-hole-one-at-a-time-volatile!
+        degree frame-id)
+    #/unless (eq? id frame-id)
+      (next frames))))
+
+; TODO: See if we'll ever use this. Our hole effects themselves will
+; run inside a `call-with-semaphore` block already, so they'll use the
+; `...-volatile!` version.
+(define (hyperstack-open-new-hole-chaining-atomic! degree id)
+  (call-with-semaphore hyperstack-semaphore* #/lambda ()
+    (hyperstack-open-new-hole-chaining-volatile! degree id)))
 
 
 (struct-easy "a holes-h-and-value" (holes-h-and-value holes value)
@@ -327,7 +475,11 @@
   (computation-h-usage-degree computation))
 
 (define (assert-current-sensitivity-allows degree)
-  (unless (<= (current-sensitivity-degree) degree)
+  (unless
+    (<=
+      (hyperstack-get-dynamic-scope hyperstack*
+        0 'current-sensitivity-degree)
+      degree)
     ; TODO: See if we can improve these error messages.
     (mat degree 0
       (error "requires evaluation strategy sensitivity of 0, i.e. a fully linearized control flow")
@@ -368,20 +520,21 @@
           positional-args))
       (dissect computation
         (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
-      #/begin (assert-current-sensitivity-allows sensitivity-degree)
-      #/dissect (unsafe-run0!h!)
+      #/dissect
+        (call-with-semaphore hyperstack-semaphore* #/lambda ()
+          (assert-current-sensitivity-allows 1)
+          (unsafe-run0!h!))
         (computation-in-progress
           (cons (computation-h 0 0 hole0-unsafe-run0!h!) hole1+)
-          unsafe-big-hole-start!h! unsafe-big-hole-stop!h! value)
+          _ _ value)
       #/w- wrap-wrap-results
         (lambda (wrap-results)
           (lambda results
-            (dissect (hole0-unsafe-run0!h!)
-              (computation-in-progress (list)
-                unsafe-big-hole-start!h!
-                unsafe-big-hole-stop!h!
-                value)
-            #/apply wrap-results value results)))
+            (dissect
+              (call-with-semaphore hyperstack-semaphore* #/lambda ()
+                (hole0-unsafe-run0!h!))
+              (computation-in-progress (list) _ _ hole0-result)
+            #/apply wrap-results hole0-result results)))
       #/mat kw-val-list (list)
         (let ()
           (call-with-values (holes-and-value-to-wrapped hole1+ value)
@@ -574,10 +727,12 @@
       (w- ds (computation-h-sensitivity-degree computation)
       #/w- du (computation-h-usage-degree computation)
       #/struct/c holes-h-and-value (holes-h/c ds 0 du) any/c)])
-  (assert-current-sensitivity-allows 0)
   (dissect computation
-    (computation-h start-degree stop-degree unsafe-run0!h!)
-  #/dissect (unsafe-run0!h!)
+    (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
+  #/dissect
+    (call-with-semaphore hyperstack-semaphore* #/lambda ()
+      (assert-current-sensitivity-allows 0)
+      (unsafe-run0!h!))
     (computation-in-progress
       holes
       unsafe-suffix-big-hole-start!h!
@@ -597,17 +752,20 @@
         #/w- du (computation-h-usage-degree computation)
         #/-> (holes-h/c ds 1 du) any/c any/c)])
     [_ (struct/c run1-result any/c any/c)])
-  (assert-current-sensitivity-allows 0)
   (dissect computation
-    (computation-h start-degree stop-degree unsafe-run0!h!)
-  #/dissect (unsafe-run0!h!)
+    (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
+  #/dissect
+    (call-with-semaphore hyperstack-semaphore* #/lambda ()
+      (assert-current-sensitivity-allows 1)
+      (unsafe-run0!h!))
     (computation-in-progress
-      (cons hole0 hole1+)
-      unsafe-suffix-big-hole-start!h!
-      unsafe-suffix-big-hole-stop!h!
-      value)
+      (cons (computation-h 0 0 hole0-unsafe-run0!h!) hole1+)
+      _ _ value)
   #/w- body-result (body hole1+ value)
-  #/dissect (run0!h! hole0) (holes-h-and-value (list) hole0-result)
+  #/dissect
+    (call-with-semaphore hyperstack-semaphore* #/lambda ()
+      (hole0-unsafe-run0!h!))
+    (computation-in-progress (list) _ _ hole0-result)
   #/run1-result hole0-result body-result))
 
 (define/contract
@@ -693,14 +851,7 @@
       (computation-h/c (=/c #/min 1 usage-degree) (=/c usage-degree)
       #/nothing)])
   (unsafe-nontrivial-computation-1!h usage-degree #/lambda ()
-    (w- old-sensitivity-degree (current-sensitivity-degree)
-    #/w- start
-      (lambda ()
-        (current-sensitivity-degree allowed-sensitivity-degree))
-    #/w- stop
-      (lambda ()
-        (current-sensitivity-degree old-sensitivity-degree))
-    'TODO)))
+    'TODO))
 
 ; We supply a kind of dynamic scope system in the form of the
 ; `read-fusable!h` family of operations and a kind of effect handler
