@@ -300,8 +300,7 @@
 (struct-easy "a hyperstack-frame"
   (hyperstack-frame degree big-escape-id start! stop! locals escapes)
   #:equal)
-(struct-easy "a hyperstack-escape"
-  (hyperstack-escape escape-id computation)
+(struct-easy "a hyperstack-escape" (hyperstack-escape escape-id frame)
   #:equal)
 
 (define (graduate-locals locals last-degree)
