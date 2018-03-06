@@ -491,17 +491,60 @@
     holes unsafe-big-hole-start!h! unsafe-big-hole-stop!h! value))
 
 (define/contract
+  (holes-h/c sensitivity-degree usage-start-degree usage-stop-degree)
+  (->
+    exact-nonnegative-integer?
+    exact-nonnegative-integer?
+    exact-nonnegative-integer?
+    contract?)
+  (and/c (listof computation-h?)
+    (lambda (holes)
+      (and (= (- usage-stop-degree usage-start-degree) #/length holes)
+      #/nextlet holes holes i usage-start-degree
+        (expect holes (cons hole holes) #t
+        #/expect hole
+          (computation-h hole-sensitivity-degree hole-usage-degree _)
+          #f
+        #/and (= hole-sensitivity-degree #/min i sensitivity-degree)
+        #/and (= hole-usage-degree i)
+        #/next holes #/add1 i)))))
+
+(define/contract
+  (computation-h/c sensitivity-degree/c usage-degree/c value/c-maybe)
+  (-> contract? contract? (maybe/c contract?) contract?)
+  (struct/dc computation-h
+    [sensitivity-degree
+      (and/c exact-nonnegative-integer? sensitivity-degree/c)]
+    [usage-degree (and/c exact-nonnegative-integer? usage-degree/c)]
+    [unsafe-run0!h! (sensitivity-degree usage-degree)
+      (mat value/c-maybe (just value/c)
+        (-> #/struct/c computation-in-progress
+          (holes-h/c sensitivity-degree 0 usage-degree)
+          (-> void?)
+          (-> void?)
+          value/c)
+        (-> any))]))
+
+(define/contract
   (chaperone-procedure*-run1!h! proc wrapper-proc . props)
   (->*
     (
       procedure?
       (or/c
         (unconstrained-domain->
-          ; TODO: Move the definition of
-          ; `chaperone-procedure*-run1!h!` to after `computation-h/c`
-          ; and `holes-h/c` if possible.
           (computation-h/c any/c (>=/c 1) #/nothing)
-          (-> (holes-h/c any/c 1 any/c) any/c any))
+          ; TODO: We could almost use `(holes-h/c any/c 1 any/c)` here
+          ; instead of `(listof computation-h?)`, but `holes-h/c`
+          ; doesn't support contracts like that. What would be really
+          ; nice is if we could have a variant of
+          ; `unconstrained-domain->` that lets us express a dependency
+          ; on the computation so we can write `(holes-h/c ds 1 du)`.
+          ; See if we can do anything like that. This particular part
+          ; of the contract is constraining our own implementation of
+          ; `chaperone-procedure*-run1!h!` though, so there may not be
+          ; a point to making it very strict if we already have a
+          ; conformant implementation.
+          (-> (listof computation-h?) any/c any))
         #f))
     #:rest
     (and/c list? #/lambda (props)
@@ -588,41 +631,6 @@
             (apply values wrap-results positional-args)
             (apply values wrap-results kw-val-list
               positional-args)))))))
-
-(define/contract
-  (holes-h/c sensitivity-degree usage-start-degree usage-stop-degree)
-  (->
-    exact-nonnegative-integer?
-    exact-nonnegative-integer?
-    exact-nonnegative-integer?
-    contract?)
-  (and/c (listof computation-h?)
-    (lambda (holes)
-      (and (= (- usage-stop-degree usage-start-degree) #/length holes)
-      #/nextlet holes holes i usage-start-degree
-        (expect holes (cons hole holes) #t
-        #/expect hole
-          (computation-h hole-sensitivity-degree hole-usage-degree _)
-          #f
-        #/and (= hole-sensitivity-degree #/min i sensitivity-degree)
-        #/and (= hole-usage-degree i)
-        #/next holes #/add1 i)))))
-
-(define/contract
-  (computation-h/c sensitivity-degree/c usage-degree/c value/c-maybe)
-  (-> contract? contract? (maybe/c contract?) contract?)
-  (struct/dc computation-h
-    [sensitivity-degree
-      (and/c exact-nonnegative-integer? sensitivity-degree/c)]
-    [usage-degree (and/c exact-nonnegative-integer? usage-degree/c)]
-    [unsafe-run0!h! (sensitivity-degree usage-degree)
-      (mat value/c-maybe (just value/c)
-        (-> #/struct/c computation-in-progress
-          (holes-h/c sensitivity-degree 0 usage-degree)
-          (-> void?)
-          (-> void?)
-          value/c)
-        (-> any))]))
 
 (define/contract
   (return!h sensitivity-degree usage-degree holes leaf)
