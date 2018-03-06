@@ -1,6 +1,6 @@
 # Effection
 
-Effection is a library for Racket that will provides tools for programming in a more pure style than is typical for Racket. Effection is also planned to offer a more extensible system of side effects than Racket's usual side effect model. Effection is a work in progress.
+Effection is a library for Racket that will provide tools for programming in a more pure style than is typical for Racket. Effection is also planned to offer a more extensible system of side effects than Racket's usual side effect model. This is all a work in progress.
 
 
 ## Purity
