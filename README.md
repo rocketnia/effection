@@ -1,6 +1,12 @@
 # Effection
 
-Effection is a library for Racket that will provide tools for programming in a more pure style than is typical for Racket. Effection is also planned to offer a more extensible system of side effects than Racket's usual side effect model. This is all a work in progress.
+Effection is a library for managing side effects in Racket. It supports a certain programming style that's almost pure, but which also has the ability to introduce handlers for custom side effects.
+
+The notion of purity Effection uses is chosen deliberately, and it's meant to facilitate commutative extensibility mechanisms by way of quasi-deterministic concurrency.
+
+The notions of *side effect* in Effection are also chosen according to elaborate reasoning, although at this point they're very experimental. The most remarkable feature of Effection's side effects is that the dynamically scoped regions they're observable in can have dynamically scoped holes inside, which for instance can take undesired side effects out of scope for controlled periods of time.
+
+This is all a work in progress. The only pieces of Effection that are fully implemented at this point are some pure utilities that will come in handy for commutatively merging values.
 
 
 ## Purity
@@ -94,13 +100,13 @@ Not only has this monotonic dynamic scope not been implemented yet, even the API
 
 ## Effection as a style of programming in Racket
 
-Although Effection encourages the use of quasi-deterministic code, Effection code can coexist alongside other Racket code. We call Racket code "Effection-unsafe" when it uses side effects outside of Effection's own effect model to stray from quasi-determinism, and the Effection library will mark things as simply "unsafe" if they're Effection-unsafe.
+Although Effection encourages the use of quasi-deterministic code, Effection code can coexist alongside other Racket code. We call Racket code "Effection-unsafe" when it strays from quasi-determinism using Racket side effects that aren't based on Effection's own effect model.
 
-There are a few non-obvious rules that determine if Racket code is Effection-safe. Operations that are otherwise deterministic but may allocate fresh values that are not `eq?` to each other, such as the operations `lambda` and `list`, are considered safe, but to cover up for this, `eq?` itself is considered unsafe. As per the usual rules for quasi-determinism, operations that can raise errors by exhausting the heap or the stack are nevertheless considered safe, and other error-raising operations like `append`, `+`, and `error` are considered safe as well; to cover up for this, catching errors at all is considered unsafe.
+There are a few non-obvious rules that determine if Racket code is quasi-deterministic and hence Effection-safe. Operations that are otherwise deterministic but may allocate fresh values that are not `eq?` to each other, such as the operations `lambda` and `list`, are considered safe, but to cover up for this, `eq?` itself is considered unsafe. As per the definition of quasi-determinism, operations that can raise errors by exhausting the heap or the stack are nevertheless considered safe, and other error-raising operations like `append`, `+`, and `error` are considered safe as well; to cover up for this, catching errors at all is considered unsafe.
 
 Somewhat inconveniently, the Effection style considers structure types that inherit from other structure types to be unsafe. In particular, it is Effection-unsafe to invoke their predicates and their field accessors of one structure type that inherits from another, despite the fact that these things are considered Effection-safe for structure types that don't inherit. This way, Effection-safe code can determine for sure that it knows a non-subtyping structure instance up to observational equivalence as observed by Effection-safe code (see [`dex-struct`](https://docs.racket-lang.org/effection/index.html#%28form._%28%28lib._effection%2Forder%2Fbase..rkt%29._dex-struct%29%29)), which is necessary knowledge for certain data representation and concurrency techniques.
 
-These policies achieve a kind of purity, but Effection-based programs are not necessarily pure throughout. Effection offers an extensible side effect model, allowing programmers to continue using Racket-style impurity in their programs without compromising their ability to expose a pure interface. This does not mean existing impure Racket code can be used as-is, but it means many of the same idioms can be translated into slightly more verbose Effection equivalents, particularly without inversion of control.
+These policies achieve a kind of purity, but Effection's extensible side effect model means programmers will be able to continue using Racket-style impurity in their programs without compromising their ability to expose a pure interface. This does not mean existing impure Racket code can be used as-is, but it means many of the same idioms can be translated into slightly more verbose Effection equivalents, particularly without inversion of control.
 
 With the use of a restricted style of programming in Racket, there comes a need to offer alternatives to certain idioms that unrestricted Racket code has taken for granted, as well as an opportunity to simplify some interfaces that no longer need to anticipate clients who use all of Racket's features. For instance, since the act of comparing values by object identity is considered unsafe, the interface for hash tables may become harder to design, implement, and use... but when iteration callbacks can be assumed to be pure, the interface for hash tables may at the same time become somewhat simpler.
 
@@ -116,6 +122,6 @@ For now, Effection offers a few modules:
   - `effection/order` - A module that re-exports `effectoin/order/base` and may someday offer more auxiliary utilities alongside it.
     - `effection/order/base` - A module offering basic support for doing comparisons and doing orderless merge operations.
 
-API documentation is maintained in this repo and [hosted at the Racket website](https://docs.racket-lang.org/effection/). (TODO: At the moment, the blurb in the documentation is a bit stale. That blurb was originally copied from this readme, and this readme has gone through a substantial rewrite.)
+API documentation is maintained in this repo and [hosted at the Racket website](https://docs.racket-lang.org/effection/).
 
-There's some work currently happening in `effection/effects/base` to implement Effection's dynamic scope/effect handler system. The definitions in this module are not entirely documented or exported yet, and there are still several big holes in the impelementation.
+There's some work currently happening in `effection/effects/base` to implement Effection's dynamic scope/effect handler system. These definitions are not entirely documented or exported yet, and there are still several big holes in their impelementations.
