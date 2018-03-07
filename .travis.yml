@@ -49,8 +49,9 @@ script:
   - cd effection-test/
   - raco pkg install --deps search-auto
   - cd ..
-  # This one must be installed last since otherwise it'll look up the
-  # others from the Racket package index.
+  # This one must be installed after the `effection-doc` and
+  # `effection-test` packages since otherwise it'll install them from
+  # from the Racket package index.
   - cd effection/
   - raco pkg install --deps search-auto
   - cd ..

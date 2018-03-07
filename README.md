@@ -1,5 +1,7 @@
 # Effection
 
+[![Travis build](https://travis-ci.org/rocketnia/effection.svg?branch=master)](https://travis-ci.org/rocketnia/effection)
+
 Effection is a library for managing side effects in Racket. It supports a certain programming style that's almost pure, but which also has the ability to introduce handlers for custom side effects.
 
 The notion of purity Effection uses is chosen deliberately, and it's meant to facilitate commutative extensibility mechanisms by way of quasi-deterministic concurrency.
