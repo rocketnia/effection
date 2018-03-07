@@ -373,6 +373,67 @@
     (hash-ref-maybe (list-ref locals degree) key)
     (nothing)))
 
+(define
+  (start-escapable-hyperstack-frame-volatile!
+    degree big-escape-id low-escape-id start! stop! locals escapes)
+  (dissect hyperstack*
+    ; NOTE: The "o" stands for "original."
+    (hyperstack-frame
+      o-degree o-beid o-start! o-stop! o-locals o-escapes)
+  #/w- graduated-locals (graduate-locals o-locals degree)
+  #/w- new-hyperstack
+    (hyperstack-frame degree big-escape-id start! stop!
+      ; As we introduce the hyperstack frame, we also replace the
+      ; `escapable-frames` entries of its low-degree dynamic scope
+      ; tables so they have the proper sequence of escapes to help
+      ; holes and `purely!h` effects escape through multiple levels of
+      ; nesting.
+      (list-kv-map locals #/lambda (i locals-hash)
+        (if (< i degree)
+          (hash-set* locals-hash 'escapable-frames
+            (cons low-escape-id
+            #/hash-ref (list-ref graduated-locals i)
+              'escapable-frames))
+          locals-hash))
+      ; As we introduce the hyperstack frame, we populate all the
+      ; low-degree escapes (which have until now been redacted to
+      ; `(nothing)`) with copies of the hyperstack frame we're pushing
+      ; away into the hyperstack. In the copies, we redact the
+      ; low-degree escapes to `(nothing)`.
+      (list-kv-map escapes #/lambda (i maybe-escape)
+        (if (< i degree)
+          (expect maybe-escape (nothing)
+            ; TODO: Write a good internal error message.
+            (error "")
+          #/just #/hyperstack-escape low-escape-id #/hyperstack-frame
+            o-degree o-beid o-start! o-stop! o-locals
+            (list-kv-map o-escapes #/lambda (j maybe-escape)
+              (if (< j i)
+                (nothing)
+                maybe-escape)))
+          (expect maybe-escape (just escape)
+            ; TODO: Write a good internal error message.
+            (error "")
+          #/just escape))))
+  #/begin
+    (start!)
+    (set! hyperstack* new-hyperstack)))
+
+(define (begin-dynamic-extent-volatile! degree)
+  (dissect hyperstack*
+    ; NOTE: The "o" stands for "original."
+    (hyperstack-frame
+      o-degree o-beid o-start! o-stop! o-locals o-escapes)
+  #/w- new-id (token)
+  #/start-escapable-hyperstack-frame-volatile!
+    degree new-id new-id (lambda () #/void) (lambda () #/void)
+    o-locals o-escapes))
+
+(define (dynamic-extent-volatile! degree init)
+  (begin-dynamic-extent-volatile! degree)
+  (init)
+  (conjure-computation-in-progress-volatile degree))
+
 (define (hyperstack-open-new-hole-one-at-a-time-volatile! degree id)
   (w- hyperstack hyperstack*
   #/dissect hyperstack
@@ -380,7 +441,6 @@
     (hyperstack-frame
       o-degree o-beid o-start! o-stop! o-locals o-escapes)
   #/w- new-id (token)
-  #/w- graduated-locals (graduate-locals o-locals degree)
   #/dissect
     (if (< degree o-degree)
       (dissect (list-ref o-escapes degree)
@@ -393,49 +453,13 @@
         ; TODO: Write this error case.
         (error "")
       #/hyperstack-frame
-        degree new-id o-stop! o-start! graduated-locals
+        degree new-id o-stop! o-start! o-locals
         (build-list degree #/lambda (i) #/nothing)))
     ; NOTE: The "e" stands for "escape."
     (hyperstack-frame
       e-degree e-beid e-start! e-stop! e-locals e-escapes)
-  #/w- new-hyperstack
-    (hyperstack-frame e-degree e-beid e-start! e-stop!
-      ; As we restore the hyperstack frame, we also replace the
-      ; `escapable-frames` entries of its low-degree dynamic scope
-      ; tables so they have the proper sequence of escapes to help
-      ; holes and `purely!h` effects escape through multiple levels of
-      ; nesting.
-      (list-kv-map e-locals #/lambda (i locals-hash)
-        (if (< i degree)
-          (hash-set* locals-hash 'escapable-frames
-            (cons new-id
-            #/hash-ref (list-ref graduated-locals i)
-              'escapable-frames))
-          locals-hash))
-      ; As we restore the hyperstack frame, we populate all the
-      ; low-degree escapes (which have until now been redacted to
-      ; `(nothing)`) with copies of the hyperstack frame we're leaving
-      ; from. In the copies, we redact the low-degree escapes to
-      ; `(nothing)`.
-      (list-kv-map e-escapes #/lambda (i maybe-escape)
-        (if (< i degree)
-          (expect maybe-escape (nothing)
-            ; TODO: Write a good internal error message.
-            (error "")
-          #/just #/hyperstack-escape new-id #/hyperstack-frame
-            o-degree o-beid o-start! o-stop! o-locals
-            (list-kv-map o-escapes #/lambda (j maybe-escape)
-              (if (< j i)
-                (nothing)
-                maybe-escape)))
-          (expect maybe-escape (just escape)
-            ; TODO: Write a good internal error message.
-            (error "")
-          #/just escape))))
-  #/begin
-    (e-start!)
-    (set! hyperstack* new-hyperstack)
-    new-hyperstack))
+  #/start-escapable-hyperstack-frame-volatile!
+    e-degree e-beid new-id e-start! e-stop! e-locals e-escapes))
 
 ; TODO: See if we'll ever use this. Our hole effects themselves will
 ; run inside a `call-with-semaphore` block already, so they'll use the
@@ -942,7 +966,18 @@
       (computation-h/c (=/c #/min 1 usage-degree) (=/c usage-degree)
       #/nothing)])
   (unsafe-nontrivial-computation-1!h usage-degree #/lambda ()
-    'TODO))
+    (dynamic-extent-volatile! usage-degree #/lambda ()
+      (dissect hyperstack*
+        (hyperstack-frame degree beid start! stop!
+          (cons locals0 locals1+)
+          escapes)
+      #/set! hyperstack*
+        (hyperstack-frame degree beid start! stop!
+          (cons
+            (hash-set locals0 'current-sensitivity-degree
+              allowed-sensitivity-degree)
+            locals1+)
+          escapes)))))
 
 ; We supply a kind of dynamic scope system in the form of the
 ; `read-fusable!h` family of operations and a kind of effect handler
