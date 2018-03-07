@@ -572,10 +572,6 @@
       (error "requires evaluation strategy sensitivity of 1, i.e. varying behavior based on the call stack")
       (error "requires slightly more evaluation strategy sensitivity"))))
 
-(struct-easy "a computation-in-progress"
-  (computation-in-progress
-    holes unsafe-big-hole-start!h! unsafe-big-hole-stop!h! value))
-
 (define/contract
   (holes-h/c sensitivity-degree usage-start-degree usage-stop-degree)
   (->
@@ -604,10 +600,8 @@
     [usage-degree (and/c exact-nonnegative-integer? usage-degree/c)]
     [unsafe-run0!h! (usage-degree)
       (mat value/c-maybe (just value/c)
-        (-> #/struct/c computation-in-progress
+        (-> #/struct/c holes-h-and-value
           (holes-h/c 0 0 usage-degree)
-          (-> void?)
-          (-> void?)
           value/c)
         (-> any))]))
 
@@ -652,16 +646,16 @@
         (call-with-semaphore hyperstack-semaphore* #/lambda ()
           (assert-current-sensitivity-allows 1)
           (unsafe-run0!h!))
-        (computation-in-progress
+        (holes-h-and-value
           (cons (computation-h 0 0 hole0-unsafe-run0!h!) hole1+)
-          _ _ value)
+          value)
       #/w- wrap-wrap-results
         (lambda (wrap-results)
           (lambda results
             (dissect
               (call-with-semaphore hyperstack-semaphore* #/lambda ()
                 (hole0-unsafe-run0!h!))
-              (computation-in-progress (list) _ _ hole0-result)
+              (holes-h-and-value (list) hole0-result)
             #/apply wrap-results hole0-result results)))
       #/mat kw-val-list (list)
         (let ()
@@ -732,7 +726,7 @@
       (computation-h/c (=/c sensitivity-degree) (=/c usage-degree)
       #/nothing)])
   (computation-h sensitivity-degree usage-degree #/lambda ()
-    (computation-in-progress
+    (holes-h-and-value
       ; NOTE: These hole effects do nothing but what the client has
       ; them do. They don't even verify that they're used in the right
       ; context, e.g. that a hole isn't opened while another hole is
@@ -743,8 +737,6 @@
         (build-list sensitivity-degree #/lambda (i)
           (return!h i i (list) #/void))
         holes)
-      (lambda () #/void)
-      (lambda () #/void)
       leaf)))
 
 (define/contract (bind!h prefix holes-and-leaf-to-suffix)
@@ -763,12 +755,7 @@
   (dissect prefix
     (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
   #/computation-h sensitivity-degree usage-degree #/lambda ()
-    (dissect (unsafe-run0!h!)
-      (computation-in-progress
-        holes
-        unsafe-prefix-big-hole-start!h!
-        unsafe-prefix-big-hole-stop!h!
-        leaf)
+    (dissect (unsafe-run0!h!) (holes-h-and-value holes leaf)
     #/begin
       (define-values
         (low-degree-prefix-holes high-degree-prefix-holes)
@@ -777,11 +764,14 @@
       (holes-and-leaf-to-suffix high-degree-prefix-holes leaf)
       (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
     
-    ; TODO: Since we don't tail-call `unsafe-run0!h!` here, we
-    ; essentially have no tail calls at all in this monad. If it turns
-    ; out that our low-degree holes and our
-    ; `big-hole-start`/`big-hole-stop` procedures don't need to
-    ; perform any side effects, we should stop manipulating them here
+    ; If the sensitivity degree is zero, we can do a tail call, so we
+    ; do.
+    #/if (= 0 sensitivity-degree) (unsafe-run0!h!)
+    
+    ; TODO: We essentially have no tail calls at all in this monad for
+    ; sensitivity degrees other than zero. If it turns out the holes
+    ; less than an effect's sensitivity degree never have side
+    ; effects, we should see if we can stop manipulating them here
     ; and just make this a tail call.
     ;
     ; TODO: While we're at it, we should see if we can change the
@@ -790,28 +780,17 @@
     ; might notice a way to accomplish it earlier when we take care of
     ; this tail call.
     ;
-    #/dissect (unsafe-run0!h!)
-      (computation-in-progress
-        holes
-        unsafe-suffix-big-hole-start!h!
-        unsafe-suffix-big-hole-stop!h!
-        leaf)
+    #/dissect (unsafe-run0!h!) (holes-h-and-value holes leaf)
     #/begin
       (define-values
         (low-degree-suffix-holes high-degree-suffix-holes)
         (split-at holes sensitivity-degree))
-    #/computation-in-progress
+    #/holes-h-and-value
       (append
         (list-zip-map low-degree-prefix-holes low-degree-suffix-holes
         #/lambda (prefix-hole suffix-hole)
           (bind!h suffix-hole #/lambda (holes leaf) prefix-hole))
         high-degree-suffix-holes)
-      (lambda ()
-        (unsafe-suffix-big-hole-start!h!)
-        (unsafe-prefix-big-hole-start!h!))
-      (lambda ()
-        (unsafe-prefix-big-hole-stop!h!)
-        (unsafe-suffix-big-hole-stop!h!))
       leaf)))
 
 (define/contract (run0!h! computation)
@@ -822,16 +801,9 @@
       #/struct/c holes-h-and-value (holes-h/c ds 0 du) any/c)])
   (dissect computation
     (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
-  #/dissect
-    (call-with-semaphore hyperstack-semaphore* #/lambda ()
-      (assert-current-sensitivity-allows 0)
-      (unsafe-run0!h!))
-    (computation-in-progress
-      holes
-      unsafe-suffix-big-hole-start!h!
-      unsafe-suffix-big-hole-stop!h!
-      value)
-  #/holes-h-and-value holes value))
+  #/call-with-semaphore hyperstack-semaphore* #/lambda ()
+    (assert-current-sensitivity-allows 0)
+    (unsafe-run0!h!)))
 
 (struct-easy "a run1-result" (run1-result hole0-result body-result)
   #:equal)
@@ -851,14 +823,14 @@
     (call-with-semaphore hyperstack-semaphore* #/lambda ()
       (assert-current-sensitivity-allows 1)
       (unsafe-run0!h!))
-    (computation-in-progress
+    (holes-h-and-value
       (cons (computation-h 0 0 hole0-unsafe-run0!h!) hole1+)
-      _ _ value)
+      value)
   #/w- body-result (body hole1+ value)
   #/dissect
     (call-with-semaphore hyperstack-semaphore* #/lambda ()
       (hole0-unsafe-run0!h!))
-    (computation-in-progress (list) _ _ hole0-result)
+    (holes-h-and-value (list) hole0-result)
   #/run1-result hole0-result body-result))
 
 (define/contract
@@ -871,7 +843,7 @@
 (define (conjure-computation-in-progress-volatile degree)
   (dissect hyperstack*
     (hyperstack-frame h-degree beid start! stop! locals escapes)
-  #/computation-in-progress
+  #/holes-h-and-value
     (w- low-degrees (min degree h-degree)
     #/append
       (list-kv-map (take low-degrees escapes)
@@ -885,8 +857,6 @@
         #/unsafe-nontrivial-computation-1!h i #/lambda ()
           (hyperstack-open-new-hole-chaining-volatile! i beid)
           (conjure-computation-in-progress-volatile i))))
-    (lambda () #/void)
-    (lambda () #/void)
     (void)))
 
 ; A degree-N handler effect which opens a degree-N hole in every
