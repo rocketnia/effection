@@ -598,10 +598,10 @@
     [sensitivity-degree
       (and/c exact-nonnegative-integer? sensitivity-degree/c)]
     [usage-degree (and/c exact-nonnegative-integer? usage-degree/c)]
-    [unsafe-run0!h! (usage-degree)
+    [unsafe-run0!h! (sensitivity-degree usage-degree)
       (mat value/c-maybe (just value/c)
         (-> #/struct/c holes-h-and-value
-          (holes-h/c 0 0 usage-degree)
+          (holes-h/c sensitivity-degree 0 usage-degree)
           value/c)
         (-> any))]))
 
