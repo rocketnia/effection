@@ -287,9 +287,9 @@
 ;  [-computation-h-usage-degree computation-h-usage-degree])
 ;(provide chaperone-procedure*-run1!h! chaperone-procedure-run1!h!)
 ;(provide pure/c!h!)
-;(provide holes-h/c computation-h/c)
+;(provide holes-h-vague/c holes-h/c computation-h/c)
 ;(provide return!h bind!h)
-;(provide run0!h! (struct-out run1-result) run1!h!)
+;(provide run0!h! run1!h! run-sd-nothing!h!)
 ;(provide purely!h with-strategy-sensitivity!h)
 ;(provide strategy-insensitively!h)
 
@@ -363,7 +363,7 @@
     'is-last-populated-degree #t
     'escapable-frames (list pure-id)
     'big-escapable-frames (list pure-id)
-    'current-sensitivity-degree 0))
+    'current-sensitivity-degree (sd0)))
 
 (define hyperstack-semaphore* (make-semaphore 1))
 (define hyperstack*
@@ -446,7 +446,7 @@
 (define (dynamic-extent-volatile! degree init)
   (begin-dynamic-extent-volatile! degree)
   (init)
-  (conjure-computation-in-progress-volatile degree))
+  (conjure-computation-in-progress-nontrivial-volatile degree))
 
 (define (hyperstack-open-new-hole-one-at-a-time-volatile! degree id)
   (w- hyperstack hyperstack*
@@ -594,7 +594,7 @@
   #:equal)
 
 (struct-easy "a computation-h"
-  (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
+  (computation-h sensitivity-degree usage-degree unsafe-run!h!)
   #:equal)
 
 ; A version of `computation-h?` that does not satisfy
@@ -621,34 +621,37 @@
       0 'current-sensitivity-degree)
     (just current-sensitivity-degree)
   #/unless
-    (<= current-sensitivity-degree degree)
+    (sd-lte current-sensitivity-degree degree)
     ; TODO: See if we can improve these error messages.
-    (mat degree 0
+    (mat degree (sd0)
       (error "requires evaluation strategy sensitivity of 0, i.e. a fully linearized control flow")
-    #/mat degree 1
+    #/mat degree (sd1)
       (error "requires evaluation strategy sensitivity of 1, i.e. varying behavior based on the call stack")
       (error "requires slightly more evaluation strategy sensitivity"))))
 
-(define/contract
-  (holes-h/c sensitivity-degree usage-start-degree usage-stop-degree)
-  (->
-    sensitivity-degree?
-    exact-nonnegative-integer?
-    exact-nonnegative-integer?
-    contract?)
+(define/contract (holes-h-vague/c sensitivity-degree)
+  (-> sensitivity-degree? exact-nonnegative-integer? contract?)
   (and/c (listof computation-h?)
     (lambda (holes)
-      (and (= (- usage-stop-degree usage-start-degree) #/length holes)
-      #/nextlet holes holes i usage-start-degree
+      (mat sensitivity-degree (sd-nothing)
+        (null? holes)
+      #/nextlet holes holes i (mat sensitivity-degree (sd0) 0 1)
         (expect holes (cons hole holes) #t
         #/expect hole
           (computation-h hole-sensitivity-degree hole-usage-degree _)
           #f
-        #/and
-          (equal? hole-sensitivity-degree
-          #/sd-and sensitivity-degree #/sensitivity-from-usage i)
+        #/and (equal? hole-sensitivity-degree sensitivity-degree)
         #/and (= hole-usage-degree i)
         #/next holes #/add1 i)))))
+
+(define/contract (holes-h/c sensitivity-degree usage-degree)
+  (-> sensitivity-degree? exact-nonnegative-integer? contract?)
+  (and/c (holes-h-vague/c sensitivity-degree)
+    (lambda (holes)
+      (= (length holes)
+        (- usage-degree
+          (first-observable-usage-degree-for-sensitivity
+            sensitivity-degree usage-degree))))))
 
 (define/contract
   (computation-h/c sensitivity-degree/c usage-degree/c value/c-maybe)
@@ -657,10 +660,10 @@
     [sensitivity-degree
       (and/c sensitivity-degree? sensitivity-degree/c)]
     [usage-degree (and/c exact-nonnegative-integer? usage-degree/c)]
-    [unsafe-run0!h! (sensitivity-degree usage-degree)
+    [unsafe-run!h! (sensitivity-degree usage-degree)
       (mat value/c-maybe (just value/c)
         (-> #/struct/c holes-h-and-value
-          (holes-h/c sensitivity-degree 0 usage-degree)
+          (holes-h/c sensitivity-degree usage-degree)
           value/c)
         (-> any))]))
 
@@ -671,19 +674,16 @@
       procedure?
       (or/c
         (unconstrained-domain->
-          (computation-h/c any/c (>=/c 1) #/nothing)
-          ; TODO: We could almost use `(holes-h/c any/c 1 any/c)` here
-          ; instead of `(listof computation-h?)`, but `holes-h/c`
-          ; doesn't support contracts like that. What would be really
-          ; nice is if we could have a variant of
-          ; `unconstrained-domain->` that lets us express a dependency
-          ; on the computation so we can write `(holes-h/c ds 1 du)`.
-          ; See if we can do anything like that. This particular part
-          ; of the contract is constraining our own implementation of
-          ; `chaperone-procedure*-run1!h!` though, so there may not be
-          ; a point to making it very strict if we already have a
-          ; conformant implementation.
-          (-> (listof computation-h?) any/c any))
+          (computation-h/c (equal/c #/sd1) (>=/c 1) #/nothing)
+          ; TODO: It would be nice if we could have a variant of
+          ; `unconstrained-domain->` that let us express a dependency
+          ; on the computation so we could write
+          ; `(holes-h/c (sd1) du)`. See if we can do anything like
+          ; that. This particular part of the contract is constraining
+          ; our own implementation of `chaperone-procedure*-run1!h!`
+          ; though, so there may not be a point to making it very
+          ; strict if we already have a conformant implementation.
+          (-> (holes-h-vague/c #/sd1) any/c any))
         #f))
     #:rest
     (and/c list? #/lambda (props)
@@ -700,30 +700,30 @@
         (keyword-apply wrapper-proc kw-key-list kw-val-list orig-proc
           positional-args))
       (dissect computation
-        (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
+        (computation-h (sd1) usage-degree unsafe-run!h!)
       #/dissect
         (call-with-semaphore hyperstack-semaphore* #/lambda ()
-          (assert-current-sensitivity-allows 1)
-          (unsafe-run0!h!))
-        (holes-h-and-value
-          (cons (computation-h (sd0) 0 hole0-unsafe-run0!h!) hole1+)
-          value)
+          (assert-current-sensitivity-allows #/sd1)
+          ; TODO NOW: Implement this `void`.
+          (list (lambda () #/void)
+          #/unsafe-run!h!))
+        (list end-run1-boundary! #/holes-h-and-value holes value)
       #/w- wrap-wrap-results
         (lambda (wrap-results)
           (lambda results
-            (dissect
-              (call-with-semaphore hyperstack-semaphore* #/lambda ()
-                (hole0-unsafe-run0!h!))
-              (holes-h-and-value (list) hole0-result)
-            #/apply wrap-results hole0-result results)))
+            (call-with-semaphore hyperstack-semaphore* #/lambda ()
+              ; TODO: See if we need to check the current sensitivity
+              ; again.
+              (end-run1-boundary!))
+            (apply wrap-results results)))
       #/mat kw-val-list (list)
         (let ()
-          (call-with-values (holes-and-value-to-wrapped hole1+ value)
+          (call-with-values (holes-and-value-to-wrapped holes value)
           #/lambda (wrap-results . wrapped-positional-args)
           #/apply values (wrap-wrap-results wrap-results)
             wrapped-positional-args))
         (let ()
-          (call-with-values (holes-and-value-to-wrapped hole1+ value)
+          (call-with-values (holes-and-value-to-wrapped holes value)
           #/lambda
             ( wrap-results wrapped-kw-val-list
               . wrapped-positional-args)
@@ -734,7 +734,14 @@
 
 (define/contract
   (chaperone-procedure-run1!h! proc wrapper-proc . props)
-  (->* (procedure? (or/c procedure? #f))
+  (->*
+    (
+      procedure?
+      (or/c
+        (unconstrained-domain->
+          (computation-h/c (equal/c #/sd1) (>=/c 1) #/nothing)
+          (-> (holes-h-vague/c #/sd1) any/c any))
+        #f))
     #:rest
     (and/c list? #/lambda (props)
       (and (even? (length props))
@@ -763,8 +770,8 @@
     (lambda (b) #/lambda (proc)
       (make-keyword-procedure
       #/lambda (kw-key-list kw-val-list . positional-args)
-        (values (purely!h 1) #/lambda (hole1+ value)
-          (define (wrap-results hole0-value . results)
+        (values (purely!h 1) #/lambda (holes value)
+          (define (wrap-results . results)
             (apply values results))
           (mat kw-val-list (list)
             (apply values wrap-results positional-args)
@@ -778,31 +785,22 @@
       [sensitivity-degree sensitivity-degree?]
       [usage-degree exact-nonnegative-integer?]
       [holes (sensitivity-degree usage-degree)
-        (holes-h/c
-          sensitivity-degree
-          (first-observable-usage-degree-for-sensitivity
-            sensitivity-degree usage-degree)
-          usage-degree)]
+        (holes-h/c sensitivity-degree usage-degree)]
       [leaf any/c])
     [_ (sensitivity-degree usage-degree)
       (computation-h/c (equal/c sensitivity-degree) (=/c usage-degree)
       #/nothing)])
   (computation-h sensitivity-degree usage-degree #/lambda ()
-    (holes-h-and-value
-      ; NOTE: These hole effects do nothing but what the client has
-      ; them do. They don't even verify that they're used in the right
-      ; context, e.g. that a hole isn't opened while another hole is
-      ; in progress. That's intentional; it helps make sure `return!h`
-      ; doesn't add any effects of its own, so that it's a proper
-      ; identity element.
-      (append
-        (build-list
-          (first-observable-usage-degree-for-sensitivity
-            sensitivity-degree usage-degree)
-        #/lambda (i)
-          (return!h (sensitivity-from-usage i) i (list) #/void))
-        holes)
-      leaf)))
+    ; NOTE: These hole effects do nothing but what the client has them
+    ; do. They don't even verify that they're used in the right
+    ; context, e.g. that a hole isn't opened while another hole is in
+    ; progress. That's intentional; it helps make sure `return!h`
+    ; doesn't add any effects of its own, so that it's a proper
+    ; identity element.
+    (holes-h-and-value holes leaf)))
+
+; TODO: See if we can change the effect continuations into efficient
+; queues as seen in the "freer monads" papers.
 
 (define/contract (bind!h prefix holes-and-leaf-to-suffix)
   (->i
@@ -811,110 +809,78 @@
       [holes-and-leaf-to-suffix (prefix)
         (w- ds (computation-h-sensitivity-degree prefix)
         #/w- du (computation-h-usage-degree prefix)
-        #/->
-          (holes-h/c
-            ds
-            (first-observable-usage-degree-for-sensitivity ds du)
-            du)
-          any/c
+        #/-> (holes-h/c ds du) any/c
           (computation-h/c (equal/c ds) (=/c du) #/nothing))])
     [_ (prefix)
       (w- ds (computation-h-sensitivity-degree prefix)
       #/w- du (computation-h-usage-degree prefix)
       #/computation-h/c (equal/c ds) (=/c du) #/nothing)])
   (dissect prefix
-    (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
+    (computation-h sensitivity-degree usage-degree unsafe-run!h!)
   #/computation-h sensitivity-degree usage-degree #/lambda ()
-    (dissect (unsafe-run0!h!) (holes-h-and-value holes leaf)
-    #/w- split-position
-      (first-observable-usage-degree-for-sensitivity
-        sensitivity-degree usage-degree)
-    #/begin
-      (define-values
-        (low-degree-prefix-holes high-degree-prefix-holes)
-        (split-at holes split-position))
-    #/dissect
-      (holes-and-leaf-to-suffix high-degree-prefix-holes leaf)
-      (computation-h _ _ unsafe-run0!h!)
-    
-    ; If the sensitivity degree is zero, we can do a tail call, so we
-    ; do.
-    #/mat sensitivity-degree (sd0) (unsafe-run0!h!)
-    
-    ; TODO: We essentially have no tail calls at all in this monad for
-    ; sensitivity degrees other than zero. If it turns out the holes
-    ; less than an effect's sensitivity degree never have side
-    ; effects, we should see if we can stop manipulating them here
-    ; and just make this a tail call.
-    ;
-    ; TODO: While we're at it, we should see if we can change the
-    ; effect continuations into efficient queues as seen in the "freer
-    ; monads" papers. That's probably a separate task, but hey, we
-    ; might notice a way to accomplish it earlier when we take care of
-    ; this tail call.
-    ;
-    #/dissect (unsafe-run0!h!) (holes-h-and-value holes leaf)
-    #/begin
-      (define-values
-        (low-degree-suffix-holes high-degree-suffix-holes)
-        (split-at holes split-position))
-    #/holes-h-and-value
-      (append
-        (list-zip-map low-degree-prefix-holes low-degree-suffix-holes
-        #/lambda (prefix-hole suffix-hole)
-          (bind!h suffix-hole #/lambda (holes leaf) prefix-hole))
-        high-degree-suffix-holes)
-      leaf)))
+    (dissect (unsafe-run!h!) (holes-h-and-value holes leaf)
+    #/dissect (holes-and-leaf-to-suffix holes leaf)
+      (computation-h _ _ unsafe-run!h!)
+    #/unsafe-run!h!)))
 
 (define/contract (run0!h! computation)
-  (->i ([computation (computation-h/c any/c any/c #/nothing)])
+  (->i
+    ([computation (computation-h/c (equal/c #/sd0) any/c #/nothing)])
     [_ (computation)
-      (w- ds (computation-h-sensitivity-degree computation)
-      #/w- du (computation-h-usage-degree computation)
-      #/struct/c holes-h-and-value (holes-h/c ds 0 du) any/c)])
-  (dissect computation
-    (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
+      (w- du (computation-h-usage-degree computation)
+      #/struct/c holes-h-and-value (holes-h/c (sd0) du) any/c)])
+  (dissect computation (computation-h (sd0) 0 unsafe-run!h!)
   #/call-with-semaphore hyperstack-semaphore* #/lambda ()
-    (assert-current-sensitivity-allows 0)
-    (unsafe-run0!h!)))
-
-(struct-easy "a run1-result" (run1-result hole0-result body-result)
-  #:equal)
+    (assert-current-sensitivity-allows #/sd0)
+    (unsafe-run!h!)))
 
 (define/contract (run1!h! computation body)
   (->i
     (
-      [computation (computation-h/c any/c (>=/c 1) #/nothing)]
+      [computation
+        (computation-h/c (equal/c #/sd1) (>=/c 1) #/nothing)]
       [body (computation)
-        (w- ds (computation-h-sensitivity-degree computation)
-        #/w- du (computation-h-usage-degree computation)
-        #/-> (holes-h/c ds 1 du) any/c any/c)])
-    [_ (struct/c run1-result any/c any/c)])
+        (w- du (computation-h-usage-degree computation)
+        #/-> (holes-h/c (sd1) du) any/c any/c)])
+    any)
   (dissect computation
-    (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
+    (computation-h (sd1) usage-degree unsafe-run!h!)
   #/dissect
     (call-with-semaphore hyperstack-semaphore* #/lambda ()
-      (assert-current-sensitivity-allows 1)
-      (unsafe-run0!h!))
-    (holes-h-and-value
-      (cons (computation-h (sd0) 0 hole0-unsafe-run0!h!) hole1+)
-      value)
-  #/w- body-result (body hole1+ value)
+      (assert-current-sensitivity-allows #/sd1)
+      ; TODO NOW: Implement this `void`.
+      (list (lambda () #/void)
+      #/unsafe-run!h!))
+    (list end-run1-boundary! #/holes-h-and-value holes value)
+  #/w- result (body holes value)
+    (call-with-semaphore hyperstack-semaphore* #/lambda ()
+      ; TODO: See if we need to check the current sensitivity again.
+      (end-run1-boundary!))
+    result))
+
+(define/contract (run-sd-nothing!h! computation)
+  (->i
+    (
+      [computation
+        (computation-h/c (equal/c #/sd-nothing) (>=/c 2) #/nothing)])
+    any)
+  (dissect computation
+    (computation-h (sd-nothing) usage-degree unsafe-run!h!)
   #/dissect
     (call-with-semaphore hyperstack-semaphore* #/lambda ()
-      (hole0-unsafe-run0!h!))
-    (holes-h-and-value (list) hole0-result)
-  #/run1-result hole0-result body-result))
+      (unsafe-run!h!))
+    (holes-h-and-value holes value)
+    value))
 
 (define/contract
-  (unsafe-nontrivial-computation-1!h degree unsafe-run0!h!)
-  (->i ([degree exact-nonnegative-integer?] [unsafe-run0!h! (-> any)])
+  (unsafe-nontrivial-computation-1!h degree unsafe-run!h!)
+  (->i ([degree exact-nonnegative-integer?] [unsafe-run!h! (-> any)])
     [_ (degree)
       (computation-h/c (equal/c #/sd1-and degree) (=/c degree)
       #/nothing)])
-  (computation-h (sd1-and degree) degree unsafe-run0!h!))
+  (computation-h (sd1-and degree) degree unsafe-run!h!))
 
-(define (conjure-computation-in-progress-volatile degree)
+(define (conjure-computation-in-progress-0-volatile degree)
   (dissect hyperstack*
     (hyperstack-frame h-degree beid start! stop! locals escapes)
   #/holes-h-and-value
@@ -925,13 +891,24 @@
         (dissect escape (just #/hyperstack-escape eid frame)
         #/unsafe-nontrivial-computation-1!h i #/lambda ()
           (hyperstack-open-new-hole-chaining-volatile! i eid)
-          (conjure-computation-in-progress-volatile i)))
+          (conjure-computation-in-progress-nontrivial-volatile i)))
       (build-list (- degree low-degrees) #/lambda (i)
         (w- i (+ low-degrees i)
         #/unsafe-nontrivial-computation-1!h i #/lambda ()
           (hyperstack-open-new-hole-chaining-volatile! i beid)
-          (conjure-computation-in-progress-volatile i))))
+          (conjure-computation-in-progress-nontrivial-volatile i))))
     (void)))
+
+(define
+  (conjure-computation-in-progress-volatile
+    sensitivity-degree usage-degree)
+  (drop (conjure-computation-in-progress-0-volatile usage-degree)
+    (first-observable-usage-degree-for-sensitivity
+      sensitivity-degree usage-degree)))
+
+(define
+  (conjure-computation-in-progress-nontrivial-volatile degree)
+  (conjure-computation-in-progress-volatile (sd1-and degree) degree))
 
 ; A degree-N handler effect which opens a degree-N hole in every
 ; instance of almost any effect that actually uses handler effects,
@@ -977,7 +954,7 @@
       #/nothing)])
   (unsafe-nontrivial-computation-1!h degree #/lambda ()
     (hyperstack-open-new-hole-chaining-to-purity-volatile! degree)
-    (conjure-computation-in-progress-volatile degree)))
+    (conjure-computation-in-progress-nontrivial-volatile degree)))
 
 ; A degree-N handler effect which allows evaluation strategy
 ; sensitivity of the given degree inside its region.
