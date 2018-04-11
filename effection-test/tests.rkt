@@ -6,7 +6,7 @@
 
 (require rackunit)
 
-(require #/only-in lathe expect w-)
+(require #/only-in lathe-comforts expect w-)
 
 (require effection/maybe)
 (require effection/order)

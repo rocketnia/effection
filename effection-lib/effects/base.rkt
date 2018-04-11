@@ -8,7 +8,7 @@
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/list split-at take)
 
-(require #/only-in lathe dissect dissectfn expect mat next nextlet w-)
+(require #/only-in lathe-comforts dissect expect mat w- w-loop)
 
 (require #/only-in effection/maybe/base just nothing maybe/c)
 (require #/only-in effection/order/base fuse? name?)
@@ -325,7 +325,7 @@
     (nothing)))
 
 (define (graduate-locals locals last-degree)
-  (nextlet locals locals
+  (w-loop next locals locals
     (expect locals (cons locals-hash locals)
       ; TODO: Write a good error message. This is a contract violation
       ; of this function, but it's an internal error of the caller.
@@ -483,7 +483,7 @@
     (hyperstack-open-new-hole-one-at-a-time-volatile! degree id)))
 
 (define (get-escapable-frames hyperstack degree)
-  (nextlet trial-degree 0
+  (w-loop next trial-degree 0
     (if (= trial-degree degree)
       (expect
         (hyperstack-get-dynamic-scope
@@ -518,7 +518,7 @@
   #/expect (list-any frames #/lambda (frame-id) #/eq? id frame-id) #t
     ; TODO: Write this error case.
     (error "")
-  #/nextlet frames frames
+  #/w-loop next frames frames
     (dissect frames (cons frame-id frames)
     #/w- result
       (hyperstack-open-new-hole-one-at-a-time-volatile!
@@ -540,7 +540,7 @@
     #t
     ; TODO: Write this error case.
     (error "")
-  #/nextlet frames frames result hyperstack*
+  #/w-loop next frames frames result hyperstack*
     (dissect frames (cons frame-id frames)
     #/if (eq? pure-id frame-id) result
     #/next frames #/hyperstack-open-new-hole-one-at-a-time-volatile!
@@ -639,7 +639,7 @@
   (and/c (listof computation-h?)
     (lambda (holes)
       (and (= (- usage-stop-degree usage-start-degree) #/length holes)
-      #/nextlet holes holes i usage-start-degree
+      #/w-loop next holes holes i usage-start-degree
         (expect holes (cons hole holes) #t
         #/expect hole
           (computation-h hole-sensitivity-degree hole-usage-degree _)

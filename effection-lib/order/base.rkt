@@ -9,8 +9,8 @@
   define/contract)
 (require #/for-syntax #/only-in syntax/parse expr id nat syntax-parse)
 
-(require #/for-syntax #/only-in lathe
-  dissect expect mat next nextlet w-)
+(require #/for-syntax #/only-in lathe-comforts
+  dissect expect mat w- w-loop)
 
 (require #/for-syntax "../private/util.rkt")
 
@@ -24,7 +24,8 @@
 (require #/only-in racket/generic define/generic define-generics)
 (require #/only-in syntax/parse/define define-simple-macro)
 
-(require #/only-in lathe dissect dissectfn expect mat next nextlet w-)
+(require #/only-in lathe-comforts
+  dissect dissectfn expect mat w- w-loop)
 
 (require #/only-in effection/maybe/base just nothing maybe/c maybe?)
 
@@ -116,7 +117,7 @@
   
   (define/contract (desyntax-list syntax-list)
     (-> proper-syntax-pair? #/listof syntax?)
-    (nextlet syntax-list syntax-list
+    (w-loop next syntax-list syntax-list
       (mat syntax-list (list) (list)
       #/mat syntax-list (cons first rest)
         (cons first #/next rest)
@@ -133,7 +134,7 @@
     (list struct:foo make-foo foo? getters setters super)
   #/expect super #t
     (raise-syntax-error #f
-      (nextlet super super
+      (w-loop next super super
         (mat super #f
           ; The super-type is unknown.
           "not the root super-type in a structure type hierarchy"
@@ -271,7 +272,7 @@
   (-> name? name? dex-result?)
   (dissect a (name-internal a)
   #/dissect b (name-internal b)
-  #/nextlet a a b b
+  #/w-loop next a a b b
     
     ; Handle the cons cells.
     (mat a (cons a-first a-rest)
@@ -666,7 +667,7 @@
     (define (dex-internals-in? this x)
       (dissect this (dex-internals-struct descriptor counts? fields)
       #/and (counts? x)
-      #/nextlet fields fields
+      #/w-loop next fields fields
         (expect fields (cons field fields) #t
         #/dissect field (list getter position dex)
         
@@ -679,7 +680,7 @@
     (define (dex-internals-name-of this x)
       (dissect this (dex-internals-struct descriptor counts? fields)
       #/expect (counts? x) #t (nothing)
-      #/nextlet fields fields rev-result (list)
+      #/w-loop next fields fields rev-result (list)
         (expect fields (cons field fields)
           (just #/name-internal #/cons 'struct #/reverse rev-result)
         #/dissect field (list getter position dex)
@@ -691,7 +692,7 @@
       (dissect this (dex-internals-struct descriptor counts? fields)
       #/expect (counts? a) #t (nothing)
       #/expect (counts? b) #t (nothing)
-      #/nextlet fields fields
+      #/w-loop next fields fields
         (expect fields (cons field fields) (just #/ordering-eq)
         #/dissect field (list getter position dex)
         
@@ -706,7 +707,7 @@
           ; dexes' domains. If they don't, this structure instance is
           ; not part part of this dex's domain, so the result is
           ; `(nothing)`.
-          #/nextlet fields fields
+          #/w-loop next fields fields
             (expect fields (cons field fields) result
             #/dissect field (list getter position dex)
             #/expect
@@ -1124,7 +1125,7 @@
     (define (cline-internals-in? this x)
       (dissect this (cline-internals-struct descriptor counts? fields)
       #/and (counts? x)
-      #/nextlet fields fields
+      #/w-loop next fields fields
         (expect fields (cons field fields) #t
         #/dissect field (list getter position cline)
         
@@ -1144,7 +1145,7 @@
       (dissect this (cline-internals-struct descriptor counts? fields)
       #/expect (counts? a) #t (nothing)
       #/expect (counts? b) #t (nothing)
-      #/nextlet fields fields
+      #/w-loop next fields fields
         (expect fields (cons field fields) (just #/ordering-eq)
         #/dissect field (list getter position cline)
         
@@ -1160,7 +1161,7 @@
           ; clines' domains. If they don't, this structure instance is
           ; not part part of this cline's domain, so the result is
           ; `(nothing)`.
-          #/nextlet fields fields
+          #/w-loop next fields fields
             (expect fields (cons field fields) result
             #/dissect field (list getter position cline)
             #/expect
@@ -1561,7 +1562,7 @@
       #/expect (counts? a) #t (nothing)
       #/expect (counts? b) #t (nothing)
       #/w- n (length fields)
-      #/nextlet fields fields args (hasheq)
+      #/w-loop next fields fields args (hasheq)
         (expect fields (cons field fields)
           (apply constructor #/build-list n #/lambda (i)
             (hash-ref args i))
