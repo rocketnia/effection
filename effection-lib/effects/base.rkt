@@ -9,11 +9,12 @@
 (require #/only-in racket/list split-at take)
 
 (require #/only-in lathe-comforts dissect expect mat w- w-loop)
+(require #/only-in lathe-comforts/list
+  list-any list-kv-map list-zip-map)
+(require #/only-in lathe-comforts/maybe just maybe/c nothing)
+(require #/only-in lathe-comforts/struct struct-easy)
 
-(require #/only-in effection/maybe/base just nothing maybe/c)
 (require #/only-in effection/order/base fuse? name?)
-
-(require "../private/util.rkt")
 
 
 ; TODO: Many of the issues raised in the following comment have begun
@@ -310,12 +311,11 @@
   (lambda (y) #/equal? x y))
 
 
-(struct-easy "a token" (token))
-(struct-easy "a hyperstack-frame"
+(struct-easy (token))
+(struct-easy
   (hyperstack-frame degree big-escape-id start! stop! locals escapes)
   #:equal)
-(struct-easy "a hyperstack-escape" (hyperstack-escape escape-id frame)
-  #:equal)
+(struct-easy (hyperstack-escape escape-id frame) #:equal)
 
 (define pure-id (token))
 
@@ -547,9 +547,9 @@
       degree frame-id)))
 
 
-(struct-easy "an sd0" (sd0) #:equal)
-(struct-easy "an sd1" (sd1) #:equal)
-(struct-easy "an sd-nothing" (sd-nothing) #:equal)
+(struct-easy (sd0) #:equal)
+(struct-easy (sd1) #:equal)
+(struct-easy (sd-nothing) #:equal)
 
 (define/contract (sensitivity-degree? x)
   (-> any/c boolean?)
@@ -590,10 +590,9 @@
   (-> exact-nonnegative-integer? sensitivity-degree?)
   (sd-and (sd1) #/sensitivity-from-usage usage-degree))
 
-(struct-easy "a holes-h-and-value" (holes-h-and-value holes value)
-  #:equal)
+(struct-easy (holes-h-and-value holes value) #:equal)
 
-(struct-easy "a computation-h"
+(struct-easy
   (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
   #:equal)
 
@@ -878,8 +877,7 @@
     (assert-current-sensitivity-allows 0)
     (unsafe-run0!h!)))
 
-(struct-easy "a run1-result" (run1-result hole0-result body-result)
-  #:equal)
+(struct-easy (run1-result hole0-result body-result) #:equal)
 
 (define/contract (run1!h! computation body)
   (->i

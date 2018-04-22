@@ -1,9 +1,13 @@
 #lang parendown scribble/manual
+
 @(require #/for-label racket/base)
-@(require #/for-label effection/order/base)
-@(require #/for-label effection/maybe/base)
 @(require #/for-label #/only-in racket/contract/base
   -> any/c chaperone-contract? contract?)
+
+@(require #/for-label #/only-in lathe-comforts/maybe
+  just maybe? maybe/c nothing)
+
+@(require #/for-label effection/order/base)
 
 
 @title{Effection}
@@ -21,35 +25,6 @@ For a more thorough overview of Effection's goals, @hyperlink["https://github.co
 
 
 @table-of-contents[]
-
-
-
-@section[#:tag "maybe"]{Maybe}
-
-@defmodule[effection/maybe/base]
-
-Maybe values are a way to encode optional data. Using maybe values can simplify some interfaces that would otherwise use run time errors or special-cased sentinel values like @racket[#f].
-
-
-@defstruct*[nothing ()]{
-  A maybe value that does not contain a value.
-  
-  Every two @tt{nothing} values are @racket[equal?].
-}
-
-@defstruct*[just ([value any/c])]{
-  A maybe value that does contain a value.
-  
-  Two @tt{just} values are @racket[equal?] if they contain @racket[equal?] values.
-}
-
-@defproc[(maybe? [x any/c]) boolean?]{
-  Returns whether the given value is a maybe value. That is, it checks that the value is either a @racket[nothing] value or a @racket[just] value.
-}
-
-@defproc[(maybe/c [c chaperone-contract?]) chaperone-contract?]{
-  Returns a chaperone contract that recognizes a maybe value where the contained value, if any, abides by the given chaperone contract.
-}
 
 
 

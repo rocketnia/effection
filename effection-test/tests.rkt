@@ -7,15 +7,15 @@
 (require rackunit)
 
 (require #/only-in lathe-comforts expect w-)
+(require #/only-in lathe-comforts/maybe just just-value nothing)
+(require #/only-in lathe-comforts/struct struct-easy)
 
-(require effection/maybe)
 (require effection/order)
-(require effection/private/util)
 
 ; (We provide nothing from this module.)
 
 
-(struct-easy "a mk-just1" (mk-just1)
+(struct-easy (mk-just1)
   #:other
   
   #:property prop:procedure
@@ -24,7 +24,7 @@
       (error "Expected this to be a mk-just1")
     #/just result))
 )
-(struct-easy "a mk-just2" (mk-just2)
+(struct-easy (mk-just2)
   #:other
   
   #:property prop:procedure
@@ -82,7 +82,7 @@
   "Using `name-of` with different dexes gives the same name")
 
 
-(struct-easy "a custom-pair" (custom-pair a b))
+(struct-easy (custom-pair a b))
 
 (check-equal?
   (compare-by-dex

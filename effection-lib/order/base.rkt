@@ -11,8 +11,8 @@
 
 (require #/for-syntax #/only-in lathe-comforts
   dissect expect mat w- w-loop)
-
-(require #/for-syntax "../private/util.rkt")
+(require #/for-syntax #/only-in lathe-comforts/list
+  list-all list-kv-map list-map)
 
 
 (require #/only-in racket/contract/base
@@ -26,10 +26,9 @@
 
 (require #/only-in lathe-comforts
   dissect dissectfn expect mat w- w-loop)
-
-(require #/only-in effection/maybe/base just nothing maybe/c maybe?)
-
-(require "../private/util.rkt")
+(require #/only-in lathe-comforts/list list-map)
+(require #/only-in lathe-comforts/maybe just maybe? maybe/c nothing)
+(require #/only-in lathe-comforts/struct struct-easy)
 
 
 ; ==== Orderings ====
@@ -167,17 +166,16 @@
 
 ; ===== Orderings ====================================================
 
-(struct-easy "an ordering-lt" (ordering-lt) #:equal)
-(struct-easy "an ordering-eq" (ordering-eq) #:equal)
-(struct-easy "an ordering-gt" (ordering-gt) #:equal)
+(struct-easy (ordering-lt) #:equal)
+(struct-easy (ordering-eq) #:equal)
+(struct-easy (ordering-gt) #:equal)
 
 ; NOTE: We used to expose this as two structs, namely
 ; `ordering-private-lt` and `ordering-private-gt`, but that approach
 ; had a problem: Using `struct->vector`, Racket code can detect which
 ; is which without even going to the trouble of writing the values to
 ; a text stream.
-(struct-easy "an ordering-private-encapsulated"
-  (ordering-private-encapsulated ordering))
+(struct-easy (ordering-private-encapsulated ordering))
 
 (define/contract (ordering-private? x)
   (-> any/c boolean?)
@@ -240,7 +238,8 @@
 ; descriptors, exact nonnegative integers, interned symbols, empty
 ; lists, and cons cells, and for sorting purposes, we consider them to
 ; ascend in that order.
-(struct-easy "a name" (name-internal rep))
+(struct-easy (name-internal rep)
+  #:error-message-phrase "a name")
 
 (define/contract (name? x)
   (-> any/c boolean?)
@@ -314,7 +313,7 @@
   (dex-internals-name-of dex-internals x)
   (dex-internals-compare dex-internals a b))
 
-(struct-easy "a dex-encapsulated" (dex-encapsulated internals))
+(struct-easy (dex-encapsulated internals))
 
 (define/contract (dex? x)
   (-> any/c boolean?)
@@ -341,7 +340,7 @@
   #/dex-internals-compare internals a b))
 
 
-(struct-easy "a dexable" (dexable dex value))
+(struct-easy (dexable dex value))
 
 (define/contract (valid-dexable? x)
   (-> any/c boolean?)
@@ -387,7 +386,7 @@
 
 
 
-(struct-easy "a dex-internals-name" (dex-internals-name)
+(struct-easy (dex-internals-name)
   #:other
   
   #:methods gen:dex-internals
@@ -419,7 +418,7 @@
   (dex-encapsulated #/dex-internals-name))
 
 
-(struct-easy "a dex-internals-dex" (dex-internals-dex)
+(struct-easy (dex-internals-dex)
   #:other
   
   #:methods gen:dex-internals
@@ -457,7 +456,7 @@
 (define/contract dex-dex dex? #/dex-encapsulated #/dex-internals-dex)
 
 
-(struct-easy "a dex-internals-give-up" (dex-internals-give-up)
+(struct-easy (dex-internals-give-up)
   #:other
   
   #:methods gen:dex-internals
@@ -486,7 +485,7 @@
   (dex-encapsulated #/dex-internals-give-up))
 
 
-(struct-easy "a dex-internals-default"
+(struct-easy
   (dex-internals-default
     dex-for-trying-first
     dex-for-trying-second)
@@ -540,8 +539,7 @@
   #/dex-internals-default dex-for-trying-first dex-for-trying-second))
 
 
-(struct-easy "a dex-internals-by-own-method"
-  (dex-internals-by-own-method dexable-get-method)
+(struct-easy (dex-internals-by-own-method dexable-get-method)
   #:other
   
   #:methods gen:dex-internals
@@ -596,7 +594,7 @@
   (dex-encapsulated #/dex-internals-by-own-method dexable-get-method))
 
 
-(struct-easy "a dex-internals-fix" (dex-internals-fix dexable-unwrap)
+(struct-easy (dex-internals-fix dexable-unwrap)
   #:other
   
   #:methods gen:dex-internals
@@ -632,8 +630,7 @@
   (dex-encapsulated #/dex-internals-fix dexable-unwrap))
 
 
-(struct-easy "a dex-internals-struct"
-  (dex-internals-struct descriptor counts? fields)
+(struct-easy (dex-internals-struct descriptor counts? fields)
   #:other
   
   #:methods gen:dex-internals
@@ -645,7 +642,7 @@
     (define (dex-internals-autoname this)
       (dissect this (dex-internals-struct descriptor counts? fields)
       #/list* 'dex-struct-by-field-position descriptor
-      #/list-fmap fields #/dissectfn (list getter position dex)
+      #/list-map fields #/dissectfn (list getter position dex)
         (list position #/autoname-dex dex)))
     
     (define (dex-internals-autodex this other)
@@ -735,7 +732,7 @@
   #/syntax-protect
     #`(dex-encapsulated #/dex-internals-struct #,struct:foo #,foo?
       #/list
-        #,@(list-fmap fields #/lambda (field)
+        #,@(list-map fields #/lambda (field)
              (dissect (desyntax-list field)
                (list position-stx dex)
              #/w- position (syntax-e position-stx)
@@ -788,7 +785,7 @@
   (cline-internals-in? cline-internals x)
   (cline-internals-compare cline-internals a b))
 
-(struct-easy "a cline-encapsulated" (cline-encapsulated internals))
+(struct-easy (cline-encapsulated internals))
 
 (define/contract (cline? x)
   (-> any/c boolean?)
@@ -815,7 +812,7 @@
   #/cline-internals-compare internals a b))
 
 
-(struct-easy "a dex-internals-cline" (dex-internals-cline)
+(struct-easy (dex-internals-cline)
   #:other
   
   #:methods gen:dex-internals
@@ -850,7 +847,7 @@
   (dex-encapsulated #/dex-internals-cline))
 
 
-(struct-easy "a cline-internals-by-dex" (cline-internals-by-dex dex)
+(struct-easy (cline-internals-by-dex dex)
   #:other
   
   #:methods gen:cline-internals
@@ -886,7 +883,7 @@
   (cline-encapsulated #/cline-internals-by-dex dex))
 
 
-(struct-easy "a cline-internals-give-up" (cline-internals-give-up)
+(struct-easy (cline-internals-give-up)
   #:other
   
   #:methods gen:cline-internals
@@ -915,7 +912,7 @@
   (cline-encapsulated #/cline-internals-give-up))
 
 
-(struct-easy "a cline-internals-default"
+(struct-easy
   (cline-internals-default
     cline-for-trying-first
     cline-for-trying-second)
@@ -974,8 +971,7 @@
     cline-for-trying-second))
 
 
-(struct-easy "a convert-dex-from-cline-by-own-method"
-  (convert-dex-from-cline-by-own-method get-method)
+(struct-easy (convert-dex-from-cline-by-own-method get-method)
   #:other
   
   #:property prop:procedure
@@ -984,8 +980,7 @@
     #/expect (get-method x) (just result) (nothing)
     #/just #/get-dex-from-cline result)))
 
-(struct-easy "a cline-internals-by-own-method"
-  (cline-internals-by-own-method dexable-get-method)
+(struct-easy (cline-internals-by-own-method dexable-get-method)
   #:other
   
   #:methods gen:cline-internals
@@ -1042,8 +1037,7 @@
   #/cline-internals-by-own-method dexable-get-method))
 
 
-(struct-easy "a convert-dex-from-cline-fix"
-  (convert-dex-from-cline-fix unwrap)
+(struct-easy (convert-dex-from-cline-fix unwrap)
   #:other
   
   #:property prop:procedure
@@ -1051,8 +1045,7 @@
     (dissect this (convert-dex-from-cline-fix unwrap)
     #/get-dex-from-cline #/unwrap #/cline-by-dex dex)))
 
-(struct-easy "a cline-internals-fix"
-  (cline-internals-fix dexable-unwrap)
+(struct-easy (cline-internals-fix dexable-unwrap)
   #:other
   
   #:methods gen:cline-internals
@@ -1090,8 +1083,7 @@
   (cline-encapsulated #/cline-internals-fix dexable-unwrap))
 
 
-(struct-easy "a cline-internals-struct"
-  (cline-internals-struct descriptor counts? fields)
+(struct-easy (cline-internals-struct descriptor counts? fields)
   #:other
   
   #:methods gen:cline-internals
@@ -1103,7 +1095,7 @@
     (define (cline-internals-autoname this)
       (dissect this (cline-internals-struct descriptor counts? fields)
       #/list* 'cline-struct-by-field-position descriptor
-      #/list-fmap fields #/dissectfn (list getter position cline)
+      #/list-map fields #/dissectfn (list getter position cline)
         (list position #/autoname-cline cline)))
     
     (define (cline-internals-autodex this other)
@@ -1138,7 +1130,7 @@
     (define (cline-internals-dex this)
       (dissect this (cline-internals-struct descriptor counts? fields)
       #/dex-internals-struct descriptor counts?
-      #/list-fmap fields #/dissectfn (list getter position cline)
+      #/list-map fields #/dissectfn (list getter position cline)
         (list getter position #/get-dex-from-cline cline)))
     
     (define (cline-internals-compare this a b)
@@ -1191,7 +1183,7 @@
   #/syntax-protect
     #`(cline-encapsulated #/cline-internals-struct #,struct:foo #,foo?
       #/list
-        #,@(list-fmap fields #/lambda (field)
+        #,@(list-map fields #/lambda (field)
              (dissect (desyntax-list field)
                (list position-stx cline)
              #/w- position (syntax-e position-stx)
@@ -1242,7 +1234,7 @@
   (furge-internals-autodex furge-internals other)
   (furge-internals-call furge-internals a b))
 
-(struct-easy "a merge-encapsulated" (merge-encapsulated internals))
+(struct-easy (merge-encapsulated internals))
 
 (define/contract (merge? x)
   (-> any/c boolean?)
@@ -1258,7 +1250,7 @@
   (dissect merge (merge-encapsulated internals)
   #/furge-internals-call internals a b))
 
-(struct-easy "a fuse-encapsulated" (fuse-encapsulated internals))
+(struct-easy (fuse-encapsulated internals))
 
 (define/contract (fuse? x)
   (-> any/c boolean?)
@@ -1275,7 +1267,7 @@
   #/furge-internals-call internals a b))
 
 
-(struct-easy "a dex-internals-merge" (dex-internals-merge)
+(struct-easy (dex-internals-merge)
   #:other
   
   #:methods gen:dex-internals
@@ -1310,7 +1302,7 @@
   (dex-encapsulated #/dex-internals-merge))
 
 
-(struct-easy "a dex-internals-fuse" (dex-internals-fuse)
+(struct-easy (dex-internals-fuse)
   #:other
   
   #:methods gen:dex-internals
@@ -1345,8 +1337,7 @@
   (dex-encapsulated #/dex-internals-fuse))
 
 
-(struct-easy "a fuse-internals-by-merge"
-  (fuse-internals-by-merge merge)
+(struct-easy (fuse-internals-by-merge merge)
   #:other
   
   #:methods gen:furge-internals
@@ -1374,7 +1365,7 @@
   (fuse-encapsulated #/fuse-internals-by-merge merge))
 
 
-(struct-easy "a furge-internals-by-dex" (furge-internals-by-dex dex)
+(struct-easy (furge-internals-by-dex dex)
   #:other
   
   #:methods gen:furge-internals
@@ -1409,7 +1400,7 @@
   (fuse-encapsulated #/furge-internals-by-dex dex))
 
 
-(struct-easy "a furge-internals-by-own-method"
+(struct-easy
   (furge-internals-by-own-method
     error-name dex-furge call-furge dexable-get-method)
   #:other
@@ -1480,7 +1471,7 @@
     'fuse-by-own-method dex-fuse call-fuse dexable-get-method))
 
 
-(struct-easy "a furge-internals-fix"
+(struct-easy
   (furge-internals-fix call-furge furge-encapsulated dexable-unwrap)
   #:other
   
@@ -1517,7 +1508,7 @@
   #/furge-internals-fix call-fuse fuse-encapsulated dexable-unwrap))
 
 
-(struct-easy "a furge-internals-struct"
+(struct-easy
   (furge-internals-struct
     autoname-furge dex-furge call-furge
     descriptor constructor counts? fields)
@@ -1534,7 +1525,7 @@
         (furge-internals-struct
           autoname-furge _ _ descriptor constructor counts? fields)
       #/list* 'furge-struct-by-field-position descriptor
-      #/list-fmap fields #/dissectfn (list getter position furge)
+      #/list-map fields #/dissectfn (list getter position furge)
         (list position #/autoname-furge furge)))
     
     (define (furge-internals-autodex this other)
@@ -1596,7 +1587,7 @@
         #,autoname-furge-id #,dex-furge-id #,call-furge-id
         #,struct:foo #,make-foo #,foo?
       #/list
-        #,@(list-fmap fields #/lambda (field)
+        #,@(list-map fields #/lambda (field)
              (dissect (desyntax-list field)
                (list position-stx furge)
              #/w- position (syntax-e position-stx)

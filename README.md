@@ -117,10 +117,8 @@ At some point these redesigned libraries for Racket may effectively culminate in
 
 ## Overview of the Effection codebase
 
-For now, Effection offers a few modules:
+For now, Effection offers a couple of modules:
 
-  - `effection/maybe` - A module that re-exports `effectoin/maybe/base` and may someday offer more auxiliary utilities alongside it.
-    - `effection/maybe/base` - A module that defines structure type instances for `nothing` and `just`, for places where Haskell's `Maybe` or ML's `option` would be useful.
   - `effection/order` - A module that re-exports `effectoin/order/base` and may someday offer more auxiliary utilities alongside it.
     - `effection/order/base` - A module offering basic support for doing comparisons and doing orderless merge operations.
 
