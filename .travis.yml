@@ -10,6 +10,7 @@ env:
   global:
     - RACKET_DIR=~/racket
     - TRAVIS_RACKET_DIR=~/travis-racket
+    - PACKAGE=effection
   matrix:
     - RACKET_VERSION=6.12
     - RACKET_VERSION=HEAD
@@ -40,19 +41,19 @@ script:
 
   # We install each package directory as a linked package, and we
   # automatically fetch all the dependencies.
-  - cd effection-lib/
+  - cd "${PACKAGE}-lib/"
   - raco pkg install --deps search-auto
   - cd ..
-  - cd effection-doc/
+  - cd "${PACKAGE}-doc/"
   - raco pkg install --deps search-auto
   - cd ..
-  - cd effection-test/
+  - cd "${PACKAGE}-test/"
   - raco pkg install --deps search-auto
   - cd ..
-  # This one must be installed after the `effection-doc` and
-  # `effection-test` packages since otherwise it'll install them from
-  # from the Racket package index.
-  - cd effection/
+  # This one must be installed after the `...-doc` and `...-test`
+  # packages since otherwise it'll install them from from the Racket
+  # package index.
+  - cd "${PACKAGE}/"
   - raco pkg install --deps search-auto
   - cd ..
 
@@ -61,12 +62,12 @@ script:
   # declared in each info.rkt are correct. (TODO: Why does
   # travis-racket suggest this? Is there a chance `raco setup` fails
   # when `raco pkg install` doesn't?)
-  - raco setup --check-pkg-deps effection
+  - raco setup --check-pkg-deps "${PACKAGE}"
 
   # We run tests according to the way the DrDr continuous testing
   # system does. This imitates the settings used by the Racket package
   # index at <https://pkgs.racket-lang.org/>.
-  - raco test --drdr --package effection-lib
-  - raco test --drdr --package effection-doc
-  - raco test --drdr --package effection-test
-  - raco test --drdr --package effection
+  - raco test --drdr --package "${PACKAGE}-lib"
+  - raco test --drdr --package "${PACKAGE}-doc"
+  - raco test --drdr --package "${PACKAGE}-test"
+  - raco test --drdr --package "${PACKAGE}"
