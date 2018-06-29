@@ -322,7 +322,7 @@
 (define/contract (autoname-dex dex)
   (-> dex? any)
   (dissect dex (dex-encapsulated internals)
-  #/dex-internals-autoname internals))
+  #/cons 'name:dex #/dex-internals-autoname internals))
 
 (define/contract (in-dex? dex x)
   (-> dex? any/c boolean?)
@@ -797,7 +797,7 @@
 (define/contract (autoname-cline cline)
   (-> cline? any)
   (dissect cline (cline-encapsulated internals)
-  #/cline-internals-autoname internals))
+  #/cons 'name:cline #/cline-internals-autoname internals))
 
 (define/contract (get-dex-from-cline cline)
   (-> cline? dex?)
