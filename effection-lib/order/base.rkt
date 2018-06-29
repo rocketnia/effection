@@ -679,7 +679,8 @@
       #/expect (counts? x) #t (nothing)
       #/w-loop next fields fields rev-result (list)
         (expect fields (cons field fields)
-          (just #/name-internal #/cons 'struct #/reverse rev-result)
+          (just #/name-internal
+          #/list* 'struct descriptor #/reverse rev-result)
         #/dissect field (list getter position dex)
         #/expect (name-of dex #/getter x) (just name) (nothing)
         #/dissect name (name-internal rep)
