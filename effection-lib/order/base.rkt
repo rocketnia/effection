@@ -393,10 +393,10 @@
   [
     
     (define (dex-internals-tag this)
-      'dex-name)
+      'tag:dex-name)
     
     (define (dex-internals-autoname this)
-      'dex-name)
+      'tag:dex-name)
     
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
@@ -406,7 +406,7 @@
     
     (define (dex-internals-name-of this x)
       (expect x (name-internal rep) (nothing)
-      #/just #/name-internal #/list 'name rep))
+      #/just #/name-internal #/list 'name:name rep))
     
     (define (dex-internals-compare this a b)
       (if (and (name? a) (name? b))
@@ -429,10 +429,10 @@
     
     
     (define (dex-internals-tag this)
-      'dex-dex)
+      'tag:dex-dex)
     
     (define (dex-internals-autoname this)
-      'dex-dex)
+      'tag:dex-dex)
     
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
@@ -463,10 +463,10 @@
   [
     
     (define (dex-internals-tag this)
-      'dex-give-up)
+      'tag:dex-give-up)
     
     (define (dex-internals-autoname this)
-      'dex-give-up)
+      'tag:dex-give-up)
     
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
@@ -495,11 +495,13 @@
   [
     
     (define (dex-internals-tag this)
-      'dex-default)
+      'tag:dex-default)
     
     (define (dex-internals-autoname this)
       (dissect this (dex-internals-default first second)
-      #/list 'dex-default (autoname-dex first) (autoname-dex second)))
+      #/list 'tag:dex-default
+        (autoname-dex first)
+        (autoname-dex second)))
     
     (define (dex-internals-autodex this other)
       (dissect this (dex-internals-default a1 a2)
@@ -546,12 +548,12 @@
   [
     
     (define (dex-internals-tag this)
-      'dex-by-own-method)
+      'tag:dex-by-own-method)
     
     (define (dex-internals-autoname this)
       (dissect this
         (dex-internals-by-own-method #/dexable dex get-method)
-      #/list 'dex-by-own-method
+      #/list 'tag:dex-by-own-method
         (autoname-dex dex)
         (name-of dex get-method)))
     
@@ -601,11 +603,11 @@
   [
     
     (define (dex-internals-tag this)
-      'dex-fix)
+      'tag:dex-fix)
     
     (define (dex-internals-autoname this)
       (dissect this (dex-internals-fix #/dexable dex unwrap)
-      #/list 'dex-fix (autoname-dex dex) (name-of dex unwrap)))
+      #/list 'tag:dex-fix (autoname-dex dex) (name-of dex unwrap)))
     
     (define (dex-internals-autodex this other)
       (dissect this (dex-internals-fix a)
@@ -637,11 +639,11 @@
   [
     
     (define (dex-internals-tag this)
-      'dex-struct-by-field-position)
+      'tag:dex-struct-by-field-position)
     
     (define (dex-internals-autoname this)
       (dissect this (dex-internals-struct descriptor counts? fields)
-      #/list* 'dex-struct-by-field-position descriptor
+      #/list* 'tag:dex-struct-by-field-position descriptor
       #/list-map fields #/dissectfn (list getter position dex)
         (list position #/autoname-dex dex)))
     
@@ -680,7 +682,7 @@
       #/w-loop next fields fields rev-result (list)
         (expect fields (cons field fields)
           (just #/name-internal
-          #/list* 'struct descriptor #/reverse rev-result)
+          #/list* 'name:struct descriptor #/reverse rev-result)
         #/dissect field (list getter position dex)
         #/expect (name-of dex #/getter x) (just name) (nothing)
         #/dissect name (name-internal rep)
@@ -820,10 +822,10 @@
   [
     
     (define (dex-internals-tag this)
-      'dex-cline)
+      'tag:dex-cline)
     
     (define (dex-internals-autoname this)
-      'dex-cline)
+      'tag:dex-cline)
     
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
@@ -855,11 +857,11 @@
   [
     
     (define (cline-internals-tag this)
-      'cline-by-dex)
+      'tag:cline-by-dex)
     
     (define (cline-internals-autoname this)
       (dissect this (cline-internals-by-dex dex)
-      #/list 'cline-by-dex #/autoname-dex dex))
+      #/list 'tag:cline-by-dex #/autoname-dex dex))
     
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-by-dex a)
@@ -891,10 +893,10 @@
   [
     
     (define (cline-internals-tag this)
-      'cline-give-up)
+      'tag:cline-give-up)
     
     (define (cline-internals-autoname this)
-      'cline-give-up)
+      'tag:cline-give-up)
     
     (define (cline-internals-autodex this other)
       (just #/ordering-eq))
@@ -923,11 +925,11 @@
   [
     
     (define (cline-internals-tag this)
-      'cline-default)
+      'tag:cline-default)
     
     (define (cline-internals-autoname this)
       (dissect this (cline-internals-default first second)
-      #/list 'cline-default
+      #/list 'tag:cline-default
         (autoname-cline first)
         (autoname-cline second)))
     
@@ -988,12 +990,12 @@
   [
     
     (define (cline-internals-tag this)
-      'cline-by-own-method)
+      'tag:cline-by-own-method)
     
     (define (cline-internals-autoname this)
       (dissect this
         (cline-internals-by-own-method #/dexable dex get-method)
-      #/list 'cline-by-own-method
+      #/list 'tag:cline-by-own-method
         (autoname-dex dex)
         (name-of dex get-method)))
     
@@ -1053,11 +1055,11 @@
   [
     
     (define (cline-internals-tag this)
-      'cline-fix)
+      'tag:cline-fix)
     
     (define (cline-internals-autoname this)
       (dissect this (cline-internals-fix #/dexable dex unwrap)
-      #/list 'cline-fix (autoname-dex dex) (name-of dex unwrap)))
+      #/list 'tag:cline-fix (autoname-dex dex) (name-of dex unwrap)))
     
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-fix a)
@@ -1091,11 +1093,11 @@
   [
     
     (define (cline-internals-tag this)
-      'cline-struct-by-field-position)
+      'tag:cline-struct-by-field-position)
     
     (define (cline-internals-autoname this)
       (dissect this (cline-internals-struct descriptor counts? fields)
-      #/list* 'cline-struct-by-field-position descriptor
+      #/list* 'tag:cline-struct-by-field-position descriptor
       #/list-map fields #/dissectfn (list getter position cline)
         (list position #/autoname-cline cline)))
     
@@ -1244,7 +1246,7 @@
 (define/contract (autoname-merge merge)
   (-> merge? any)
   (dissect merge (merge-encapsulated internals)
-  #/cons 'merge #/furge-internals-autoname internals))
+  #/cons 'name:merge #/furge-internals-autoname internals))
 
 (define/contract (call-merge merge a b)
   (-> merge? any/c any/c maybe?)
@@ -1260,7 +1262,7 @@
 (define/contract (autoname-fuse fuse)
   (-> fuse? any)
   (dissect fuse (fuse-encapsulated internals)
-  #/cons 'fuse #/furge-internals-autoname internals))
+  #/cons 'name:fuse #/furge-internals-autoname internals))
 
 (define/contract (call-fuse fuse a b)
   (-> fuse? any/c any/c maybe?)
@@ -1275,10 +1277,10 @@
   [
     
     (define (dex-internals-tag this)
-      'dex-merge)
+      'tag:dex-merge)
     
     (define (dex-internals-autoname this)
-      'dex-merge)
+      'tag:dex-merge)
     
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
@@ -1310,10 +1312,10 @@
   [
     
     (define (dex-internals-tag this)
-      'dex-fuse)
+      'tag:dex-fuse)
     
     (define (dex-internals-autoname this)
-      'dex-fuse)
+      'tag:dex-fuse)
     
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
@@ -1345,11 +1347,11 @@
   [
     
     (define (furge-internals-tag this)
-      'fuse-by-merge)
+      'tag:fuse-by-merge)
     
     (define (furge-internals-autoname this)
       (dissect this (fuse-internals-by-merge merge)
-      #/list 'fuse-by-merge #/autoname-merge merge))
+      #/list 'tag:fuse-by-merge #/autoname-merge merge))
     
     (define (furge-internals-autodex this other)
       (dissect this (fuse-internals-by-merge a)
@@ -1373,11 +1375,11 @@
   [
     
     (define (furge-internals-tag this)
-      'furge-by-dex)
+      'tag:furge-by-dex)
     
     (define (furge-internals-autoname this)
       (dissect this (furge-internals-by-dex dex)
-      #/list 'furge-by-dex #/autoname-dex dex))
+      #/list 'tag:furge-by-dex #/autoname-dex dex))
     
     (define (furge-internals-autodex this other)
       (dissect this (furge-internals-by-dex a)
@@ -1410,12 +1412,12 @@
   [
     
     (define (furge-internals-tag this)
-      'furge-by-own-method)
+      'tag:furge-by-own-method)
     
     (define (furge-internals-autoname this)
       (dissect this
         (furge-internals-by-own-method _ _ _ #/dexable dex get-method)
-      #/list 'furge-by-own-method
+      #/list 'tag:furge-by-own-method
         (autoname-dex dex)
         (name-of dex get-method)))
     
@@ -1480,11 +1482,11 @@
   [
     
     (define (furge-internals-tag this)
-      'furge-fix)
+      'tag:furge-fix)
     
     (define (furge-internals-autoname this)
       (dissect this (furge-internals-fix _ _ #/dexable dex unwrap)
-      #/list 'furge-fix (autoname-dex dex) (name-of dex unwrap)))
+      #/list 'tag:furge-fix (autoname-dex dex) (name-of dex unwrap)))
     
     (define (furge-internals-autodex this other)
       (dissect this (furge-internals-fix _ _ a)
@@ -1519,13 +1521,13 @@
   [
     
     (define (furge-internals-tag this)
-      'furge-struct-by-field-position)
+      'tag:furge-struct-by-field-position)
     
     (define (furge-internals-autoname this)
       (dissect this
         (furge-internals-struct
           autoname-furge _ _ descriptor constructor counts? fields)
-      #/list* 'furge-struct-by-field-position descriptor
+      #/list* 'tag:furge-struct-by-field-position descriptor
       #/list-map fields #/dissectfn (list getter position furge)
         (list position #/autoname-furge furge)))
     
