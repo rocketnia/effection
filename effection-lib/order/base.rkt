@@ -30,6 +30,9 @@
 (require #/only-in lathe-comforts/maybe just maybe? maybe/c nothing)
 (require #/only-in lathe-comforts/struct struct-easy)
 
+(require #/prefix-in internal: #/only-in effection/order/unsafe
+  name name?)
+
 
 ; ==== Orderings ====
 
@@ -234,16 +237,9 @@
 
 ; ===== Names, dexes, and dexables ===================================
 
-; Internally, we represent name values as data made of structure type
-; descriptors, exact nonnegative integers, interned symbols, empty
-; lists, and cons cells, and for sorting purposes, we consider them to
-; ascend in that order.
-(struct-easy (name-internal rep)
-  #:error-message-phrase "a name")
-
 (define/contract (name? x)
   (-> any/c boolean?)
-  (name-internal? x))
+  (internal:name? x))
 
 ; TODO: Test this implementation very thoroughly. We need to know what
 ; happens when this module is used through diamond dependencies, what
@@ -269,8 +265,8 @@
 
 (define/contract (names-autodex a b)
   (-> name? name? dex-result?)
-  (dissect a (name-internal a)
-  #/dissect b (name-internal b)
+  (dissect a (internal:name a)
+  #/dissect b (internal:name b)
   #/w-loop next a a b b
     
     ; Handle the cons cells.
@@ -405,8 +401,8 @@
       (name? x))
     
     (define (dex-internals-name-of this x)
-      (expect x (name-internal rep) (nothing)
-      #/just #/name-internal #/list 'name:name rep))
+      (expect x (internal:name rep) (nothing)
+      #/just #/internal:name #/list 'name:name rep))
     
     (define (dex-internals-compare this a b)
       (if (and (name? a) (name? b))
@@ -442,7 +438,7 @@
     
     (define (dex-internals-name-of this x)
       (if (dex? x)
-        (just #/name-internal #/autoname-dex x)
+        (just #/internal:name #/autoname-dex x)
         (nothing)))
     
     (define (dex-internals-compare this a b)
@@ -681,11 +677,11 @@
       #/expect (counts? x) #t (nothing)
       #/w-loop next fields fields rev-result (list)
         (expect fields (cons field fields)
-          (just #/name-internal
+          (just #/internal:name
           #/list* 'name:struct descriptor #/reverse rev-result)
         #/dissect field (list getter position dex)
         #/expect (name-of dex #/getter x) (just name) (nothing)
-        #/dissect name (name-internal rep)
+        #/dissect name (internal:name rep)
         #/next fields #/cons rep rev-result)))
     
     (define (dex-internals-compare this a b)
@@ -835,7 +831,7 @@
     
     (define (dex-internals-name-of this x)
       (if (cline? x)
-        (just #/name-internal #/autoname-cline x)
+        (just #/internal:name #/autoname-cline x)
         (nothing)))
     
     (define (dex-internals-compare this a b)
@@ -1290,7 +1286,7 @@
     
     (define (dex-internals-name-of this x)
       (if (merge? x)
-        (just #/name-internal #/autoname-merge x)
+        (just #/internal:name #/autoname-merge x)
         (nothing)))
     
     (define (dex-internals-compare this a b)
@@ -1325,7 +1321,7 @@
     
     (define (dex-internals-name-of this x)
       (if (fuse? x)
-        (just #/name-internal #/autoname-fuse x)
+        (just #/internal:name #/autoname-fuse x)
         (nothing)))
     
     (define (dex-internals-compare this a b)
