@@ -370,7 +370,7 @@
   (-> valid-dexable? valid-dexable? #/maybe/c dex-result?)
   (dissect a (dexable a-dex a)
   #/dissect b (dexable b-dex b)
-  #/expect (compare-by-dex dex-dex a-dex b-dex) (just #/ordering-eq)
+  #/expect (compare-by-dex (dex-dex) a-dex b-dex) (just #/ordering-eq)
     (nothing)
   #/compare-by-dex a-dex a b))
 
@@ -410,7 +410,7 @@
         (nothing)))
   ])
 
-(define/contract dex-name dex?
+(define/contract (dex-name) (-> dex?)
   (dex-encapsulated #/dex-internals-name))
 
 
@@ -449,7 +449,8 @@
       #/super-autodex a b))
   ])
 
-(define/contract dex-dex dex? #/dex-encapsulated #/dex-internals-dex)
+(define/contract (dex-dex) (-> dex?)
+  (dex-encapsulated #/dex-internals-dex))
 
 
 (struct-easy (dex-internals-give-up)
@@ -477,7 +478,7 @@
       (nothing))
   ])
 
-(define/contract dex-give-up dex?
+(define/contract (dex-give-up) (-> dex?)
   (dex-encapsulated #/dex-internals-give-up))
 
 
@@ -503,8 +504,8 @@
       (dissect this (dex-internals-default a1 a2)
       #/dissect other (dex-internals-default b1 b2)
       #/maybe-ordering-or
-        (compare-by-dex dex-dex a1 b1)
-        (compare-by-dex dex-dex a2 b2)))
+        (compare-by-dex (dex-dex) a1 b1)
+        (compare-by-dex (dex-dex) a2 b2)))
     
     (define (dex-internals-in? this x)
       (dissect this (dex-internals-default first second)
@@ -575,7 +576,7 @@
         (dex-internals-by-own-method #/dexable dex get-method)
       #/expect (get-method a) (just a-method) (nothing)
       #/expect (get-method b) (just b-method) (nothing)
-      #/expect (compare-by-dex dex-dex a-method b-method)
+      #/expect (compare-by-dex (dex-dex) a-method b-method)
         (just #/ordering-eq)
         (raise-arguments-error 'dex-by-own-method
           "obtained two different methods from the two values being compared"
@@ -657,7 +658,7 @@
         #/dissect b-field (list b-getter b-position b-dex)
         #/maybe-ordering-or
           (just #/lt-autodex a-position b-position <)
-        #/compare-by-dex dex-dex a-dex b-dex)))
+        #/compare-by-dex (dex-dex) a-dex b-dex)))
     
     (define (dex-internals-in? this x)
       (dissect this (dex-internals-struct descriptor counts? fields)
@@ -842,7 +843,7 @@
       #/cline-internals-autodex a b))
   ])
 
-(define/contract dex-cline dex?
+(define/contract (dex-cline) (-> dex?)
   (dex-encapsulated #/dex-internals-cline))
 
 
@@ -862,7 +863,7 @@
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-by-dex a)
       #/dissect other (cline-internals-by-dex b)
-      #/compare-by-dex dex-dex a b))
+      #/compare-by-dex (dex-dex) a b))
     
     (define (cline-internals-dex this)
       (dissect this (cline-internals-by-dex dex)
@@ -907,7 +908,7 @@
       (nothing))
   ])
 
-(define/contract cline-give-up cline?
+(define/contract (cline-give-up) (-> cline?)
   (cline-encapsulated #/cline-internals-give-up))
 
 
@@ -933,8 +934,8 @@
       (dissect this (cline-internals-default a1 a2)
       #/dissect other (cline-internals-default b1 b2)
       #/maybe-ordering-or
-        (compare-by-dex dex-cline a1 b1)
-        (compare-by-dex dex-cline a2 b2)))
+        (compare-by-dex (dex-cline) a1 b1)
+        (compare-by-dex (dex-cline) a2 b2)))
     
     (define (cline-internals-dex this)
       (dissect this (cline-internals-default first second)
@@ -1018,7 +1019,7 @@
         (cline-internals-by-own-method #/dexable dex get-method)
       #/expect (get-method a) (just a-method) (nothing)
       #/expect (get-method b) (just b-method) (nothing)
-      #/expect (compare-by-dex dex-cline a-method b-method)
+      #/expect (compare-by-dex (dex-cline) a-method b-method)
         (just #/ordering-eq)
         (raise-arguments-error 'cline-by-own-method
           "obtained two different methods from the two values being compared"
@@ -1111,7 +1112,7 @@
         #/dissect b-field (list b-getter b-position b-cline)
         #/maybe-ordering-or
           (just #/lt-autodex a-position b-position <)
-        #/compare-by-dex dex-cline a-cline b-cline)))
+        #/compare-by-dex (dex-cline) a-cline b-cline)))
     
     (define (cline-internals-in? this x)
       (dissect this (cline-internals-struct descriptor counts? fields)
@@ -1297,7 +1298,7 @@
       #/furge-internals-autodex a b))
   ])
 
-(define/contract dex-merge dex?
+(define/contract (dex-merge) (-> dex?)
   (dex-encapsulated #/dex-internals-merge))
 
 
@@ -1332,7 +1333,7 @@
       #/furge-internals-autodex a b))
   ])
 
-(define/contract dex-fuse dex?
+(define/contract (dex-fuse) (-> dex?)
   (dex-encapsulated #/dex-internals-fuse))
 
 
@@ -1352,7 +1353,7 @@
     (define (furge-internals-autodex this other)
       (dissect this (fuse-internals-by-merge a)
       #/dissect other (fuse-internals-by-merge b)
-      #/compare-by-dex dex-merge a b))
+      #/compare-by-dex (dex-merge) a b))
     
     (define (furge-internals-call this a b)
       (dissect this (fuse-internals-by-merge merge)
@@ -1380,7 +1381,7 @@
     (define (furge-internals-autodex this other)
       (dissect this (furge-internals-by-dex a)
       #/dissect other (furge-internals-by-dex b)
-      #/compare-by-dex dex-dex a b))
+      #/compare-by-dex (dex-dex) a b))
     
     (define (furge-internals-call this a b)
       (dissect this (furge-internals-by-dex dex)
@@ -1462,12 +1463,12 @@
 (define/contract (merge-by-own-method dexable-get-method)
   (-> (dexableof #/-> any/c #/maybe/c merge?) merge?)
   (merge-encapsulated #/furge-internals-by-own-method
-    'merge-by-own-method dex-merge call-merge dexable-get-method))
+    'merge-by-own-method (dex-merge) call-merge dexable-get-method))
 
 (define/contract (fuse-by-own-method dexable-get-method)
   (-> (dexableof #/-> any/c #/maybe/c fuse?) fuse?)
   (fuse-encapsulated #/furge-internals-by-own-method
-    'fuse-by-own-method dex-fuse call-fuse dexable-get-method))
+    'fuse-by-own-method (dex-fuse) call-fuse dexable-get-method))
 
 
 (struct-easy
@@ -1609,11 +1610,11 @@
 
 (define-syntax merge-struct-by-field-position #/lambda (stx)
   (expand-furge-struct-by-field-position stx "merges"
-    #'merge-encapsulated #'autoname-merge #'dex-merge #'call-merge))
+    #'merge-encapsulated #'autoname-merge #'(dex-merge) #'call-merge))
 
 (define-syntax fuse-struct-by-field-position #/lambda (stx)
   (expand-furge-struct-by-field-position stx "fuses"
-    #'fuse-encapsulated #'autoname-fuse #'dex-fuse #'call-fuse))
+    #'fuse-encapsulated #'autoname-fuse #'(dex-fuse) #'call-fuse))
 
 (define-for-syntax
   (expand-furge-struct
@@ -1644,8 +1645,8 @@
 
 (define-syntax merge-struct #/lambda (stx)
   (expand-furge-struct stx "merges"
-    #'merge-encapsulated #'autoname-merge #'dex-merge #'call-merge))
+    #'merge-encapsulated #'autoname-merge #'(dex-merge) #'call-merge))
 
 (define-syntax fuse-struct #/lambda (stx)
   (expand-furge-struct stx "fuses"
-    #'fuse-encapsulated #'autoname-fuse #'dex-fuse #'call-fuse))
+    #'fuse-encapsulated #'autoname-fuse #'(dex-fuse) #'call-fuse))

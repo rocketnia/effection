@@ -94,7 +94,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 @subsection[#:tag "dexes"]{Names, Dexes, and Dexables}
 
 @defproc[(name? [x any/c]) boolean?]{
-  Returns whether the given value is a name. In Effection, a "name" is something like a partial application of comparison by a dex. Any value can be converted to a name using @racket[name-of] if any dex for that value is at hand (and it always converts to the same name regardless of which dex is chosen), and names themselves can be compared using @racket[dex-name].
+  Returns whether the given value is a name. In Effection, a "name" is something like a partial application of comparison by a dex. Any value can be converted to a name using @racket[name-of] if any dex for that value is at hand (and it always converts to the same name regardless of which dex is chosen), and names themselves can be compared using @racket[(dex-name)].
 }
 
 
@@ -143,19 +143,19 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 }
 
 
-@defthing[dex-name dex?]{
-  A dex that compares names.
+@defproc[(dex-name) dex?]{
+  Returns a dex that compares names.
 }
 
-@defthing[dex-dex dex?]{
-  A dex that compares dexes.
+@defproc[(dex-dex) dex?]{
+  Returns a dex that compares dexes.
   
   All presently existing dexes allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(dex-default (dex-give-up) (dex-give-up))] and @racket[(dex-give-up)] can be distinguished this way despite otherwise having equivalent behavior.
 }
 
 
-@defthing[dex-give-up dex?]{
-  A dex over an empty domain.
+@defproc[(dex-give-up) dex?]{
+  Returns a dex over an empty domain.
 }
 
 @defproc[
@@ -170,7 +170,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   The invocation of @racket[dex-for-trying-second] is a tail call.
   
-  When compared by @racket[dex-dex], all @tt{dex-default} values are @racket[ordering-eq] if their @racket[dex-for-trying-first] values are and their @racket[dex-for-trying-second] values are.
+  When compared by @racket[(dex-dex)], all @tt{dex-default} values are @racket[ordering-eq] if their @racket[dex-for-trying-first] values are and their @racket[dex-for-trying-second] values are.
 }
 
 @defproc[
@@ -180,13 +180,13 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 ]{
   Given a dexable function, returns a dex that works by invoking that function with each value to get @racket[(just _dex)] or @racket[(nothing)], verifying that the two @var[dex] values are the same, and then proceeding to tail-call that dex value.
   
-  When compared by @racket[dex-dex], all @tt{dex-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
+  When compared by @racket[(dex-dex)], all @tt{dex-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
 }
 
 @defproc[(dex-fix [dexable-unwrap (dexableof (-> dex? dex?))]) dex?]{
   Given a dexable function, returns a dex that works by passing itself to the function and then tail-calling the resulting dex.
   
-  When compared by @racket[dex-dex], all @tt{dex-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
+  When compared by @racket[(dex-dex)], all @tt{dex-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
 }
 
 @defform[
@@ -203,7 +203,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
-  When compared by @racket[dex-dex], all @tt{dex-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[dex-expr] values are @racket[ordering-eq].
+  When compared by @racket[(dex-dex)], all @tt{dex-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[dex-expr] values are @racket[ordering-eq].
 }
 
 @defform[
@@ -216,7 +216,7 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
-  When compared by @racket[dex-dex], each @tt{dex-struct} value is @racket[ordering-eq] to the equivalent @racket[dex-struct-by-field-position] value.
+  When compared by @racket[(dex-dex)], each @tt{dex-struct} value is @racket[ordering-eq] to the equivalent @racket[dex-struct-by-field-position] value.
 }
 
 
@@ -241,8 +241,8 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   Given a cline and two values, compares those values according to the cline. The result is @racket[(nothing)] if either value is outside the cline's domain.
 }
 
-@defthing[dex-cline dex?]{
-  A dex that compares clines.
+@defproc[(dex-cline) dex?]{
+  Returns a dex that compares clines.
   
   All presently existing clines allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(cline-default (cline-give-up) (cline-give-up))] and @racket[(cline-give-up)] can be distinguished this way despite otherwise having equivalent behavior.
 }
@@ -251,15 +251,15 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 @defproc[(cline-by-dex [dex dex?]) cline?]{
   Returns a cline that compares values by tail-calling the given dex. Since the dex never returns the "candidly precedes" or "candidly follows" results, this cline doesn't either.
   
-  When compared by @racket[dex-cline], all @tt{cline-by-dex} values are @racket[ordering-eq] if their dexes are.
+  When compared by @racket[(dex-cline)], all @tt{cline-by-dex} values are @racket[ordering-eq] if their dexes are.
   
-  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to the original @racket[dex].
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to the original @racket[dex].
 }
 
-@defthing[cline-give-up cline?]{
-  A cline over an empty domain.
+@defproc[(cline-give-up) cline?]{
+  Returns a cline over an empty domain.
   
-  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to @racket[dex-give-up].
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to @racket[(dex-give-up)].
 }
 
 @defproc[
@@ -274,9 +274,9 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   The invocation of @racket[cline-for-trying-second] is a tail call.
   
-  When compared by @racket[dex-cline], all @tt{cline-default} values are @racket[ordering-eq] if their @racket[cline-for-trying-first] values are and their @racket[cline-for-trying-second] values are.
+  When compared by @racket[(dex-cline)], all @tt{cline-default} values are @racket[ordering-eq] if their @racket[cline-for-trying-first] values are and their @racket[cline-for-trying-second] values are.
   
-  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to the similarly constructed @racket[dex-default].
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to the similarly constructed @racket[dex-default].
 }
 
 @defproc[
@@ -286,9 +286,9 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 ]{
   Given a dexable function, returns a cline that works by invoking that function with each value to get @racket[(just _cline)] or @racket[(nothing)], verifying that the two @var[cline] values are the same, and then proceeding to tail-call that value.
   
-  When compared by @racket[dex-cline], all @tt{cline-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
+  When compared by @racket[(dex-cline)], all @tt{cline-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
   
-  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
 }
 
 @defproc[
@@ -297,9 +297,9 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
 ]{
   Given a dexable function, returns a cline that works by passing itself to the function and then tail-calling the resulting cline.
   
-  When compared by @racket[dex-cline], all @tt{cline-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
+  When compared by @racket[(dex-cline)], all @tt{cline-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
   
-  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
 }
 
 @defform[
@@ -316,9 +316,9 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
-  When compared by @racket[dex-cline], all @tt{cline-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[cline-expr] values are @racket[ordering-eq].
+  When compared by @racket[(dex-cline)], all @tt{cline-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[cline-expr] values are @racket[ordering-eq].
   
-  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to the similarly constructed @racket[dex-struct-by-field-position].
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to the similarly constructed @racket[dex-struct-by-field-position].
 }
 
 @defform[
@@ -331,15 +331,15 @@ A “dex” is like a cline, but it never results in the “candidly precedes”
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
-  When compared by @racket[dex-cline], each @tt{cline-struct} value is @racket[ordering-eq] to the equivalent @racket[cline-struct-by-field-position] value.
+  When compared by @racket[(dex-cline)], each @tt{cline-struct} value is @racket[ordering-eq] to the equivalent @racket[cline-struct-by-field-position] value.
   
-  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[dex-dex], it is @racket[ordering-eq] to the similarly constructed @racket[dex-struct].
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to the similarly constructed @racket[dex-struct].
 }
 
 
 @subsection[#:tag "merges-and-fuses"]{Merges and Fuses}
 
-Effection offers a non-exhaustive but extensive selection of "merges" and "fuses." These are values which can be compared for equality with like values (using @racket[dex-merge] and @racket[dex-fuse]), and they represent operations of two arguments (invocable using @racket[call-merge] and @racket[call-fuse]).
+Effection offers a non-exhaustive but extensive selection of "merges" and "fuses." These are values which can be compared for equality with like values (using @racket[(dex-merge)] and @racket[(dex-fuse)]), and they represent operations of two arguments (invocable using @racket[call-merge] and @racket[call-fuse]).
 
 Merges represent operations that are commutative, associative, and idempotent, or in other words exactly the kind of operation that can operate on a (nonempty and finite) unordered set of inputs.
 
@@ -365,23 +365,23 @@ The idempotence of a merge operation is such enough that if the two inputs to th
 }
 
 @deftogether[(
-  @defthing[dex-merge dex?]
-  @defthing[dex-fuse dex?]
+  @defproc[(dex-merge) dex?]
+  @defproc[(dex-fuse) dex?]
 )]{
-  A dex that compares merges/fuses.
+  Returns a dex that compares merges/fuses.
 }
 
 
 @defproc[(merge-by-dex [dex dex?]) merge?]{
   Returns a merge that merges any values that are already @racket[ordering-eq] according the given dex. The result of the merge is @racket[ordering-eq] to both of the inputs.
   
-  When compared by @racket[dex-merge], all @tt{merge-by-dex} values are @racket[ordering-eq] if their dexes are.
+  When compared by @racket[(dex-merge)], all @tt{merge-by-dex} values are @racket[ordering-eq] if their dexes are.
 }
 
 @defproc[(fuse-by-merge [merge merge?]) fuse?]{
   Returns a fuse that fuses values by merging them using the given merge.
   
-  When compared by @racket[dex-fuse], all @tt{fuse-by-merge} values are @racket[ordering-eq] if their merges are.
+  When compared by @racket[(dex-fuse)], all @tt{fuse-by-merge} values are @racket[ordering-eq] if their merges are.
 }
 
 @deftogether[(
@@ -398,7 +398,7 @@ The idempotence of a merge operation is such enough that if the two inputs to th
 )]{
   Given a dexable function, returns a fuse that works by invoking that function with each value to get @racket[(just _method)] or @racket[(nothing)], verifying that the two @var[method] values are the same, and invoking that merge/fuse value to get a result of @racket[(just _result)] or @racket[(nothing)]. If the result is @racket[(just _result)], this does a final check before returning it: It invokes the method-getting function on the @racket[result] to verify that it obtains the same @var[method] value that was obtained from the inputs. This ensures that the operation is associative.
   
-  When compared by @racket[dex-merge]/@racket[dex-fuse], all @tt{merge-by-own-method}/@tt{fuse-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
+  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-by-own-method}/@tt{fuse-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
 }
 
 @deftogether[(
@@ -413,7 +413,7 @@ The idempotence of a merge operation is such enough that if the two inputs to th
 )]{
   Given a dexable function, returns a merge/fuse that works by passing itself to the function and then tail-calling the resulting merge/fuse.
   
-  When compared by @racket[dex-merge]/@racket[dex-fuse], all @tt{merge-fix}/@tt{fuse-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
+  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-fix}/@tt{fuse-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
 }
 
 @deftogether[(
@@ -436,7 +436,7 @@ The idempotence of a merge operation is such enough that if the two inputs to th
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
-  When compared by @racket[dex-merge]/@racket[dex-fuse], all @tt{merge-struct-by-field-position}/@tt{fuse-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[field-method-expr] values are @racket[ordering-eq].
+  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-struct-by-field-position}/@tt{fuse-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[field-method-expr] values are @racket[ordering-eq].
 }
 
 @deftogether[(
@@ -453,5 +453,5 @@ The idempotence of a merge operation is such enough that if the two inputs to th
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
-  When compared by @racket[dex-merge]/@racket[dex-fuse], each @tt{merge-struct}/@tt{fuse-struct} value is @racket[ordering-eq] to the equivalent @racket[merge-struct-by-field-position]/@racket[fuse-struct-by-field-position] value.
+  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], each @tt{merge-struct}/@tt{fuse-struct} value is @racket[ordering-eq] to the equivalent @racket[merge-struct-by-field-position]/@racket[fuse-struct-by-field-position] value.
 }

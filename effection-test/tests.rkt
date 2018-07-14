@@ -75,7 +75,7 @@
   (dex-default (dex-struct nothing) (dex-struct just dex-elem)))
 
 (check-equal?
-  (compare-by-dex dex-name
+  (compare-by-dex (dex-name)
     (just-value #/name-of (dex-struct nothing) (nothing))
     (just-value #/name-of (dex-maybe dex-give-up) (nothing)))
   (just #/ordering-eq)
@@ -87,28 +87,28 @@
 (check-equal?
   (compare-by-dex
     (dex-struct-by-field-position custom-pair
-      [0 dex-dex]
-      [1 dex-cline])
-    (custom-pair dex-give-up cline-give-up)
-    (custom-pair dex-give-up cline-give-up))
+      [0 (dex-dex)]
+      [1 (dex-cline)])
+    (custom-pair (dex-give-up) (cline-give-up))
+    (custom-pair (dex-give-up) (cline-give-up)))
   (just #/ordering-eq)
   "Specifying fields in order with `dex-struct-by-field-position` works")
 (check-equal?
   (compare-by-dex
     (dex-struct-by-field-position custom-pair
-      [1 dex-cline]
-      [0 dex-dex])
-    (custom-pair dex-give-up cline-give-up)
-    (custom-pair dex-give-up cline-give-up))
+      [1 (dex-cline)]
+      [0 (dex-dex)])
+    (custom-pair (dex-give-up) (cline-give-up))
+    (custom-pair (dex-give-up) (cline-give-up)))
   (just #/ordering-eq)
   "Specifying fields out of order with `dex-struct-by-field-position` works")
 
 (check-equal?
   (w- name
-    (just-value #/name-of dex-dex
+    (just-value #/name-of (dex-dex)
     #/dex-struct-by-field-position custom-pair
-      [1 dex-cline]
-      [0 dex-dex])
-    (compare-by-dex dex-name name name))
+      [1 (dex-cline)]
+      [0 (dex-dex)])
+    (compare-by-dex (dex-name) name name))
   (just #/ordering-eq)
   "Names that internally contain structure type descriptors and exact nonnegative integers can be compared")
