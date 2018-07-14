@@ -455,3 +455,32 @@ The idempotence of a merge operation is such enough that if the two inputs to th
   
   When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], each @tt{merge-struct}/@tt{fuse-struct} value is @racket[ordering-eq] to the equivalent @racket[merge-struct-by-field-position]/@racket[fuse-struct-by-field-position] value.
 }
+
+
+@subsection[#:tag "tables"]{Tables}
+
+Effection's "tables" are similar to Racket hash tables where all the keys are Effection name values. However, tables are encapsulated in such a way that Effection-safe code will always process the table entries in an order-oblivious way. For instance, an Effection table cannot be converted to a list in general. This makes tables useful for representing orderless sets that cross API boundaries, where the API client should not be able to depend on accidental details of the set representation.
+
+
+@defproc[(table? [x any/c]) boolean?]{
+  Returns whether the given value is an Effection table.
+}
+
+@defproc[(table-get [key name?] [table table?]) maybe?]{
+  Returns the value associated with the given name in the given table, if any.
+}
+
+@defproc[(table-empty) table?]{
+  Returns an empty table. In this table, the result of @racket[table-get] for any name is @racket[(nothing)].
+}
+
+@defproc[
+  (table-shadow [key name?] [maybe-val maybe?] [table table?])
+  table?
+]{
+  Returns another table that's just like the given one, except that the @racket[table-get] result for the given name is the given @racket[maybe?] value. That is, this overwrites or removes the value associated with the given name.
+}
+
+@defproc[(dex-table [val-dex dex?]) dex?]{
+  Returns a dex that compares tables, using the given dex to compare each value.
+}

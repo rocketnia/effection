@@ -17,7 +17,7 @@
 
 (require #/only-in racket/contract/base
   -> and/c any any/c chaperone-contract? contract? contract-projection
-  struct/c)
+  list/c listof struct/c)
 (require #/only-in racket/contract/combinator
   contract-first-order-passes? make-contract)
 (require #/only-in racket/contract/region define/contract)
@@ -25,8 +25,10 @@
 (require #/only-in syntax/parse/define define-simple-macro)
 
 (require #/only-in lathe-comforts
-  dissect dissectfn expect mat w- w-loop)
-(require #/only-in lathe-comforts/list list-map)
+  dissect dissectfn expect fn mat w- w-loop)
+(require #/only-in lathe-comforts/hash
+  hash-ref-maybe hash-set-maybe hash-v-all)
+(require #/only-in lathe-comforts/list list-bind list-map)
 (require #/only-in lathe-comforts/maybe just maybe? maybe/c nothing)
 (require #/only-in lathe-comforts/struct struct-easy)
 
@@ -103,6 +105,14 @@
   fuse-fix
   fuse-struct-by-field-position
   fuse-struct)
+
+
+; ==== Tables ====
+
+(provide table? table-empty table-shadow table-get)
+(provide dex-table)
+; TODO: Also implement, document, and provide `merge-table`,
+; `fuse-table`, `table-map-fuse`, and `table-sort`.
 
 
 
@@ -1650,3 +1660,131 @@
 (define-syntax fuse-struct #/lambda (stx)
   (expand-furge-struct stx "fuses"
     #'fuse-encapsulated #'autoname-fuse #'(dex-fuse) #'call-fuse))
+
+
+
+; ===== Tables =======================================================
+
+(struct-easy (table-encapsulated hash))
+
+(define/contract (table? x)
+  (-> any/c boolean?)
+  (table-encapsulated? x))
+
+(define/contract (table-get key table)
+  (-> name? table? maybe?)
+  (dissect key (internal:name key)
+  #/dissect table (table-encapsulated hash)
+  #/hash-ref-maybe hash key))
+
+(define/contract (table-empty)
+  (-> table?)
+  (table-encapsulated #/hash))
+
+(define/contract (table-shadow key maybe-val table)
+  (-> name? maybe? table? table?)
+  (dissect key (internal:name key)
+  #/dissect table (table-encapsulated hash)
+  #/table-encapsulated #/hash-set-maybe key maybe-val))
+
+(define/contract (table->sorted-list table)
+  (-> table? #/listof #/list/c name? any/c)
+  (dissect table (table-encapsulated hash)
+  #/list-map
+    (sort (hash->list hash) #/fn a b
+      (dissect a (cons ak av)
+      #/dissect b (cons bk bv)
+      #/w- dex-result
+        (names-autodex (internal:name ak) (internal:name bk))
+      #/mat dex-result (ordering-lt) #t
+      #/mat dex-result (ordering-private-encapsulated #/ordering-lt)
+        #t
+        #f))
+  #/dissectfn (cons k v)
+    (list (internal:name k) v)))
+
+(struct-easy (dex-internals-table val-dex)
+  #:other
+  
+  #:methods gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'tag:dex-table)
+    
+    (define (dex-internals-autoname this)
+      (dissect this (dex-internals-table val-dex)
+      #/list 'tag:dex-table #/autoname-dex val-dex))
+    
+    (define (dex-internals-autodex this other)
+      (dissect this (dex-internals-table a-val-dex)
+      #/dissect other (dex-internals-table b-val-dex)
+      #/compare-by-dex (dex-dex) a-val-dex b-val-dex))
+    
+    (define (dex-internals-in? this x)
+      (dissect this (dex-internals-table val-dex)
+      #/expect x (table-encapsulated x) #f
+      #/hash-v-all x #/fn val
+        (in-dex? val-dex val)))
+    
+    ; TODO: See if we should have the ordering of the
+    ; `dex-internals-name-of` names of tables be consistent with the
+    ; `dex-internals-compare` ordering of the tables themselves.
+    
+    (define (dex-internals-name-of this x)
+      (dissect this (dex-internals-table val-dex)
+      ; TODO: Currently, this calls `in-dex?` on each value of the
+      ; table (indirectly via this one `in-dex?` call), and then if
+      ; they all succeed, it calls `name-of`. This could be doing some
+      ; redundant computation. See if we can optimize this.
+      #/if (not #/in-dex? x) (nothing)
+      #/just #/internal:name #/cons 'name:table
+      #/list-bind (table->sorted-list x) #/dissectfn (list k v)
+        (dissect (name-of val-dex v) (just v)
+        #/list k v)))
+    
+    (define (dex-internals-compare this a b)
+      (dissect this (dex-internals-table val-dex)
+      ; TODO: Currently, this calls `in-dex?` on each value of each
+      ; table (indirectly via these two `in-dex?` calls), and then if
+      ; they all succeed, it calls `compare-by-dex` on each one too
+      ; (up to the point, if any, where it exits early due to a
+      ; nonequal result). This could be doing some redundant
+      ; computation. See if we can optimize this.
+      #/if (not #/in-dex? this a) (nothing)
+      #/if (not #/in-dex? this b) (nothing)
+      #/maybe-ordering-or
+        (just #/lt-autodex (hash-count a) (hash-count b) <)
+      #/w- a (table->sorted-list #/table-encapsulated a)
+      #/w- b (table->sorted-list #/table-encapsulated b)
+      #/maybe-ordering-or
+        (w-loop next
+          keys
+          (map list
+            (list-map a #/dissectfn (list k v) k)
+            (list-map b #/dissectfn (list k v) k))
+          (expect keys (cons entry keys) (just #/ordering-eq)
+          #/dissect entry (list a b)
+          #/maybe-ordering-or (just #/names-autodex a b)
+          #/next keys))
+        (w-loop next
+          vals
+          ; NOTE: If we get to this point, we compare *every* pair of
+          ; corresponding values. That's because if we short-circuit
+          ; before comparing certain values, then a client can deduce
+          ; that their sometimes-non-terminating `dex-by-own-method`
+          ; hasn't been called on certain values in the table.
+          (list-map
+            (map list
+              (list-map a #/dissectfn (list k v) v)
+              (list-map b #/dissectfn (list k v) v))
+          #/dissectfn (list a b)
+            (compare-by-dex val-dex a b))
+          (expect vals (cons maybe-dex-result vals)
+            (just #/ordering-eq)
+          #/maybe-ordering-or maybe-dex-result
+          #/next vals))))
+  ])
+
+(define/contract (dex-table) (-> dex?)
+  (dex-encapsulated #/dex-internals-table))
