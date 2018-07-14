@@ -481,6 +481,27 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
   Returns another table that's just like the given one, except that the @racket[table-get] result for the given name is the given @racket[maybe?] value. That is, this overwrites or removes the value associated with the given name.
 }
 
-@defproc[(dex-table [val-dex dex?]) dex?]{
+@defproc[
+  (table-map-fuse
+    [table table?]
+    [fuse fuse?]
+    [key-to-operand (-> name? any/c)])
+  maybe?
+]{
+  Given a table, a fuse, and a function, calls that function with each key of the table, and returns a @racket[just] containing the fused value of all the function results. If the table is empty or if any function result is outside the fuse’s domain, this returns @racket[(nothing)] instead.
+}
+
+@defproc[(dex-table [dex-val dex?]) dex?]{
   Returns a dex that compares tables, using the given dex to compare each value.
+  
+  When compared by @racket[(dex-dex)], all @tt{dex-table} values are @racket[ordering-eq] if their @racket[dex-val] values are.
+}
+
+@deftogether[(
+  @defproc[(merge-table [merge-val merge?]) merge?]
+  @defproc[(fuse-table [fuse-val fuse?]) fuse?]
+)]{
+  Returns a merge/fuse that combines tables by collecting all the nonoverlapping entries and combining the overlapping entries using the given @racket[merge-val]/@racket[fuse-val].
+  
+  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-table}/@tt{fuse-table} values are @racket[ordering-eq] if their @racket[merge-val]/@racket[fuse-val] values are.
 }

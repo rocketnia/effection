@@ -22,14 +22,16 @@
   contract-first-order-passes? make-contract)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/generic define/generic define-generics)
+(require #/only-in racket/hash hash-union)
 (require #/only-in syntax/parse/define define-simple-macro)
 
 (require #/only-in lathe-comforts
   dissect dissectfn expect fn mat w- w-loop)
 (require #/only-in lathe-comforts/hash
-  hash-ref-maybe hash-set-maybe hash-v-all)
-(require #/only-in lathe-comforts/list list-bind list-map)
-(require #/only-in lathe-comforts/maybe just maybe? maybe/c nothing)
+  hash-ref-maybe hash-set-maybe hash-v-all hash-v-any hash-v-map)
+(require #/only-in lathe-comforts/list list-any list-bind list-map)
+(require #/only-in lathe-comforts/maybe
+  just maybe? maybe-bind maybe/c nothing nothing?)
 (require #/only-in lathe-comforts/struct struct-easy)
 
 (require #/prefix-in internal: #/only-in effection/order/unsafe
@@ -109,10 +111,10 @@
 
 ; ==== Tables ====
 
-(provide table? table-empty table-shadow table-get)
-(provide dex-table)
-; TODO: Also implement, document, and provide `merge-table`,
-; `fuse-table`, `table-map-fuse`, and `table-sort`.
+(provide table? table-get table-empty table-shadow table-map-fuse)
+(provide dex-table merge-table fuse-table)
+; TODO: Also implement, document, and provide `table-sort`, a function
+; that returns a list of tables based on a table and a cline.
 
 
 
@@ -1687,6 +1689,28 @@
   #/dissect table (table-encapsulated hash)
   #/table-encapsulated #/hash-set-maybe key maybe-val))
 
+(define/contract (table-map-fuse table fuse key-to-operand)
+  (-> table? fuse? (-> name? any/c) maybe?)
+  (dissect table (table-encapsulated hash)
+  #/w- operands
+    (list-map (hash-keys hash) #/fn key
+      (key-to-operand #/internal:name key))
+  
+  ; NOTE: We do a first pass over the operands to make sure they're
+  ; all in the fuse's domain because otherwise a client could detect
+  ; that their sometimes-non-terminating `fuse-by-own-method` wasn't
+  ; called on certain operands.
+  #/if
+    (list-any operands #/fn operand
+      (nothing? #/call-fuse fuse operand operand))
+    (nothing)
+  
+  #/expect operands (cons so-far operands) (nothing)
+  #/w-loop next so-far so-far operands operands
+    (expect operands (cons operand operands) (just so-far)
+    #/maybe-bind (call-fuse fuse so-far operand) #/fn so-far
+    #/next so-far operands)))
+
 (define/contract (table->sorted-list table)
   (-> table? #/listof #/list/c name? any/c)
   (dissect table (table-encapsulated hash)
@@ -1788,3 +1812,54 @@
 
 (define/contract (dex-table) (-> dex?)
   (dex-encapsulated #/dex-internals-table))
+
+(struct-easy
+  (furge-internals-table
+    autoname-furge dex-furge call-furge furge-val)
+  #:other
+  
+  #:methods gen:furge-internals
+  [
+    
+    (define (furge-internals-tag this)
+      'tag:furge-table)
+    
+    (define (furge-internals-autoname this)
+      (dissect this
+        (furge-internals-table autoname-furge _ _ furge-val)
+      #/list 'tag:furge-table #/autoname-furge furge-val))
+    
+    (define (furge-internals-autodex this other)
+      (dissect this (furge-internals-table _ dex-furge _ a)
+      #/dissect other (furge-internals-table _ _ _ b)
+      #/compare-by-dex dex-furge a b))
+    
+    (define (furge-internals-call this a b)
+      (dissect this (furge-internals-table _ _ call-furge furge-val)
+      #/expect a (table-encapsulated a) (nothing)
+      #/expect b (table-encapsulated b) (nothing)
+      ; NOTE: We run `call-furge` on all the entries to detect if any
+      ; of them is outside the furge's domain.
+      #/w- a (hash-v-map a #/fn v #/call-furge furge-val v v)
+      #/w- b (hash-v-map b #/fn v #/call-furge furge-val v v)
+      #/if (hash-v-any a #/fn v #/nothing? v) (nothing)
+      #/if (hash-v-any b #/fn v #/nothing? v) (nothing)
+      #/w- furged
+        (hash-union a b #:combine #/fn a b
+          (maybe-bind a #/fn a
+          #/maybe-bind b #/fn b
+          #/call-furge furge-val a b))
+      #/if (hash-v-any furged #/fn v #/nothing? v) (nothing)
+      #/just #/table-encapsulated
+      #/hash-v-map furged #/dissectfn (just v) v))
+  ])
+
+(define/contract (merge-table merge-val)
+  (-> merge? merge?)
+  (merge-encapsulated #/furge-internals-table
+    autoname-merge (dex-merge) call-merge merge-val))
+
+(define/contract (fuse-table fuse-val)
+  (-> fuse? fuse?)
+  (fuse-encapsulated #/furge-internals-table
+    autoname-fuse (dex-fuse) call-fuse fuse-val))
