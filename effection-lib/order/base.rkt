@@ -1687,7 +1687,7 @@
   (-> name? maybe? table? table?)
   (dissect key (internal:name key)
   #/dissect table (table-encapsulated hash)
-  #/table-encapsulated #/hash-set-maybe key maybe-val))
+  #/table-encapsulated #/hash-set-maybe hash key maybe-val))
 
 (define/contract (table-map-fuse table fuse key-to-operand)
   (-> table? fuse? (-> name? any/c) maybe?)
@@ -1727,7 +1727,7 @@
   #/dissectfn (cons k v)
     (list (internal:name k) v)))
 
-(struct-easy (dex-internals-table val-dex)
+(struct-easy (dex-internals-table dex-val)
   #:other
   
   #:methods gen:dex-internals
@@ -1737,46 +1737,46 @@
       'tag:dex-table)
     
     (define (dex-internals-autoname this)
-      (dissect this (dex-internals-table val-dex)
-      #/list 'tag:dex-table #/autoname-dex val-dex))
+      (dissect this (dex-internals-table dex-val)
+      #/list 'tag:dex-table #/autoname-dex dex-val))
     
     (define (dex-internals-autodex this other)
-      (dissect this (dex-internals-table a-val-dex)
-      #/dissect other (dex-internals-table b-val-dex)
-      #/compare-by-dex (dex-dex) a-val-dex b-val-dex))
+      (dissect this (dex-internals-table a-dex-val)
+      #/dissect other (dex-internals-table b-dex-val)
+      #/compare-by-dex (dex-dex) a-dex-val b-dex-val))
     
     (define (dex-internals-in? this x)
-      (dissect this (dex-internals-table val-dex)
+      (dissect this (dex-internals-table dex-val)
       #/expect x (table-encapsulated x) #f
       #/hash-v-all x #/fn val
-        (in-dex? val-dex val)))
+        (in-dex? dex-val val)))
     
     ; TODO: See if we should have the ordering of the
     ; `dex-internals-name-of` names of tables be consistent with the
     ; `dex-internals-compare` ordering of the tables themselves.
     
     (define (dex-internals-name-of this x)
-      (dissect this (dex-internals-table val-dex)
+      (dissect this (dex-internals-table dex-val)
       ; TODO: Currently, this calls `in-dex?` on each value of the
-      ; table (indirectly via this one `in-dex?` call), and then if
-      ; they all succeed, it calls `name-of`. This could be doing some
-      ; redundant computation. See if we can optimize this.
-      #/if (not #/in-dex? x) (nothing)
+      ; table (indirectly via this one `dex-internals-in?` call), and
+      ; then if they all succeed, it calls `name-of`. This could be
+      ; doing some redundant computation. See if we can optimize this.
+      #/if (not #/dex-internals-in? this x) (nothing)
       #/just #/internal:name #/cons 'name:table
       #/list-bind (table->sorted-list x) #/dissectfn (list k v)
-        (dissect (name-of val-dex v) (just v)
+        (dissect (name-of dex-val v) (just v)
         #/list k v)))
     
     (define (dex-internals-compare this a b)
-      (dissect this (dex-internals-table val-dex)
+      (dissect this (dex-internals-table dex-val)
       ; TODO: Currently, this calls `in-dex?` on each value of each
-      ; table (indirectly via these two `in-dex?` calls), and then if
-      ; they all succeed, it calls `compare-by-dex` on each one too
-      ; (up to the point, if any, where it exits early due to a
-      ; nonequal result). This could be doing some redundant
+      ; table (indirectly via these two `dex-internals-in?` calls),
+      ; and then if they all succeed, it calls `compare-by-dex` on
+      ; each one too (up to the point, if any, where it exits early
+      ; due to a nonequal result). This could be doing some redundant
       ; computation. See if we can optimize this.
-      #/if (not #/in-dex? this a) (nothing)
-      #/if (not #/in-dex? this b) (nothing)
+      #/if (not #/dex-internals-in? this a) (nothing)
+      #/if (not #/dex-internals-in? this b) (nothing)
       #/maybe-ordering-or
         (just #/lt-autodex (hash-count a) (hash-count b) <)
       #/w- a (table->sorted-list #/table-encapsulated a)
@@ -1803,15 +1803,15 @@
               (list-map a #/dissectfn (list k v) v)
               (list-map b #/dissectfn (list k v) v))
           #/dissectfn (list a b)
-            (compare-by-dex val-dex a b))
+            (compare-by-dex dex-val a b))
           (expect vals (cons maybe-dex-result vals)
             (just #/ordering-eq)
           #/maybe-ordering-or maybe-dex-result
           #/next vals))))
   ])
 
-(define/contract (dex-table) (-> dex?)
-  (dex-encapsulated #/dex-internals-table))
+(define/contract (dex-table dex-val) (-> dex? dex?)
+  (dex-encapsulated #/dex-internals-table dex-val))
 
 (struct-easy
   (furge-internals-table
