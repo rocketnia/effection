@@ -6,7 +6,7 @@
 
 (require rackunit)
 
-(require #/only-in lathe-comforts expect w-)
+(require #/only-in lathe-comforts expect fn w-)
 (require #/only-in lathe-comforts/maybe just just-value nothing)
 (require #/only-in lathe-comforts/struct struct-easy)
 
@@ -19,7 +19,7 @@
   #:other
   
   #:property prop:procedure
-  (lambda (this result)
+  (fn this result
     (expect this (mk-just1)
       (error "Expected this to be a mk-just1")
     #/just result))
@@ -28,7 +28,7 @@
   #:other
   
   #:property prop:procedure
-  (lambda (this result)
+  (fn this result
     (expect this (mk-just2)
       (error "Expected this to be a mk-just2")
     #/just result))
@@ -37,7 +37,7 @@
 
 (check-exn
   exn:fail:contract?
-  (lambda ()
+  (fn
     (compare-by-dex
       ; This dex compares any dex which has itself in its domain. The
       ; method of comparison (the dex) is obtained from the value by
@@ -54,7 +54,7 @@
 
 (check-exn
   exn:fail:contract?
-  (lambda ()
+  (fn
     (compare-by-cline
       ; This cline compares any cline which has itself in its domain.
       ; The method of comparison (the cline) is obtained from the

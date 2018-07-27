@@ -10,7 +10,7 @@
 (require #/for-syntax #/only-in syntax/parse expr id nat syntax-parse)
 
 (require #/for-syntax #/only-in lathe-comforts
-  dissect expect mat w- w-loop)
+  dissect expect fn mat w- w-loop)
 (require #/for-syntax #/only-in lathe-comforts/list
   list-all list-kv-map list-map)
 
@@ -166,13 +166,11 @@
           "not the root super-type in a structure type hierarchy, which in this case would be ~s"
           (syntax-e super)))
       stx id)
-  #/expect
-    (list-all getters #/lambda (getter) #/not #/eq? #f getter)
-    #t
+  #/expect (list-all getters #/fn getter #/not #/eq? #f getter) #t
     (raise-syntax-error #f
       "not a structure type with all of its getters available"
       stx id)
-  #/expect (list-all setters #/lambda (setter) #/eq? #f setter) #t
+  #/expect (list-all setters #/fn setter #/eq? #f setter) #t
     (raise-syntax-error #f
       "not an immutable structure type"
       stx id)
@@ -270,7 +268,7 @@
 (define descriptors-next-rank* 0)
 (define/contract (descriptor-rank descriptor)
   (-> struct-type? exact-nonnegative-integer?)
-  (call-with-semaphore descriptors-semaphore* #/lambda ()
+  (call-with-semaphore descriptors-semaphore* #/fn
     (if (hash-has-key? descriptors-to-ranks* descriptor)
       (hash-ref descriptors-to-ranks* descriptor)
     #/w- rank descriptors-next-rank*
@@ -302,7 +300,7 @@
     
     ; Handle the interned symbols.
     #/w- interned-symbol?
-      (lambda (x)
+      (fn x
         (and (symbol? x) (symbol-interned? x)))
     #/if (interned-symbol? a)
       (if (interned-symbol? b) (lt-autodex a b symbol<?)
@@ -361,18 +359,17 @@
       #:name 'dexableof
       
       #:first-order
-      (lambda (x)
+      (fn x
         (contract-first-order-passes?
-          (struct/c dexable any/c #/lambda (x)
+          (struct/c dexable any/c #/fn x
             (contract-first-order-passes? c x))
           x))
       
       #:projection
-      (lambda (b)
+      (fn b
         (w- c-projection ((contract-projection c) b)
-        #/lambda (x)
-          (dissect x (dexable dex x)
-          #/dexable dex #/c-projection x))))))
+        #/dissectfn (dexable dex x)
+          (dexable dex #/c-projection x))))))
 
 (define/contract (compare-dexables a b)
   (-> valid-dexable? valid-dexable? #/maybe/c dex-result?)
@@ -657,7 +654,7 @@
         (just
         #/struct-type-descriptors-autodex a-descriptor b-descriptor)
       #/maybe-compare-aligned-lists a-fields b-fields
-      #/lambda (a-field b-field)
+      #/fn a-field b-field
         (dissect a-field (list a-getter a-position a-dex)
         #/dissect b-field (list b-getter b-position b-dex)
         #/maybe-ordering-or
@@ -719,7 +716,7 @@
         #/next fields)))
   ])
 
-(define-syntax dex-struct-by-field-position #/lambda (stx)
+(define-syntax (dex-struct-by-field-position stx)
   (syntax-parse stx #/
     (_ struct-tag:id [field-position:nat field-dex:expr] ...)
   #/dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
@@ -736,7 +733,7 @@
   #/syntax-protect
     #`(internal:dex #/dex-internals-struct #,struct:foo #,foo?
       #/list
-        #,@(list-map fields #/lambda (field)
+        #,@(list-map fields #/fn field
              (dissect (desyntax-list field)
                (list position-stx dex)
              #/w- position (syntax-e position-stx)
@@ -757,7 +754,7 @@
                    #,position-stx
                    #,dex))))))
 
-(define-syntax dex-struct #/lambda (stx)
+(define-syntax (dex-struct stx)
   (syntax-parse stx #/ (_ struct-tag:id field-dex:expr ...)
   #/dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
     (list struct:foo make-foo foo? getters)
@@ -772,8 +769,7 @@
   #/syntax-protect
     #`(internal:dex #/dex-internals-struct #,struct:foo #,foo?
       #/list
-        #,@(list-kv-map (map list fields getters)
-           #/lambda (position field)
+        #,@(list-kv-map (map list fields getters) #/fn position field
              (dissect field (list dex getter)
                #`(list #,getter #,position #,dex))))))
 
@@ -969,7 +965,7 @@
   #:other
   
   #:property prop:procedure
-  (lambda (this x)
+  (fn this x
     (dissect this (convert-dex-from-cline-by-own-method get-method)
     #/expect (get-method x) (just result) (nothing)
     #/just #/get-dex-from-cline result)))
@@ -1034,7 +1030,7 @@
   #:other
   
   #:property prop:procedure
-  (lambda (this dex)
+  (fn this dex
     (dissect this (convert-dex-from-cline-fix unwrap)
     #/get-dex-from-cline #/unwrap #/cline-by-dex dex)))
 
@@ -1100,7 +1096,7 @@
         (just
         #/struct-type-descriptors-autodex a-descriptor b-descriptor)
       #/maybe-compare-aligned-lists a-fields b-fields
-      #/lambda (a-field b-field)
+      #/fn a-field b-field
         (dissect a-field (list a-getter a-position a-cline)
         #/dissect b-field (list b-getter b-position b-cline)
         #/maybe-ordering-or
@@ -1159,7 +1155,7 @@
         #/next fields)))
   ])
 
-(define-syntax cline-struct-by-field-position #/lambda (stx)
+(define-syntax (cline-struct-by-field-position stx)
   (syntax-parse stx #/
     (_ struct-tag:id [field-position:nat field-cline:expr] ...)
   #/dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
@@ -1176,7 +1172,7 @@
   #/syntax-protect
     #`(internal:cline #/cline-internals-struct #,struct:foo #,foo?
       #/list
-        #,@(list-map fields #/lambda (field)
+        #,@(list-map fields #/fn field
              (dissect (desyntax-list field)
                (list position-stx cline)
              #/w- position (syntax-e position-stx)
@@ -1197,7 +1193,7 @@
                    #,position-stx
                    #,cline))))))
 
-(define-syntax cline-struct #/lambda (stx)
+(define-syntax (cline-struct stx)
   (syntax-parse stx #/ (_ struct-tag:id field-cline:expr ...)
   #/dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
     (list struct:foo make-foo foo? getters)
@@ -1212,8 +1208,7 @@
   #/syntax-protect
     #`(internal:cline #/cline-internals-struct #,struct:foo #,foo?
       #/list
-        #,@(list-kv-map (map list fields getters)
-           #/lambda (position field)
+        #,@(list-kv-map (map list fields getters) #/fn position field
              (dissect field (list cline getter)
                #`(list #,getter #,position #,cline))))))
 
@@ -1522,7 +1517,7 @@
         (just
         #/struct-type-descriptors-autodex a-descriptor b-descriptor)
       #/maybe-compare-aligned-lists a-fields b-fields
-      #/lambda (a-field b-field)
+      #/fn a-field b-field
         (dissect a-field (list a-getter a-position a-furge)
         #/dissect b-field (list b-getter b-position b-furge)
         #/maybe-ordering-or
@@ -1538,8 +1533,7 @@
       #/w- n (length fields)
       #/w-loop next fields fields args (hasheq)
         (expect fields (cons field fields)
-          (apply constructor #/build-list n #/lambda (i)
-            (hash-ref args i))
+          (apply constructor #/build-list n #/fn i #/hash-ref args i)
         #/dissect field (list getter position furge)
         #/next fields
         #/hash-set args position
@@ -1570,7 +1564,7 @@
         #,autoname-furge-id #,dex-furge-id #,call-furge-id
         #,struct:foo #,make-foo #,foo?
       #/list
-        #,@(list-map fields #/lambda (field)
+        #,@(list-map fields #/fn field
              (dissect (desyntax-list field)
                (list position-stx furge)
              #/w- position (syntax-e position-stx)
@@ -1591,11 +1585,11 @@
                    #,position-stx
                    #,furge))))))
 
-(define-syntax merge-struct-by-field-position #/lambda (stx)
+(define-syntax (merge-struct-by-field-position stx)
   (expand-furge-struct-by-field-position stx "merges"
     #'internal:merge #'autoname-merge #'(dex-merge) #'call-merge))
 
-(define-syntax fuse-struct-by-field-position #/lambda (stx)
+(define-syntax (fuse-struct-by-field-position stx)
   (expand-furge-struct-by-field-position stx "fuses"
     #'internal:fuse #'autoname-fuse #'(dex-fuse) #'call-fuse))
 
@@ -1621,16 +1615,15 @@
         #,autoname-furge-id #,dex-furge-id #,call-furge-id
         #,struct:foo #,make-foo #,foo?
       #/list
-        #,@(list-kv-map (map list fields getters)
-           #/lambda (position field)
+        #,@(list-kv-map (map list fields getters) #/fn position field
              (dissect field (list furge getter)
                #`(list #,getter #,position #,furge))))))
 
-(define-syntax merge-struct #/lambda (stx)
+(define-syntax (merge-struct stx)
   (expand-furge-struct stx "merges"
     #'internal:merge #'autoname-merge #'(dex-merge) #'call-merge))
 
-(define-syntax fuse-struct #/lambda (stx)
+(define-syntax (fuse-struct stx)
   (expand-furge-struct stx "fuses"
     #'internal:fuse #'autoname-fuse #'(dex-fuse) #'call-fuse))
 
