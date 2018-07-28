@@ -17,7 +17,7 @@
 
 (require #/only-in racket/contract/base
   -> and/c any any/c chaperone-contract? contract? contract-projection
-  list/c listof struct/c)
+  struct/c)
 (require #/only-in racket/contract/combinator
   contract-first-order-passes? make-contract)
 (require #/only-in racket/contract/region define/contract)
@@ -33,6 +33,17 @@
   just maybe? maybe-bind maybe/c nothing nothing?)
 (require #/only-in lathe-comforts/struct struct-easy)
 
+(require #/only-in effection/order/private
+  dex-result? lt-autodex names-autodex make-ordering-private-gt
+  make-ordering-private-lt -ordering-private?
+  struct-type-descriptors-autodex
+  
+  struct:ordering-eq ordering-eq ordering-eq?
+  
+  struct:ordering-gt ordering-gt ordering-gt?
+  
+  struct:ordering-lt ordering-lt ordering-lt?
+  )
 (require #/prefix-in internal: #/only-in effection/order/unsafe
   cline cline? cline-internals-autodex cline-internals-autoname
   cline-internals-compare cline-internals-dex cline-internals-in?
@@ -41,7 +52,7 @@
   dex-internals-tag dex-internals-name-of furge-internals-autodex
   furge-internals-autoname furge-internals-call furge-internals-tag
   fuse fuse? gen:cline-internals gen:dex-internals gen:furge-internals
-  merge merge? name name?)
+  merge merge? name name? table table? table->sorted-list)
 
 
 ; ==== Orderings ====
@@ -49,7 +60,8 @@
 (provide #/struct-out ordering-lt)
 (provide #/struct-out ordering-eq)
 (provide #/struct-out ordering-gt)
-(provide ordering-private? dex-result? cline-result?)
+(provide #/rename-out [-ordering-private? ordering-private?])
+(provide dex-result? cline-result?)
 (provide make-ordering-private-lt make-ordering-private-gt)
 
 
@@ -185,58 +197,14 @@
 
 ; ===== Orderings ====================================================
 
-(struct-easy (ordering-lt) #:equal)
-(struct-easy (ordering-eq) #:equal)
-(struct-easy (ordering-gt) #:equal)
-
-; NOTE: We used to expose this as two structs, namely
-; `ordering-private-lt` and `ordering-private-gt`, but that approach
-; had a problem: Using `struct->vector`, Racket code can detect which
-; is which without even going to the trouble of writing the values to
-; a text stream.
-(struct-easy (ordering-private-encapsulated ordering))
-
-(define/contract (ordering-private? x)
-  (-> any/c boolean?)
-  (ordering-private-encapsulated? x))
-
-(define/contract (dex-result? x)
-  (-> any/c boolean?)
-  (or (ordering-private? x) (ordering-eq? x)))
-
 (define/contract (cline-result? x)
   (-> any/c boolean?)
   (or (dex-result? x) (ordering-lt? x) (ordering-gt? x)))
-
-; NOTE: We make these procedures because if we provided them as bare
-; values, we would encourage people to write code that appeared to
-; keep the ordering private but actually exposed it to a simple `eq?`
-; check. Of course, Effection-unsafe Racket code can still compare
-; these values by writing them to streams and observing the data
-; that's written this way, but at least that's harder to do by
-; accident.
-(define/contract (make-ordering-private-lt)
-  (-> ordering-private?)
-  (ordering-private-encapsulated #/ordering-lt))
-(define/contract (make-ordering-private-gt)
-  (-> ordering-private?)
-  (ordering-private-encapsulated #/ordering-gt))
-
-(define-simple-macro (ordering-or first:expr second:expr)
-  (w- result first
-  #/expect result (ordering-eq) result
-    second))
 
 (define-simple-macro (maybe-ordering-or first:expr second:expr)
   (w- result first
   #/expect result (just #/ordering-eq) result
     second))
-
-(define/contract (lt-autodex a b <?)
-  (-> any/c any/c (-> any/c any/c boolean?) dex-result?)
-  (if (<? a b) (make-ordering-private-lt)
-  #/if (<? b a) (make-ordering-private-gt)
-  #/ordering-eq))
 
 (define/contract (lt-autocline a b <?)
   (-> any/c any/c (-> any/c any/c boolean?) dex-result?)
@@ -256,65 +224,6 @@
 (define/contract (name? x)
   (-> any/c boolean?)
   (internal:name? x))
-
-; TODO: Test this implementation very thoroughly. We need to know what
-; happens when this module is used through diamond dependencies, what
-; happens if this module is somehow visited more than once, and that
-; kind of thing. We probably won't be able to guarantee struct type
-; descriptors will be sorted the same way in every phase, but we can
-; at least document why not.
-(define descriptors-semaphore* (make-semaphore 1))
-(define descriptors-to-ranks* (make-weak-hasheq))
-(define descriptors-next-rank* 0)
-(define/contract (descriptor-rank descriptor)
-  (-> struct-type? exact-nonnegative-integer?)
-  (call-with-semaphore descriptors-semaphore* #/fn
-    (if (hash-has-key? descriptors-to-ranks* descriptor)
-      (hash-ref descriptors-to-ranks* descriptor)
-    #/w- rank descriptors-next-rank*
-      (hash-set! descriptors-to-ranks* descriptor rank)
-      (set! descriptors-next-rank* (add1 rank))
-      rank)))
-(define/contract (struct-type-descriptors-autodex a b)
-  (-> struct-type? struct-type? dex-result?)
-  (lt-autodex (descriptor-rank a) (descriptor-rank b) <))
-
-(define/contract (names-autodex a b)
-  (-> name? name? dex-result?)
-  (dissect a (internal:name a)
-  #/dissect b (internal:name b)
-  #/w-loop next a a b b
-    
-    ; Handle the cons cells.
-    (mat a (cons a-first a-rest)
-      (mat b (cons b-first b-rest)
-        (ordering-or (next a-first b-first) (next a-rest b-rest))
-      #/make-ordering-private-gt)
-    #/mat b (cons b-first b-rest) (make-ordering-private-lt)
-    
-    ; Handle the empty lists.
-    #/mat a (list)
-      (mat b (list) (ordering-eq)
-      #/make-ordering-private-gt)
-    #/mat b (list) (make-ordering-private-lt)
-    
-    ; Handle the interned symbols.
-    #/w- interned-symbol?
-      (fn x
-        (and (symbol? x) (symbol-interned? x)))
-    #/if (interned-symbol? a)
-      (if (interned-symbol? b) (lt-autodex a b symbol<?)
-      #/make-ordering-private-gt)
-    #/if (interned-symbol? b) (make-ordering-private-lt)
-    
-    ; Handle the exact nonnegative integers.
-    #/if (exact-nonnegative-integer? a)
-      (if (exact-nonnegative-integer? b) (lt-autodex a b <)
-      #/make-ordering-private-gt)
-    #/if (exact-nonnegative-integer? b) (make-ordering-private-lt)
-    
-    ; Handle the structure type descriptors.
-    #/struct-type-descriptors-autodex a b)))
 
 
 (define/contract (dex? x)
@@ -1631,31 +1540,29 @@
 
 ; ===== Tables =======================================================
 
-(struct-easy (table-encapsulated hash))
-
 (define/contract (table? x)
   (-> any/c boolean?)
-  (table-encapsulated? x))
+  (internal:table? x))
 
 (define/contract (table-get key table)
   (-> name? table? maybe?)
   (dissect key (internal:name key)
-  #/dissect table (table-encapsulated hash)
+  #/dissect table (internal:table hash)
   #/hash-ref-maybe hash key))
 
 (define/contract (table-empty)
   (-> table?)
-  (table-encapsulated #/hash))
+  (internal:table #/hash))
 
 (define/contract (table-shadow key maybe-val table)
   (-> name? maybe? table? table?)
   (dissect key (internal:name key)
-  #/dissect table (table-encapsulated hash)
-  #/table-encapsulated #/hash-set-maybe hash key maybe-val))
+  #/dissect table (internal:table hash)
+  #/internal:table #/hash-set-maybe hash key maybe-val))
 
 (define/contract (table-map-fuse table fuse key-to-operand)
   (-> table? fuse? (-> name? any/c) maybe?)
-  (dissect table (table-encapsulated hash)
+  (dissect table (internal:table hash)
   #/w- operands
     (list-map (hash-keys hash) #/fn key
       (key-to-operand #/internal:name key))
@@ -1674,22 +1581,6 @@
     (expect operands (cons operand operands) (just so-far)
     #/maybe-bind (call-fuse fuse so-far operand) #/fn so-far
     #/next so-far operands)))
-
-(define/contract (table->sorted-list table)
-  (-> table? #/listof #/list/c name? any/c)
-  (dissect table (table-encapsulated hash)
-  #/list-map
-    (sort (hash->list hash) #/fn a b
-      (dissect a (cons ak av)
-      #/dissect b (cons bk bv)
-      #/w- dex-result
-        (names-autodex (internal:name ak) (internal:name bk))
-      #/mat dex-result (ordering-lt) #t
-      #/mat dex-result (ordering-private-encapsulated #/ordering-lt)
-        #t
-        #f))
-  #/dissectfn (cons k v)
-    (list (internal:name k) v)))
 
 (struct-easy (dex-internals-table dex-val)
   #:other
@@ -1711,7 +1602,7 @@
     
     (define (dex-internals-in? this x)
       (dissect this (dex-internals-table dex-val)
-      #/expect x (table-encapsulated x) #f
+      #/expect x (internal:table x) #f
       #/hash-v-all x #/fn val
         (in-dex? dex-val val)))
     
@@ -1729,7 +1620,8 @@
       ; optimize this.
       #/if (not #/internal:dex-internals-in? this x) (nothing)
       #/just #/internal:name #/cons 'name:table
-      #/list-bind (table->sorted-list x) #/dissectfn (list k v)
+      #/list-bind (internal:table->sorted-list x)
+      #/dissectfn (list k v)
         (dissect (name-of dex-val v) (just v)
         #/list k v)))
     
@@ -1745,8 +1637,8 @@
       #/if (not #/internal:dex-internals-in? this b) (nothing)
       #/maybe-ordering-or
         (just #/lt-autodex (hash-count a) (hash-count b) <)
-      #/w- a (table->sorted-list #/table-encapsulated a)
-      #/w- b (table->sorted-list #/table-encapsulated b)
+      #/w- a (internal:table->sorted-list #/internal:table a)
+      #/w- b (internal:table->sorted-list #/internal:table b)
       #/maybe-ordering-or
         (w-loop next
           keys
@@ -1802,8 +1694,8 @@
     
     (define (furge-internals-call this a b)
       (dissect this (furge-internals-table _ _ call-furge furge-val)
-      #/expect a (table-encapsulated a) (nothing)
-      #/expect b (table-encapsulated b) (nothing)
+      #/expect a (internal:table a) (nothing)
+      #/expect b (internal:table b) (nothing)
       ; NOTE: We run `call-furge` on all the entries to detect if any
       ; of them is outside the furge's domain.
       #/w- a (hash-v-map a #/fn v #/call-furge furge-val v v)
@@ -1816,7 +1708,7 @@
           #/maybe-bind b #/fn b
           #/call-furge furge-val a b))
       #/if (hash-v-any furged #/fn v #/nothing? v) (nothing)
-      #/just #/table-encapsulated
+      #/just #/internal:table
       #/hash-v-map furged #/dissectfn (just v) v))
   ])
 

@@ -1,9 +1,24 @@
 #lang parendown racket/base
 
 
+(require #/only-in racket/contract/base -> any/c list/c listof)
+(require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/generic define-generics)
 
+(require #/only-in lathe-comforts dissect dissectfn fn mat w-)
+(require #/only-in lathe-comforts/list list-map)
 (require #/only-in lathe-comforts/struct struct-easy)
+
+(require #/only-in effection/order/private
+  names-autodex ordering-lt
+  
+  struct:name name name? name-rep
+  
+  struct:ordering-private ordering-private ordering-private?
+  ordering-private-ordering)
+
+
+(provide #/struct-out ordering-private)
 
 (provide #/struct-out name)
 
@@ -36,20 +51,19 @@
 (provide #/struct-out merge)
 (provide #/struct-out fuse)
 
+(provide #/struct-out table)
+
+(provide table->sorted-list)
 
 
-; ==== Names, dexes, and dexables ====
 
-; Internally, we represent name values as data made of structure type
-; descriptors, exact nonnegative integers, interned symbols, empty
-; lists, and cons cells, and for sorting purposes, we consider them to
-; ascend in that order.
-;
-; This is the struct type we "encapsulate" that in, but we offer it as
-; an unsafe export.
-;
-(struct-easy (name rep)
-  #:error-message-phrase "a name")
+; ===== Orderings ====================================================
+
+; NOTE: We define `ordering-private` in `effection/order/private`, but
+; we re-export it here.
+
+
+; ===== Names, dexes, and dexables ===================================
 
 (define-generics dex-internals
   (dex-internals-tag dex-internals)
@@ -85,3 +99,22 @@
 
 (struct-easy (merge internals))
 (struct-easy (fuse internals))
+
+
+; ===== Tables =======================================================
+
+(struct-easy (table hash))
+
+(define/contract (table->sorted-list tab)
+  (-> table? #/listof #/list/c name? any/c)
+  (dissect tab (table hash)
+  #/list-map
+    (sort (hash->list hash) #/fn a b
+      (dissect a (cons ak av)
+      #/dissect b (cons bk bv)
+      #/w- dex-result (names-autodex (name ak) (name bk))
+      #/mat dex-result (ordering-lt) #t
+      #/mat dex-result (ordering-private #/ordering-lt) #t
+        #f))
+  #/dissectfn (cons k v)
+    (list (name k) v)))
