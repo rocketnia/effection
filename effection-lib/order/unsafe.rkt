@@ -1,7 +1,7 @@
 #lang parendown racket/base
 
 
-(require #/only-in racket/contract/base -> any/c list/c listof)
+(require #/only-in racket/contract/base -> any any/c list/c listof)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/generic define-generics)
 
@@ -31,6 +31,7 @@
   dex-internals-name-of
   dex-internals-compare)
 (provide #/struct-out dex)
+(provide autoname-dex)
 
 (provide
   gen:cline-internals
@@ -74,6 +75,11 @@
   (dex-internals-compare dex-internals a b))
 
 (struct-easy (dex internals))
+
+(define/contract (autoname-dex d)
+  (-> dex? any)
+  (dissect d (dex internals)
+  #/cons 'name:dex #/dex-internals-autoname internals))
 
 
 ; ===== Clines =======================================================
