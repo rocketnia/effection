@@ -45,15 +45,15 @@
   struct:ordering-lt ordering-lt ordering-lt?
   )
 (require #/prefix-in internal: #/only-in effection/order/unsafe
-  autoname-dex cline cline? cline-internals-autodex
-  cline-internals-autoname cline-internals-compare cline-internals-dex
-  cline-internals-in? cline-internals-tag dex dex?
-  dex-internals-autodex dex-internals-autoname dex-internals-compare
-  dex-internals-in? dex-internals-tag dex-internals-name-of
-  furge-internals-autodex furge-internals-autoname
-  furge-internals-call furge-internals-tag fuse fuse?
-  gen:cline-internals gen:dex-internals gen:furge-internals merge
-  merge? name name? table table? table->sorted-list)
+  autoname-cline autoname-dex autoname-fuse autoname-merge cline
+  cline? cline-internals-autodex cline-internals-autoname
+  cline-internals-compare cline-internals-dex cline-internals-in?
+  cline-internals-tag dex dex? dex-internals-autodex
+  dex-internals-autoname dex-internals-compare dex-internals-in?
+  dex-internals-tag dex-internals-name-of furge-internals-autodex
+  furge-internals-autoname furge-internals-call furge-internals-tag
+  fuse fuse? gen:cline-internals gen:dex-internals gen:furge-internals
+  merge merge? name name? table table? table->sorted-list)
 
 
 ; ==== Orderings ====
@@ -688,11 +688,6 @@
   (-> any/c boolean?)
   (internal:cline? x))
 
-(define/contract (autoname-cline cline)
-  (-> cline? any)
-  (dissect cline (internal:cline internals)
-  #/cons 'name:cline #/internal:cline-internals-autoname internals))
-
 (define/contract (get-dex-from-cline cline)
   (-> cline? dex?)
   (dissect cline (internal:cline internals)
@@ -729,7 +724,7 @@
     
     (define (dex-internals-name-of this x)
       (if (cline? x)
-        (just #/internal:name #/autoname-cline x)
+        (just #/internal:name #/internal:autoname-cline x)
         (nothing)))
     
     (define (dex-internals-compare this a b)
@@ -824,8 +819,8 @@
     (define (cline-internals-autoname this)
       (dissect this (cline-internals-default first second)
       #/list 'tag:cline-default
-        (autoname-cline first)
-        (autoname-cline second)))
+        (internal:autoname-cline first)
+        (internal:autoname-cline second)))
     
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-default a1 a2)
@@ -994,7 +989,7 @@
       (dissect this (cline-internals-struct descriptor counts? fields)
       #/list* 'tag:cline-struct-by-field-position descriptor
       #/list-map fields #/dissectfn (list getter position cline)
-        (list position #/autoname-cline cline)))
+        (list position #/internal:autoname-cline cline)))
     
     (define (cline-internals-autodex this other)
       (dissect this
@@ -1129,11 +1124,6 @@
   (-> any/c boolean?)
   (internal:merge? x))
 
-(define/contract (autoname-merge merge)
-  (-> merge? any)
-  (dissect merge (internal:merge internals)
-  #/cons 'name:merge #/internal:furge-internals-autoname internals))
-
 (define/contract (call-merge merge a b)
   (-> merge? any/c any/c maybe?)
   (dissect merge (internal:merge internals)
@@ -1142,11 +1132,6 @@
 (define/contract (fuse? x)
   (-> any/c boolean?)
   (internal:fuse? x))
-
-(define/contract (autoname-fuse fuse)
-  (-> fuse? any)
-  (dissect fuse (internal:fuse internals)
-  #/cons 'name:fuse #/internal:furge-internals-autoname internals))
 
 (define/contract (call-fuse fuse a b)
   (-> fuse? any/c any/c maybe?)
@@ -1174,7 +1159,7 @@
     
     (define (dex-internals-name-of this x)
       (if (merge? x)
-        (just #/internal:name #/autoname-merge x)
+        (just #/internal:name #/internal:autoname-merge x)
         (nothing)))
     
     (define (dex-internals-compare this a b)
@@ -1209,7 +1194,7 @@
     
     (define (dex-internals-name-of this x)
       (if (fuse? x)
-        (just #/internal:name #/autoname-fuse x)
+        (just #/internal:name #/internal:autoname-fuse x)
         (nothing)))
     
     (define (dex-internals-compare this a b)
@@ -1235,7 +1220,7 @@
     
     (define (furge-internals-autoname this)
       (dissect this (fuse-internals-by-merge merge)
-      #/list 'tag:fuse-by-merge #/autoname-merge merge))
+      #/list 'tag:fuse-by-merge #/internal:autoname-merge merge))
     
     (define (furge-internals-autodex this other)
       (dissect this (fuse-internals-by-merge a)
@@ -1498,11 +1483,13 @@
 
 (define-syntax (merge-struct-by-field-position stx)
   (expand-furge-struct-by-field-position stx "merges"
-    #'internal:merge #'autoname-merge #'(dex-merge) #'call-merge))
+    #'internal:merge #'internal:autoname-merge #'(dex-merge)
+    #'call-merge))
 
 (define-syntax (fuse-struct-by-field-position stx)
   (expand-furge-struct-by-field-position stx "fuses"
-    #'internal:fuse #'autoname-fuse #'(dex-fuse) #'call-fuse))
+    #'internal:fuse #'internal:autoname-fuse #'(dex-fuse)
+    #'call-fuse))
 
 (define-for-syntax
   (expand-furge-struct
@@ -1532,11 +1519,13 @@
 
 (define-syntax (merge-struct stx)
   (expand-furge-struct stx "merges"
-    #'internal:merge #'autoname-merge #'(dex-merge) #'call-merge))
+    #'internal:merge #'internal:autoname-merge #'(dex-merge)
+    #'call-merge))
 
 (define-syntax (fuse-struct stx)
   (expand-furge-struct stx "fuses"
-    #'internal:fuse #'autoname-fuse #'(dex-fuse) #'call-fuse))
+    #'internal:fuse #'internal:autoname-fuse #'(dex-fuse)
+    #'call-fuse))
 
 
 
@@ -1717,9 +1706,9 @@
 (define/contract (merge-table merge-val)
   (-> merge? merge?)
   (internal:merge #/furge-internals-table
-    autoname-merge (dex-merge) call-merge merge-val))
+    internal:autoname-merge (dex-merge) call-merge merge-val))
 
 (define/contract (fuse-table fuse-val)
   (-> fuse? fuse?)
   (internal:fuse #/furge-internals-table
-    autoname-fuse (dex-fuse) call-fuse fuse-val))
+    internal:autoname-fuse (dex-fuse) call-fuse fuse-val))

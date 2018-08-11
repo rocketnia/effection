@@ -42,6 +42,7 @@
   cline-internals-in?
   cline-internals-compare)
 (provide #/struct-out cline)
+(provide autoname-cline)
 
 (provide
   gen:furge-internals
@@ -51,6 +52,8 @@
   furge-internals-call)
 (provide #/struct-out merge)
 (provide #/struct-out fuse)
+(provide autoname-merge)
+(provide autoname-fuse)
 
 (provide #/struct-out table)
 
@@ -76,9 +79,9 @@
 
 (struct-easy (dex internals))
 
-(define/contract (autoname-dex d)
+(define/contract (autoname-dex x)
   (-> dex? any)
-  (dissect d (dex internals)
+  (dissect x (dex internals)
   #/cons 'name:dex #/dex-internals-autoname internals))
 
 
@@ -94,6 +97,11 @@
 
 (struct-easy (cline internals))
 
+(define/contract (autoname-cline x)
+  (-> cline? any)
+  (dissect x (cline internals)
+  #/cons 'name:cline #/cline-internals-autoname internals))
+
 
 ; ===== Merges and fuses =============================================
 
@@ -105,6 +113,16 @@
 
 (struct-easy (merge internals))
 (struct-easy (fuse internals))
+
+(define/contract (autoname-merge x)
+  (-> merge? any)
+  (dissect x (merge internals)
+  #/cons 'name:merge #/furge-internals-autoname internals))
+
+(define/contract (autoname-fuse x)
+  (-> fuse? any)
+  (dissect x (fuse internals)
+  #/cons 'name:fuse #/furge-internals-autoname internals))
 
 
 ; ===== Tables =======================================================
