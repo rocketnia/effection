@@ -49,6 +49,8 @@ The “secretly precedes” and “secretly follows” cases are indistinguishab
 
 A “dex” is like a cline, but it never results in the “candidly precedes” and “candidly follows” cases. Thus, a dex is useful as a kind of equality test.
 
+All the exports of @tt{effection/order/base} are also exported by @racketmodname[effection/order].
+
 
 @subsection[#:tag "orderings"]{Orderings}
 
@@ -504,4 +506,22 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
   Returns a merge/fuse that combines tables by collecting all the nonoverlapping entries and combining the overlapping entries using the given @racket[merge-val]/@racket[fuse-val].
   
   When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-table}/@tt{fuse-table} values are @racket[ordering-eq] if their @racket[merge-val]/@racket[fuse-val] values are.
+}
+
+
+@subsection[#:tag "other-data"]{Operations for Other Data Types}
+
+@defmodule[effection/order]
+
+The @tt{effection/order} module exports all the definitions of @racketmodname[effection/order/base] plus the definitions below.
+
+@defproc[(dex-immutable-string) dex?]{
+  Returns a dex that compares immutable strings.
+}
+
+@defproc[(cline-immutable-string) cline?]{
+  Returns a cline that compares immutable strings by their
+  @racket[string<?] ordering.
+  
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to @racket[(dex-immutable-string)].
 }

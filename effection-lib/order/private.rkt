@@ -63,6 +63,12 @@
   #/if (<? b a) (make-ordering-private-gt)
   #/ordering-eq))
 
+(define/contract (lt-autocline a b <?)
+  (-> any/c any/c (-> any/c any/c boolean?) dex-result?)
+  (if (<? a b) (ordering-lt)
+  #/if (<? b a) (ordering-gt)
+  #/ordering-eq))
+
 
 ; ===== Names, dexes, and dexables ===================================
 

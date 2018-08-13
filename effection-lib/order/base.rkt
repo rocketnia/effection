@@ -207,12 +207,6 @@
   #/expect result (just #/ordering-eq) result
     second))
 
-(define/contract (lt-autocline a b <?)
-  (-> any/c any/c (-> any/c any/c boolean?) dex-result?)
-  (if (<? a b) (ordering-lt)
-  #/if (<? b a) (ordering-gt)
-  #/ordering-eq))
-
 (define (maybe-compare-aligned-lists as bs maybe-compare-elems)
   (expect (list as bs) (list (cons a as) (cons b bs))
     (just #/ordering-eq)
@@ -1405,10 +1399,10 @@
     (define (furge-internals-autodex this other)
       (dissect this
         (furge-internals-struct
-          _ dex-furge _ a-descriptor a-constructor a-counts? a-fields)
+          _ dex-furge _ a-descriptor _ _ a-fields)
       #/dissect other
         (furge-internals-struct
-          _ _ _ b-descriptor a-constructor b-counts? b-fields)
+          _ _ _ b-descriptor _ _ b-fields)
       #/maybe-ordering-or
         (just
         #/struct-type-descriptors-autodex a-descriptor b-descriptor)
