@@ -5,6 +5,7 @@
 
 (require #/only-in lathe-comforts expect)
 (require #/only-in lathe-comforts/maybe just nothing)
+(require #/only-in lathe-comforts/string immutable-string?)
 (require #/only-in lathe-comforts/struct struct-easy)
 
 (require effection/order/base)
@@ -18,10 +19,6 @@
   dex-immutable-string
   cline-immutable-string)
 
-
-(define/contract (immutable-string? v)
-  (-> any/c boolean?)
-  (and (string? v) (immutable? v)))
 
 (struct-easy (dex-internals-immutable-string)
   
