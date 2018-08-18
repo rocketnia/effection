@@ -9,7 +9,8 @@
 (require #/only-in lathe-comforts/struct struct-easy)
 
 (require effection/order/base)
-(require #/only-in effection/order/private lt-autocline lt-autodex)
+(require #/only-in effection/order/private
+  exact-rational? lt-autocline lt-autodex)
 (require #/prefix-in internal: #/only-in effection/order/unsafe
   cline dex gen:cline-internals gen:dex-internals name)
 
@@ -17,72 +18,96 @@
 
 (provide
   dex-immutable-string
-  cline-immutable-string)
+  cline-immutable-string
+  dex-exact-rational
+  cline-exact-rational)
 
 
-(struct-easy (dex-internals-immutable-string)
-  
-  #:other
-  
-  #:methods internal:gen:dex-internals
-  [
+(define-syntax-rule
+  (define-datum-cline
+    dex-internals-id dex-id tag:dex-id
+    cline-internals-id cline-id tag:cline-id
+    name:id id? id<?)
+  (begin
+    (struct-easy (dex-internals-id)
+      
+      #:other
+      
+      #:methods internal:gen:dex-internals
+      [
+        
+        (define (dex-internals-tag this)
+          'tag:dex-id)
+        
+        (define (dex-internals-autoname this)
+          'tag:dex-id)
+        
+        (define (dex-internals-autodex this other)
+          (just #/ordering-eq))
+        
+        (define (dex-internals-in? this x)
+          (id? x))
+        
+        (define (dex-internals-name-of this x)
+          (if (id? x)
+            (just #/internal:name
+            #/list 'name:id #/string->symbol x)
+            (nothing)))
+        
+        (define (dex-internals-compare this a b)
+          (expect (id? a) #t (nothing)
+          #/expect (id? b) #t (nothing)
+          #/just #/lt-autodex a b string<?))
+      ])
     
-    (define (dex-internals-tag this)
-      'tag:dex-immutable-string)
+    (define/contract (dex-id)
+      (-> dex?)
+      (internal:dex #/dex-internals-id))
     
-    (define (dex-internals-autoname this)
-      'tag:dex-immutable-string)
     
-    (define (dex-internals-autodex this other)
-      (just #/ordering-eq))
+    (struct-easy (cline-internals-id)
+      #:other
+      
+      #:methods internal:gen:cline-internals
+      [
+        
+        (define (cline-internals-tag this)
+          'tag:cline-id)
+        
+        (define (cline-internals-autoname this)
+          'tag:cline-id)
+        
+        (define (cline-internals-autodex this other)
+          (just #/ordering-eq))
+        
+        (define (cline-internals-dex this)
+          (dex-id))
+        
+        (define (cline-internals-in? this x)
+          (id? x))
+        
+        (define (cline-internals-compare this a b)
+          (expect (id? a) #t (nothing)
+          #/expect (id? b) #t (nothing)
+          #/just #/lt-autocline a b string<?))
+      ])
     
-    (define (dex-internals-in? this x)
-      (immutable-string? x))
-    
-    (define (dex-internals-name-of this x)
-      (if (immutable-string? x)
-        (just #/internal:name
-        #/list 'name:immutable-string #/string->symbol x)
-        (nothing)))
-    
-    (define (dex-internals-compare this a b)
-      (expect (immutable-string? a) #t (nothing)
-      #/expect (immutable-string? b) #t (nothing)
-      #/just #/lt-autodex a b string<?))
-  ])
+    (define/contract (cline-id)
+      (-> cline?)
+      (internal:cline #/cline-internals-id))
+  ))
 
-(define/contract (dex-immutable-string)
-  (-> dex?)
-  (internal:dex #/dex-internals-immutable-string))
 
+(define-datum-cline
+  dex-internals-immutable-string dex-immutable-string
+  tag:dex-immutable-string
+  cline-internals-immutable-string cline-immutable-string
+  tag:cline-immutable-string
+  name:immutable-string immutable-string? string<?)
 
-(struct-easy (cline-internals-immutable-string)
-  #:other
-  
-  #:methods internal:gen:cline-internals
-  [
-    
-    (define (cline-internals-tag this)
-      'tag:cline-immutable-string)
-    
-    (define (cline-internals-autoname this)
-      'tag:cline-immutable-string)
-    
-    (define (cline-internals-autodex this other)
-      (just #/ordering-eq))
-    
-    (define (cline-internals-dex this)
-      (dex-immutable-string))
-    
-    (define (cline-internals-in? this x)
-      (immutable-string? x))
-    
-    (define (cline-internals-compare this a b)
-      (expect (immutable-string? a) #t (nothing)
-      #/expect (immutable-string? b) #t (nothing)
-      #/just #/lt-autocline a b string<?))
-  ])
-
-(define/contract (cline-immutable-string)
-  (-> cline?)
-  (internal:cline #/cline-internals-immutable-string))
+(define-datum-cline
+  dex-internals-exact-rational dex-exact-rational
+  tag:dex-exact-rational
+  cline-internals-exact-rational cline-exact-rational
+  tag:cline-exact-rational
+  name:exact-rational exact-rational? <)

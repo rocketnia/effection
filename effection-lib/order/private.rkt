@@ -73,9 +73,9 @@
 ; ===== Names, dexes, and dexables ===================================
 
 ; Internally, we represent name values as data made of structure type
-; descriptors, exact nonnegative integers, interned symbols, empty
-; lists, and cons cells, and for sorting purposes, we consider them to
-; ascend in that order.
+; descriptors, exact rational numbers, interned symbols, empty lists,
+; and cons cells. For sorting purposes, we consider them to ascend in
+; that order.
 ;
 ; This is the struct type we "encapsulate" that in, but we offer it as
 ; an unsafe export.
@@ -105,6 +105,10 @@
   (-> struct-type? struct-type? dex-result?)
   (lt-autodex (descriptor-rank a) (descriptor-rank b) <))
 
+(define/contract (exact-rational? v)
+  (-> any/c boolean?)
+  (and (rational? v) (exact? v)))
+
 (define/contract (names-autodex a b)
   (-> name? name? dex-result?)
   (dissect a (name a)
@@ -133,11 +137,11 @@
       #/make-ordering-private-gt)
     #/if (interned-symbol? b) (make-ordering-private-lt)
     
-    ; Handle the exact nonnegative integers.
-    #/if (natural? a)
-      (if (natural? b) (lt-autodex a b <)
+    ; Handle the exact rational numbers.
+    #/if (exact-rational? a)
+      (if (exact-rational? b) (lt-autodex a b <)
       #/make-ordering-private-gt)
-    #/if (natural? b) (make-ordering-private-lt)
+    #/if (exact-rational? b) (make-ordering-private-lt)
     
     ; Handle the structure type descriptors.
     #/struct-type-descriptors-autodex a b)))
