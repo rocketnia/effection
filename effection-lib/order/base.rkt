@@ -1423,11 +1423,12 @@
       #/w- n (length fields)
       #/w-loop next fields fields args (hasheq)
         (expect fields (cons field fields)
-          (apply constructor #/build-list n #/fn i #/hash-ref args i)
+          (just
+          #/apply constructor #/build-list n #/fn i #/hash-ref args i)
         #/dissect field (list getter position furge)
-        #/next fields
-        #/hash-set args position
-          (call-furge furge (getter a) (getter b)))))
+        #/maybe-bind (call-furge furge (getter a) (getter b))
+        #/fn furged
+        #/next fields #/hash-set args position furged)))
   ])
 
 (define-for-syntax
