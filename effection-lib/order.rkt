@@ -12,7 +12,8 @@
 (require #/only-in effection/order/private
   exact-rational? lt-autocline lt-autodex)
 (require #/prefix-in internal: #/only-in effection/order/unsafe
-  cline dex gen:cline-internals gen:dex-internals name)
+  cline dex fuse gen:cline-internals gen:dex-internals
+  gen:furge-internals name)
 
 (provide #/all-from-out effection/order/base)
 
@@ -20,7 +21,9 @@
   dex-immutable-string
   cline-immutable-string
   dex-exact-rational
-  cline-exact-rational)
+  cline-exact-rational
+  fuse-exact-rational-by-plus
+  fuse-exact-rational-by-times)
 
 
 (define-syntax-rule
@@ -111,3 +114,55 @@
   cline-internals-exact-rational cline-exact-rational
   tag:cline-exact-rational
   name:exact-rational exact-rational? <)
+
+
+(struct-easy (fuse-internals-exact-rational-by-plus)
+  #:other
+  
+  #:methods internal:gen:furge-internals
+  [
+    
+    (define (furge-internals-tag this)
+      'tag:fuse-exact-rational-by-plus)
+    
+    (define (furge-internals-autoname this)
+      'tag:fuse-exact-rational-by-plus)
+    
+    (define (furge-internals-autodex this other)
+      (just #/ordering-eq))
+    
+    (define (furge-internals-call this a b)
+      (expect (exact-rational? a) #t (nothing)
+      #/expect (exact-rational? b) #t (nothing)
+      #/just #/+ a b))
+  ])
+
+(define/contract (fuse-exact-rational-by-plus)
+  (-> fuse?)
+  (internal:fuse #/fuse-internals-exact-rational-by-plus))
+
+
+(struct-easy (fuse-internals-exact-rational-by-times)
+  #:other
+  
+  #:methods internal:gen:furge-internals
+  [
+    
+    (define (furge-internals-tag this)
+      'tag:fuse-exact-rational-by-times)
+    
+    (define (furge-internals-autoname this)
+      'tag:fuse-exact-rational-by-times)
+    
+    (define (furge-internals-autodex this other)
+      (just #/ordering-eq))
+    
+    (define (furge-internals-call this a b)
+      (expect (exact-rational? a) #t (nothing)
+      #/expect (exact-rational? b) #t (nothing)
+      #/just #/* a b))
+  ])
+
+(define/contract (fuse-exact-rational-by-times)
+  (-> fuse?)
+  (internal:fuse #/fuse-internals-exact-rational-by-times))

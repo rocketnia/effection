@@ -536,3 +536,11 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to @racket[(dex-exact-rational)].
 }
+
+@defproc[(fuse-exact-rational-by-plus) fuse?]{
+  Returns a fuse that fuses exact rational numbers using @racket[+].
+}
+
+@defproc[(fuse-exact-rational-by-times) fuse?]{
+  Returns a fuse that fuses exact rational numbers using @racket[*].
+}
