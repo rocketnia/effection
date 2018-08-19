@@ -12,6 +12,11 @@
 (require #/only-in lathe-comforts expect dissect fn mat w- w-loop)
 (require #/only-in lathe-comforts/struct struct-easy)
 
+(require #/prefix-in internal: #/only-in
+  effection/order/private/unsafe
+  
+  name name? ordering-private ordering-private?)
+
 
 (provide #/all-defined-out)
 
@@ -23,16 +28,9 @@
 (struct-easy (ordering-eq) #:equal)
 (struct-easy (ordering-gt) #:equal)
 
-; NOTE: We used to expose this as two structs, namely
-; `ordering-private-lt` and `ordering-private-gt`, but that approach
-; had a problem: Using `struct->vector`, Racket code can detect which
-; is which without even going to the trouble of writing the values to
-; a text stream.
-(struct-easy (ordering-private ordering))
-
-(define/contract (-ordering-private? x)
+(define/contract (ordering-private? x)
   (-> any/c boolean?)
-  (ordering-private? x))
+  (internal:ordering-private? x))
 
 (define/contract (dex-result? x)
   (-> any/c boolean?)
@@ -47,10 +45,10 @@
 ; accident.
 (define/contract (make-ordering-private-lt)
   (-> ordering-private?)
-  (ordering-private #/ordering-lt))
+  (internal:ordering-private #/ordering-lt))
 (define/contract (make-ordering-private-gt)
   (-> ordering-private?)
-  (ordering-private #/ordering-gt))
+  (internal:ordering-private #/ordering-gt))
 
 (define-simple-macro (ordering-or first:expr second:expr)
   (w- result first
@@ -71,17 +69,6 @@
 
 
 ; ===== Names, dexes, and dexables ===================================
-
-; Internally, we represent name values as data made of structure type
-; descriptors, exact rational numbers, interned symbols, empty lists,
-; and cons cells. For sorting purposes, we consider them to ascend in
-; that order.
-;
-; This is the struct type we "encapsulate" that in, but we offer it as
-; an unsafe export.
-;
-(struct-easy (name rep)
-  #:error-message-phrase "a name")
 
 ; TODO: Test this implementation very thoroughly. We need to know what
 ; happens when this module is used through diamond dependencies, what
@@ -109,10 +96,14 @@
   (-> any/c boolean?)
   (and (rational? v) (exact? v)))
 
+(define/contract (name? x)
+  (-> any/c boolean?)
+  (internal:name? x))
+
 (define/contract (names-autodex a b)
   (-> name? name? dex-result?)
-  (dissect a (name a)
-  #/dissect b (name b)
+  (dissect a (internal:name a)
+  #/dissect b (internal:name b)
   #/w-loop next a a b b
     
     ; Handle the cons cells.
