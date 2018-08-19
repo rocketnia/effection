@@ -86,6 +86,12 @@
   dex-struct-by-field-position
   dex-struct)
 
+(module+ private/unsafe #/provide
+  dexableof-unchecked)
+(module+ private/unsafe #/provide
+  dex-by-own-method-unchecked
+  dex-fix-unchecked)
+
 
 ; ==== Clines ====
 
@@ -101,6 +107,10 @@
   cline-fix
   cline-struct-by-field-position
   cline-struct)
+
+(module+ private/unsafe #/provide
+  cline-by-own-method-unchecked
+  cline-fix-unchecked)
 
 
 ; ==== Merges and fuses ====
@@ -126,6 +136,13 @@
   fuse-fix
   fuse-struct-by-field-position
   fuse-struct)
+
+(module+ private/unsafe #/provide
+  merge-by-own-method-unchecked
+  merge-fix-unchecked)
+(module+ private/unsafe #/provide
+  fuse-by-own-method-unchecked
+  fuse-fix-unchecked)
 
 
 ; ==== Tables ====
@@ -248,19 +265,18 @@
   (expect x (dexable dex value) #f
   #/and (dex? dex) (in-dex? dex value)))
 
-(define/contract (dexableof c)
+(define/contract (dexableof-internal name c)
   (-> contract? contract?)
-  (and/c valid-dexable?
-  #/if (chaperone-contract? c)
-    (struct/c dexable any/c c)
+  (if (chaperone-contract? c)
+    (struct/c dexable dex? c)
     (make-contract
       
-      #:name 'dexableof
+      #:name name
       
       #:first-order
       (fn x
         (contract-first-order-passes?
-          (struct/c dexable any/c #/fn x
+          (struct/c dexable dex? #/fn x
             (contract-first-order-passes? c x))
           x))
       
@@ -269,6 +285,14 @@
         (w- c-projection ((contract-projection c) b)
         #/dissectfn (dexable dex x)
           (dexable dex #/c-projection x))))))
+
+(define/contract (dexableof-unchecked c)
+  (-> contract? contract?)
+  (dexableof-internal 'dexableof-unchecked c))
+
+(define/contract (dexableof c)
+  (-> contract? contract?)
+  (and/c valid-dexable? (dexableof-internal 'dexableof c)))
 
 (define/contract (compare-dexables a b)
   (-> valid-dexable? valid-dexable? #/maybe/c dex-result?)
@@ -488,6 +512,10 @@
       #/compare-by-dex a-method a b))
   ])
 
+(define/contract (dex-by-own-method-unchecked dexable-get-method)
+  (-> (dexableof-unchecked #/-> any/c #/maybe/c dex?) dex?)
+  (internal:dex #/dex-internals-by-own-method dexable-get-method))
+
 (define/contract (dex-by-own-method dexable-get-method)
   (-> (dexableof #/-> any/c #/maybe/c dex?) dex?)
   (internal:dex #/dex-internals-by-own-method dexable-get-method))
@@ -525,6 +553,10 @@
       (dissect this (dex-internals-fix #/dexable dex unwrap)
       #/compare-by-dex (unwrap #/internal:dex this) a b))
   ])
+
+(define/contract (dex-fix-unchecked dexable-unwrap)
+  (-> (dexableof-unchecked #/-> dex? dex?) dex?)
+  (internal:dex #/dex-internals-fix dexable-unwrap))
 
 (define/contract (dex-fix dexable-unwrap)
   (-> (dexableof #/-> dex? dex?) dex?)
@@ -917,6 +949,10 @@
       #/compare-by-cline a-method a b))
   ])
 
+(define/contract (cline-by-own-method-unchecked dexable-get-method)
+  (-> (dexableof-unchecked #/-> any/c #/maybe/c cline?) cline?)
+  (internal:cline #/cline-internals-by-own-method dexable-get-method))
+
 (define/contract (cline-by-own-method dexable-get-method)
   (-> (dexableof #/-> any/c #/maybe/c cline?) cline?)
   (internal:cline #/cline-internals-by-own-method dexable-get-method))
@@ -964,6 +1000,10 @@
       (dissect this (cline-internals-fix #/dexable dex unwrap)
       #/compare-by-cline (unwrap #/internal:cline this) a b))
   ])
+
+(define/contract (cline-fix-unchecked dexable-unwrap)
+  (-> (dexableof-unchecked #/-> cline? cline?) cline?)
+  (internal:cline #/cline-internals-fix dexable-unwrap))
 
 (define/contract (cline-fix dexable-unwrap)
   (-> (dexableof #/-> cline? cline?) cline?)
@@ -1326,6 +1366,16 @@
       #/just result))
   ])
 
+(define/contract (merge-by-own-method-unchecked dexable-get-method)
+  (-> (dexableof-unchecked #/-> any/c #/maybe/c merge?) merge?)
+  (internal:merge #/furge-internals-by-own-method
+    'merge-by-own-method (dex-merge) call-merge dexable-get-method))
+
+(define/contract (fuse-by-own-method-unchecked dexable-get-method)
+  (-> (dexableof-unchecked #/-> any/c #/maybe/c fuse?) fuse?)
+  (internal:fuse #/furge-internals-by-own-method
+    'fuse-by-own-method (dex-fuse) call-fuse dexable-get-method))
+
 (define/contract (merge-by-own-method dexable-get-method)
   (-> (dexableof #/-> any/c #/maybe/c merge?) merge?)
   (internal:merge #/furge-internals-by-own-method
@@ -1364,6 +1414,16 @@
         #/dexable dex unwrap)
       #/call-furge (unwrap #/furge-encapsulated this) a b))
   ])
+
+(define/contract (merge-fix-unchecked dexable-unwrap)
+  (-> (dexableof-unchecked #/-> merge? merge?) merge?)
+  (internal:merge
+  #/furge-internals-fix call-merge internal:merge dexable-unwrap))
+
+(define/contract (fuse-fix-unchecked dexable-unwrap)
+  (-> (dexableof-unchecked #/-> fuse? fuse?) fuse?)
+  (internal:fuse
+  #/furge-internals-fix call-fuse internal:fuse dexable-unwrap))
 
 (define/contract (merge-fix dexable-unwrap)
   (-> (dexableof #/-> merge? merge?) merge?)

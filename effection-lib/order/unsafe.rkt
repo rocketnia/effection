@@ -9,6 +9,12 @@
 (require #/only-in lathe-comforts/list list-map)
 (require #/only-in lathe-comforts/struct struct-easy)
 
+; TODO: Uncomment this and the `all-from-out` line once we have this
+; rearranged a bit. This use of a submodule seems a lot better for
+; code organization than moving things between files like we've been
+; doing.
+;
+;(require #/submod effection/order/base private/unsafe)
 (require #/only-in effection/order/private
   names-autodex ordering-lt
   
@@ -17,6 +23,8 @@
   struct:ordering-private ordering-private ordering-private?
   ordering-private-ordering)
 
+
+;(provide #/all-from-out #/submod effection/order/base private/unsafe)
 
 (provide #/struct-out ordering-private)
 
