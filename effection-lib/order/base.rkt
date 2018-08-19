@@ -44,7 +44,9 @@
   
   struct:ordering-lt ordering-lt ordering-lt?
   )
-(require #/prefix-in internal: #/only-in effection/order/unsafe
+(require #/prefix-in internal: #/only-in
+  effection/order/private/unsafe
+  
   autoname-cline autoname-dex autoname-fuse autoname-merge cline
   cline? cline-internals-autodex cline-internals-autoname
   cline-internals-compare cline-internals-dex cline-internals-in?
