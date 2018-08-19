@@ -278,7 +278,7 @@
   #/and (dex? dex) (in-dex? dex value)))
 
 (define/contract (dexableof-internal name c)
-  (-> contract? contract?)
+  (-> symbol? contract? contract?)
   (if (chaperone-contract? c)
     (struct/c dexable dex? c)
     (make-contract
