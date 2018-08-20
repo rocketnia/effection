@@ -9,6 +9,7 @@
 (require #/only-in lathe-comforts/struct struct-easy)
 
 (require effection/order/base)
+(require #/submod effection/order/base private/order)
 (require #/only-in effection/order/private
   exact-rational? lt-autocline lt-autodex)
 (require #/prefix-in internal: #/only-in effection/order/unsafe
@@ -16,6 +17,7 @@
   gen:furge-internals name)
 
 (provide #/all-from-out effection/order/base)
+(provide #/all-from-out #/submod effection/order/base private/order)
 
 (provide
   dex-immutable-string

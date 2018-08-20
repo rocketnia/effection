@@ -2,7 +2,7 @@
 
 @(require #/for-label racket/base)
 @(require #/for-label #/only-in racket/contract/base
-  -> any/c chaperone-contract? contract?)
+  -> any/c chaperone-contract? cons/c contract? listof)
 
 @(require #/for-label #/only-in lathe-comforts/maybe
   just maybe? maybe/c nothing)
@@ -493,6 +493,17 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
   Given a table, a fuse, and a function, calls that function with each key of the table, and returns a @racket[just] containing the fused value of all the function results. If the table is empty or if any function result is outside the fuse’s domain, this returns @racket[(nothing)] instead.
 }
 
+@defproc[
+  (table-sort [cline cline?] [table table?])
+  (maybe/c (listof table?))
+]{
+  Given a cline and a table, sorts the values of the table by the cline, without determining an order on values that the cline doesn't determine an order on. This returns @racket[(nothing)] if any of the values are outside the cline's domain. Otherwise, it returns a @racket[just] containing a list of nonempty tables, partitioning the original table's values in ascending order.
+  
+  What we mean by partitioning is this: Each entry of the original table appears in one and only one table in the list, and the tables have no other entries.
+  
+  What we mean by ascending order is this: If the given cline computes that one value of the original table is @racket[(ordering-lt)] to a second value, then the two values are stored in two different tables, and the first value's table precedes the second value's table in the list. Likewise (and equivalently), if a value is @racket[(ordering-gt)] to a second value, the first occurs after the second in the list of tables.
+}
+
 @defproc[(dex-table [dex-val dex?]) dex?]{
   Returns a dex that compares tables, using the given dex to compare each value.
   
@@ -543,4 +554,14 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
 
 @defproc[(fuse-exact-rational-by-times) fuse?]{
   Returns a fuse that fuses exact rational numbers using @racket[*].
+}
+
+@defproc[
+  (assocs->table-if-mutually-unique
+    [assocs (listof (cons/c name? any/c))])
+  (maybe/c table?)
+]{
+  Given an association list, returns a @racket[just] of a table with the same entries if the keys are mutually unique; otherwise returns @racket[(nothing)].
+  
+  This is a procedure that is convenient for two purposes: It's useful for detecting duplicates in a list of names, and it's useful for constructing tables. These purposes often coincide, since data structures which contain mutually unique names are often good candidates for converting to tables.
 }

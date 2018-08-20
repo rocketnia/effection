@@ -16,8 +16,8 @@
 
 
 (require #/only-in racket/contract/base
-  -> and/c any any/c chaperone-contract? contract? contract-projection
-  list/c listof struct/c)
+  -> and/c any any/c chaperone-contract? cons/c contract?
+  contract-projection list/c listof struct/c)
 (require #/only-in racket/contract/combinator
   contract-first-order-passes? make-contract)
 (require #/only-in racket/contract/region define/contract)
@@ -28,7 +28,8 @@
   dissect dissectfn expect fn mat w- w-loop)
 (require #/only-in lathe-comforts/hash
   hash-ref-maybe hash-set-maybe hash-v-all hash-v-any hash-v-map)
-(require #/only-in lathe-comforts/list list-any list-bind list-map)
+(require #/only-in lathe-comforts/list
+  list-all list-any list-bind list-map)
 (require #/only-in lathe-comforts/maybe
   just maybe? maybe-bind maybe/c nothing nothing?)
 (require #/only-in lathe-comforts/struct struct-easy)
@@ -157,12 +158,13 @@
 
 ; ==== Tables ====
 
-(provide table? table-get table-empty table-shadow table-map-fuse)
+(provide
+  table? table-get table-empty table-shadow table-map-fuse table-sort)
+(module+ private/order #/provide
+  assocs->table-if-mutually-unique)
 (module+ private/unsafe #/provide
   table->sorted-list)
 (provide dex-table merge-table fuse-table)
-; TODO: Also implement, document, and provide `table-sort`, a function
-; that returns a list of tables based on a table and a cline.
 
 
 
@@ -1645,6 +1647,66 @@
     #/maybe-bind (call-fuse fuse so-far operand) #/fn so-far
     #/next so-far operands)))
 
+(define/contract (assocs->table-if-mutually-unique assocs)
+  (-> (listof #/cons/c name? any/c) #/maybe/c table?)
+  (w-loop next assocs assocs result (table-empty)
+    (expect assocs (cons (cons k v) assocs) (just result)
+    #/expect (table-get k result) (nothing) (nothing)
+    #/next assocs #/table-shadow k (just v) result)))
+
+(define/contract (table-sort cline table)
+  (-> cline? table? #/maybe/c #/listof table?)
+  (dissect table (internal:table hash)
+  #/w- unsorted (hash->list hash)
+  
+  ; NOTE: We do a first pass over the operands to make sure they're
+  ; all in the cline's domain because otherwise a client could detect
+  ; that their sometimes-non-terminating `cline-by-own-method` wasn't
+  ; called on certain operands. This also makes it easy to take care
+  ; of every condition where we need to return `(nothing)`.
+  #/expect
+    (list-all unsorted #/dissectfn (cons k v) #/in-cline? cline v)
+    #t
+    (nothing)
+  #/just
+  
+  #/w- sorted-flat
+    (sort (hash->list hash) #/fn a b
+      (dissect a (cons ak av)
+      #/dissect b (cons bk bv)
+      #/dissect (compare-by-cline cline av bv) (just cline-result)
+      #/mat cline-result (ordering-lt) #t
+        #f))
+  #/w- sorted-flat
+    (list-map sorted-flat #/dissectfn (cons k v)
+      (cons (internal:name k) v))
+  #/w-loop next
+    sorted-flat sorted-flat
+    current-group (list)
+    rev-sorted-grouped (list)
+    
+    (expect sorted-flat (cons entry sorted-flat)
+      (mat current-group (list)
+        (reverse rev-sorted-grouped)
+        (dissect (assocs->table-if-mutually-unique current-group)
+          (just current-group)
+        #/reverse #/cons current-group rev-sorted-grouped))
+    #/dissect entry (cons k v)
+    #/expect current-group (cons existing-v _)
+      (next sorted-flat (list entry) rev-sorted-grouped)
+    #/dissect (compare-by-cline cline existing-v v)
+      (just cline-result)
+    #/mat cline-result (ordering-lt)
+      ; The element we're on is part of a new group, so we commit the
+      ; current group to the result.
+      (dissect (assocs->table-if-mutually-unique current-group)
+        (just current-group)
+      #/next sorted-flat (list entry)
+        (cons current-group rev-sorted-grouped))
+      ; The element we're on is part of the current group.
+      (next sorted-flat (cons entry current-group)
+        rev-sorted-grouped))))
+
 (define/contract (table->sorted-list tab)
   (-> table? #/listof #/list/c name? any/c)
   (dissect tab (internal:table hash)
@@ -1654,7 +1716,6 @@
       #/dissect b (cons bk bv)
       #/w- dex-result
         (names-autodex (internal:name ak) (internal:name bk))
-      #/mat dex-result (ordering-lt) #t
       #/mat dex-result (internal:ordering-private #/ordering-lt) #t
         #f))
   #/dissectfn (cons k v)
