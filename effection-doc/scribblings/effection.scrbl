@@ -175,6 +175,12 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   When compared by @racket[(dex-dex)], all @tt{dex-default} values are @racket[ordering-eq] if their @racket[dex-for-trying-first] values are and their @racket[dex-for-trying-second] values are.
 }
 
+@defproc[(dex-opaque [name name?] [dex dex?]) dex?]{
+  Given a name and a dex, returns another dex that behaves like the given one but is not equal to it.
+  
+  When compared by @racket[(dex-dex)], all @tt{dex-opaque} values are @racket[ordering-eq] if their @racket[name] values are and their @racket[dex] values are.
+}
+
 @defproc[
   (dex-by-own-method
     [dexable-get-method (dexableof (-> any/c (maybe/c dex?)))])
@@ -279,6 +285,12 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   When compared by @racket[(dex-cline)], all @tt{cline-default} values are @racket[ordering-eq] if their @racket[cline-for-trying-first] values are and their @racket[cline-for-trying-second] values are.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to the similarly constructed @racket[dex-default].
+}
+
+@defproc[(cline-opaque [name name?] [cline cline?]) cline?]{
+  Given a name and a cline, returns another cline that behaves like the given one but is not equal to it.
+  
+  When compared by @racket[(dex-cline)], all @tt{cline-opaque} values are @racket[ordering-eq] if their @racket[name] values are and their @racket[cline] values are.
 }
 
 @defproc[
@@ -387,6 +399,15 @@ The idempotence of a merge operation is such enough that if the two inputs to th
 }
 
 @deftogether[(
+  @defproc[(merge-opaque [name name?] [merge merge?]) merge?]
+  @defproc[(fuse-opaque [name name?] [fuse fuse?]) fuse?]
+)]{
+  Given a name and a merge/fuse, returns another merge/fuse that behaves like the given one but is not equal to it.
+  
+  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-opaque}/@tt{fuse-opaque} values are @racket[ordering-eq] if their @racket[name] values are and their @racket[merge]/@racket[fuse] values are.
+}
+
+@deftogether[(
   @defproc[
     (merge-by-own-method
       [dexable-get-method (dexableof (-> any/c (maybe/c merge?)))])
@@ -398,7 +419,7 @@ The idempotence of a merge operation is such enough that if the two inputs to th
     fuse?
   ]
 )]{
-  Given a dexable function, returns a fuse that works by invoking that function with each value to get @racket[(just _method)] or @racket[(nothing)], verifying that the two @var[method] values are the same, and invoking that merge/fuse value to get a result of @racket[(just _result)] or @racket[(nothing)]. If the result is @racket[(just _result)], this does a final check before returning it: It invokes the method-getting function on the @racket[result] to verify that it obtains the same @var[method] value that was obtained from the inputs. This ensures that the operation is associative.
+  Given a dexable function, returns a merge/fuse that works by invoking that function with each value to get @racket[(just _method)] or @racket[(nothing)], verifying that the two @var[method] values are the same, and invoking that merge/fuse value to get a result of @racket[(just _result)] or @racket[(nothing)]. If the result is @racket[(just _result)], this does a final check before returning it: It invokes the method-getting function on the @racket[result] to verify that it obtains the same @var[method] value that was obtained from the inputs. This ensures that the operation is associative.
   
   When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-by-own-method}/@tt{fuse-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
 }

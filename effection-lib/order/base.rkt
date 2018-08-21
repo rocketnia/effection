@@ -86,6 +86,7 @@
 (provide
   dex-give-up
   dex-default
+  dex-opaque
   dex-by-own-method
   dex-fix
   dex-struct-by-field-position
@@ -115,6 +116,7 @@
   cline-by-dex
   cline-give-up
   cline-default
+  cline-opaque
   cline-by-own-method
   cline-fix
   cline-struct-by-field-position
@@ -150,6 +152,7 @@
 (provide merge-by-dex)
 
 (provide
+  merge-opaque
   merge-by-own-method
   merge-fix
   merge-struct-by-field-position
@@ -165,6 +168,7 @@
   merge-by-own-method-unchecked
   merge-fix-unchecked)
 (provide
+  fuse-opaque
   fuse-by-own-method
   fuse-fix
   fuse-struct-by-field-position
@@ -512,6 +516,44 @@
   (-> dex? dex? dex?)
   (internal:dex
   #/dex-internals-default dex-for-trying-first dex-for-trying-second))
+
+
+(struct-easy (dex-internals-opaque name dex)
+  #:other
+  
+  #:methods internal:gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'tag:dex-opaque)
+    
+    (define (dex-internals-autoname this)
+      (dissect this (dex-internals-opaque (internal:name name) dex)
+      #/list 'tag:dex-opaque name #/autoname-dex dex))
+    
+    (define (dex-internals-autodex this other)
+      (dissect this (dex-internals-opaque a-name a-dex)
+      #/dissect other (dex-internals-default b-name b-dex)
+      #/maybe-ordering-or
+        (compare-by-dex (dex-name) a-name b-name)
+        (compare-by-dex (dex-dex) a-dex b-dex)))
+    
+    (define (dex-internals-in? this x)
+      (dissect this (dex-internals-opaque name dex)
+      #/in-dex? dex x))
+    
+    (define (dex-internals-name-of this x)
+      (dissect this (dex-internals-opaque name dex)
+      #/name-of dex x))
+    
+    (define (dex-internals-compare this a b)
+      (dissect this (dex-internals-opaque name dex)
+      #/compare-by-dex dex a b))
+  ])
+
+(define/contract (dex-opaque name dex)
+  (-> name? dex? dex?)
+  (internal:dex #/dex-internals-opaque name dex))
 
 
 (define-syntax-rule
@@ -1029,6 +1071,45 @@
     cline-for-trying-second))
 
 
+(struct-easy (cline-internals-opaque name cline)
+  #:other
+  
+  #:methods internal:gen:cline-internals
+  [
+    
+    (define (cline-internals-tag this)
+      'tag:cline-opaque)
+    
+    (define (cline-internals-autoname this)
+      (dissect this
+        (cline-internals-opaque (internal:name name) cline)
+      #/list 'tag:cline-opaque name #/autoname-cline cline))
+    
+    (define (cline-internals-autodex this other)
+      (dissect this (cline-internals-opaque a-name a-cline)
+      #/dissect other (cline-internals-opaque b-name b-cline)
+      #/maybe-ordering-or
+        (compare-by-dex (dex-name) a-name b-name)
+        (compare-by-dex (dex-cline) a-cline b-cline)))
+    
+    (define (cline-internals-dex this)
+      (dissect this (cline-internals-opaque name cline)
+      #/dex-opaque name #/get-dex-from-cline cline))
+    
+    (define (cline-internals-in? this x)
+      (dissect this (cline-internals-opaque name cline)
+      #/in-cline? cline x))
+    
+    (define (cline-internals-compare this a b)
+      (dissect this (cline-internals-opaque name cline)
+      #/compare-by-cline cline a b))
+  ])
+
+(define/contract (cline-opaque name cline)
+  (-> name? cline? cline?)
+  (internal:cline #/cline-internals-opaque name cline))
+
+
 (define-cmp-by-own-method
   internal:cline
   cline?
@@ -1460,6 +1541,69 @@
 
 
 (define-syntax-rule
+  (define-furge-opaque
+    internal:furge
+    furge?
+    autoname-furge
+    call-furge
+    dex-furge
+    furge-internals-opaque
+    tag:furge-opaque
+    furge-opaque)
+  (begin
+    
+    (struct-easy (furge-internals-opaque name furge)
+      #:other
+      
+      #:methods internal:gen:furge-internals
+      [
+        
+        (define (furge-internals-tag this)
+          'tag:furge-opaque)
+        
+        (define (furge-internals-autoname this)
+          (dissect this (fuse-internals-by-merge furge)
+          #/list 'tag:furge-opaque #/autoname-furge furge))
+        
+        (define (furge-internals-autodex this other)
+          (dissect this (furge-internals-opaque a-name a-furge)
+          #/dissect other (furge-internals-opaque b-name b-furge)
+          #/maybe-ordering-or
+            (compare-by-dex (dex-name) a-name b-name)
+            (compare-by-dex (dex-furge) a-furge b-furge)))
+        
+        (define (furge-internals-call this a b)
+          (dissect this (furge-internals-opaque name furge)
+          #/call-furge furge a b))
+      ])
+    
+    (define/contract (furge-opaque name furge)
+      (-> name? furge? furge?)
+      (internal:furge #/furge-internals-opaque name furge))
+  ))
+
+(define-furge-opaque
+  internal:merge
+  merge?
+  autoname-merge
+  call-merge
+  dex-merge
+  merge-internals-opaque
+  tag:merge-opaque
+  merge-opaque)
+
+(define-furge-opaque
+  internal:fuse
+  fuse?
+  autoname-fuse
+  call-fuse
+  dex-fuse
+  fuse-internals-opaque
+  tag:fuse-opaque
+  fuse-opaque)
+
+
+(define-syntax-rule
   (define-furge-by-own-method
     internal:furge
     furge?
@@ -1471,6 +1615,7 @@
     furge-by-own-method::get-method
     furge-by-own-method-delegate/c
     furge-internals-by-own-method
+    tag:furge-by-own-method
     furge-by-own-method-thorough-unchecked
     furge-by-own-method-thorough
     furge-by-own-method-unthorough
@@ -1634,6 +1779,7 @@
   merge-by-own-method::get-method
   merge-by-own-method-delegate/c
   merge-internals-by-own-method
+  tag:merge-by-own-method
   merge-by-own-method-thorough-unchecked
   merge-by-own-method-thorough
   merge-by-own-method-unthorough
@@ -1651,6 +1797,7 @@
   fuse-by-own-method::get-method
   fuse-by-own-method-delegate/c
   fuse-internals-by-own-method
+  tag:fuse-by-own-method
   fuse-by-own-method-thorough-unchecked
   fuse-by-own-method-thorough
   fuse-by-own-method-unthorough
