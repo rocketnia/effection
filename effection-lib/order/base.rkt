@@ -159,7 +159,7 @@
   merge-struct)
 (module+ private/unsafe #/provide
   (struct-out merge-by-own-method::raise-different-input-methods-error)
-  (struct-out merge-by-own-method::raise-cannot-get-result-method-error)
+  (struct-out merge-by-own-method::raise-cannot-get-output-method-error)
   (struct-out merge-by-own-method::raise-different-output-method-error)
   (struct-out merge-by-own-method::get-method)
   merge-by-own-method-delegate/c
@@ -175,7 +175,7 @@
   fuse-struct)
 (module+ private/unsafe #/provide
   (struct-out fuse-by-own-method::raise-different-input-methods-error)
-  (struct-out fuse-by-own-method::raise-cannot-get-result-method-error)
+  (struct-out fuse-by-own-method::raise-cannot-get-output-method-error)
   (struct-out fuse-by-own-method::raise-different-output-method-error)
   (struct-out fuse-by-own-method::get-method)
   fuse-by-own-method-delegate/c
@@ -600,11 +600,11 @@
       (cmp-by-own-method-thorough-unchecked dexable-delegate)
       (-> (dexableof-unchecked cmp-by-own-method-delegate/c) cmp?)
       (internal:cmp #/cmp-internals-by-own-method dexable-delegate))
-
+    
     (define/contract (cmp-by-own-method-thorough dexable-delegate)
       (-> (dexableof cmp-by-own-method-delegate/c) cmp?)
       (cmp-by-own-method-thorough-unchecked dexable-delegate))
-
+    
     (struct-easy (cmp-by-own-method-unthorough get-method)
       #:other
       
@@ -623,14 +623,14 @@
             "b-method" b-method)
         #/dissect command (cmp-by-own-method::get-method source)
         #/get-method source)))
-
+    
     (define/contract (cmp-by-own-method-unchecked dexable-get-method)
       (-> (dexableof-unchecked #/-> any/c #/maybe/c cmp?) cmp?)
       (dissect dexable-get-method (dexable dex get-method)
       #/cmp-by-own-method-thorough-unchecked #/dexable
         (dex-struct cmp-by-own-method-unthorough dex)
         (cmp-by-own-method-unthorough get-method)))
-
+    
     (define/contract (cmp-by-own-method dexable-get-method)
       (-> (dexableof #/-> any/c #/maybe/c cmp?) cmp?)
       (cmp-by-own-method-unchecked dexable-get-method))
@@ -1704,17 +1704,17 @@
               a b result a-method result-method)
           #/just result))
       ])
-
+    
     (define/contract
       (furge-by-own-method-thorough-unchecked dexable-delegate)
       (-> (dexableof-unchecked furge-by-own-method-delegate/c) furge?)
       (internal:furge
       #/furge-internals-by-own-method dexable-delegate))
-
+    
     (define/contract (furge-by-own-method-thorough dexable-delegate)
       (-> (dexableof furge-by-own-method-delegate/c) furge?)
       (furge-by-own-method-thorough-unchecked dexable-delegate))
-
+    
     (struct-easy (furge-by-own-method-unthorough get-method)
       #:other
       
@@ -1754,7 +1754,7 @@
             "output-method" output-method)
         #/dissect command (furge-by-own-method::get-method source)
         #/get-method source)))
-
+    
     (define/contract
       (furge-by-own-method-unchecked dexable-get-method)
       (-> (dexableof-unchecked #/-> any/c #/maybe/c furge?) furge?)
@@ -1762,7 +1762,7 @@
       #/furge-by-own-method-thorough-unchecked #/dexable
         (dex-struct furge-by-own-method-unthorough dex)
         (furge-by-own-method-unthorough get-method)))
-
+    
     (define/contract (furge-by-own-method dexable-get-method)
       (-> (dexableof #/-> any/c #/maybe/c furge?) furge?)
       (furge-by-own-method-unchecked dexable-get-method))
@@ -1774,7 +1774,7 @@
   call-merge
   dex-merge
   merge-by-own-method::raise-different-input-methods-error
-  merge-by-own-method::raise-cannot-get-result-method-error
+  merge-by-own-method::raise-cannot-get-output-method-error
   merge-by-own-method::raise-different-output-method-error
   merge-by-own-method::get-method
   merge-by-own-method-delegate/c
@@ -1792,7 +1792,7 @@
   call-fuse
   dex-fuse
   fuse-by-own-method::raise-different-input-methods-error
-  fuse-by-own-method::raise-cannot-get-result-method-error
+  fuse-by-own-method::raise-cannot-get-output-method-error
   fuse-by-own-method::raise-different-output-method-error
   fuse-by-own-method::get-method
   fuse-by-own-method-delegate/c
