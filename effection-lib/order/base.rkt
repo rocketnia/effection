@@ -16,8 +16,8 @@
 
 
 (require #/only-in racket/contract/base
-  -> and/c any any/c chaperone-contract? cons/c contract?
-  contract-projection list/c listof struct/c)
+  -> and/c any any/c case-> chaperone-contract? cons/c contract?
+  contract-projection list/c listof none/c struct/c)
 (require #/only-in racket/contract/combinator
   contract-first-order-passes? make-contract)
 (require #/only-in racket/contract/region define/contract)
@@ -94,6 +94,11 @@
 (module+ private/unsafe #/provide
   dexableof-unchecked)
 (module+ private/unsafe #/provide
+  (struct-out dex-by-own-method::raise-different-methods-error)
+  (struct-out dex-by-own-method::get-method)
+  dex-by-own-method-delegate/c
+  dex-by-own-method-thorough-unchecked
+  dex-by-own-method-thorough
   dex-by-own-method-unchecked
   dex-fix-unchecked)
 
@@ -116,6 +121,11 @@
   cline-struct)
 
 (module+ private/unsafe #/provide
+  (struct-out cline-by-own-method::raise-different-methods-error)
+  (struct-out cline-by-own-method::get-method)
+  cline-by-own-method-delegate/c
+  cline-by-own-method-thorough-unchecked
+  cline-by-own-method-thorough
   cline-by-own-method-unchecked
   cline-fix-unchecked)
 
@@ -145,6 +155,13 @@
   merge-struct-by-field-position
   merge-struct)
 (module+ private/unsafe #/provide
+  (struct-out merge-by-own-method::raise-different-input-methods-error)
+  (struct-out merge-by-own-method::raise-cannot-get-result-method-error)
+  (struct-out merge-by-own-method::raise-different-output-method-error)
+  (struct-out merge-by-own-method::get-method)
+  merge-by-own-method-delegate/c
+  merge-by-own-method-thorough-unchecked
+  merge-by-own-method-thorough
   merge-by-own-method-unchecked
   merge-fix-unchecked)
 (provide
@@ -153,6 +170,13 @@
   fuse-struct-by-field-position
   fuse-struct)
 (module+ private/unsafe #/provide
+  (struct-out fuse-by-own-method::raise-different-input-methods-error)
+  (struct-out fuse-by-own-method::raise-cannot-get-result-method-error)
+  (struct-out fuse-by-own-method::raise-different-output-method-error)
+  (struct-out fuse-by-own-method::get-method)
+  fuse-by-own-method-delegate/c
+  fuse-by-own-method-thorough-unchecked
+  fuse-by-own-method-thorough
   fuse-by-own-method-unchecked
   fuse-fix-unchecked)
 
@@ -173,6 +197,11 @@
 (provide
   fusable-function? make-fusable-function fuse-fusable-function)
 (module+ private/unsafe #/provide
+  (struct-out fuse-fusable-function::raise-cannot-combine-results-error)
+  (struct-out fuse-fusable-function::arg-to-method)
+  fuse-fusable-function-delegate/c
+  fuse-fusable-function-thorough-unchecked
+  fuse-fusable-function-thorough
   fuse-fusable-function-unchecked)
 
 
@@ -485,7 +514,100 @@
   #/dex-internals-default dex-for-trying-first dex-for-trying-second))
 
 
-(struct-easy (dex-internals-by-own-method dexable-get-method)
+(define-syntax-rule
+  (define-cmp-by-own-method
+    internal:cmp
+    cmp?
+    cmp-by-own-method::raise-different-methods-error
+    cmp-by-own-method::get-method
+    cmp-by-own-method-delegate/c
+    cmp-internals-by-own-method
+    cmp-by-own-method-thorough-unchecked
+    cmp-by-own-method-thorough
+    cmp-by-own-method-unthorough
+    cmp-by-own-method-unchecked
+    cmp-by-own-method)
+  (begin
+    
+    (struct-easy
+      (cmp-by-own-method::raise-different-methods-error
+        a b a-method b-method))
+    (struct-easy
+      (cmp-by-own-method::get-method source))
+    
+    (define/contract cmp-by-own-method-delegate/c
+      contract?
+      (case->
+        (->
+          (struct/c cmp-by-own-method::raise-different-methods-error
+            any/c any/c cmp? cmp?)
+          none/c)
+        (->
+          (struct/c cmp-by-own-method::get-method any/c)
+          (maybe/c cmp?))))
+    
+    ; NOTE: If we weren't using this macro, we'd write the
+    ; (struct-easy (cmp-internals-by-own-method ...) ...) declaration
+    ; here. However, this definition substantially differs between the
+    ; dex and the cline definitions, and the mutual recursion works
+    ; out fine this way in Racket, so we leave it out of this and
+    ; define `dex-internals-by-own-method` and
+    ; `cline-internals-by-own-method` separately from this macro call.
+    
+    (define/contract
+      (cmp-by-own-method-thorough-unchecked dexable-delegate)
+      (-> (dexableof-unchecked cmp-by-own-method-delegate/c) cmp?)
+      (internal:cmp #/cmp-internals-by-own-method dexable-delegate))
+
+    (define/contract (cmp-by-own-method-thorough dexable-delegate)
+      (-> (dexableof cmp-by-own-method-delegate/c) cmp?)
+      (cmp-by-own-method-thorough-unchecked dexable-delegate))
+
+    (struct-easy (cmp-by-own-method-unthorough get-method)
+      #:other
+      
+      #:property prop:procedure
+      (fn this command
+        (dissect this (cmp-by-own-method-unthorough get-method)
+        #/mat command
+          (cmp-by-own-method::raise-different-methods-error
+            a b a-method b-method)
+          (raise-arguments-error 'cmp-by-own-method
+            "obtained two different methods from the two values being compared"
+            "get-method" get-method
+            "a" a
+            "b" b
+            "a-method" a-method
+            "b-method" b-method)
+        #/dissect command (cmp-by-own-method::get-method source)
+        #/get-method source)))
+
+    (define/contract (cmp-by-own-method-unchecked dexable-get-method)
+      (-> (dexableof-unchecked #/-> any/c #/maybe/c cmp?) cmp?)
+      (dissect dexable-get-method (dexable dex get-method)
+      #/cmp-by-own-method-thorough-unchecked #/dexable
+        (dex-struct cmp-by-own-method-unthorough dex)
+        (cmp-by-own-method-unthorough get-method)))
+
+    (define/contract (cmp-by-own-method dexable-get-method)
+      (-> (dexableof #/-> any/c #/maybe/c cmp?) cmp?)
+      (cmp-by-own-method-unchecked dexable-get-method))
+  ))
+
+(define-cmp-by-own-method
+  internal:dex
+  dex?
+  dex-by-own-method::raise-different-methods-error
+  dex-by-own-method::get-method
+  dex-by-own-method-delegate/c
+  dex-internals-by-own-method
+  dex-by-own-method-thorough-unchecked
+  dex-by-own-method-thorough
+  dex-by-own-method-unthorough
+  dex-by-own-method-unchecked
+  dex-by-own-method)
+
+(struct-easy (dex-internals-by-own-method dexable-delegate)
   #:other
   
   #:methods internal:gen:dex-internals
@@ -496,10 +618,10 @@
     
     (define (dex-internals-autoname this)
       (dissect this
-        (dex-internals-by-own-method #/dexable dex get-method)
+        (dex-internals-by-own-method #/dexable dex delegate)
       #/list 'tag:dex-by-own-method
         (autoname-dex dex)
-        (name-of dex get-method)))
+        (name-of dex delegate)))
     
     (define (dex-internals-autodex this other)
       (dissect this (dex-internals-by-own-method a)
@@ -508,40 +630,32 @@
     
     (define (dex-internals-in? this x)
       (dissect this
-        (dex-internals-by-own-method #/dexable dex get-method)
-      #/expect (get-method x) (just method) #f
+        (dex-internals-by-own-method #/dexable dex delegate)
+      #/expect (delegate #/dex-by-own-method::get-method x)
+        (just method)
+        #f
       #/in-dex? method x))
     
     (define (dex-internals-name-of this x)
       (dissect this
-        (dex-internals-by-own-method #/dexable dex get-method)
-      #/expect (get-method x) (just method) (nothing)
+        (dex-internals-by-own-method #/dexable dex delegate)
+      #/maybe-bind (delegate #/dex-by-own-method::get-method x)
+      #/fn method
       #/name-of method x))
     
     (define (dex-internals-compare this a b)
       (dissect this
-        (dex-internals-by-own-method #/dexable dex get-method)
-      #/expect (get-method a) (just a-method) (nothing)
-      #/expect (get-method b) (just b-method) (nothing)
+        (dex-internals-by-own-method #/dexable dex delegate)
+      #/maybe-bind (delegate #/dex-by-own-method::get-method a)
+      #/fn a-method
+      #/maybe-bind (delegate #/dex-by-own-method::get-method b)
+      #/fn b-method
       #/expect (compare-by-dex (dex-dex) a-method b-method)
         (just #/ordering-eq)
-        (raise-arguments-error 'dex-by-own-method
-          "obtained two different methods from the two values being compared"
-          "get-method" get-method
-          "a" a
-          "b" b
-          "a-method" a-method
-          "b-method" b-method)
+        (delegate #/dex-by-own-method::raise-different-methods-error
+          a b a-method b-method)
       #/compare-by-dex a-method a b))
   ])
-
-(define/contract (dex-by-own-method-unchecked dexable-get-method)
-  (-> (dexableof-unchecked #/-> any/c #/maybe/c dex?) dex?)
-  (internal:dex #/dex-internals-by-own-method dexable-get-method))
-
-(define/contract (dex-by-own-method dexable-get-method)
-  (-> (dexableof #/-> any/c #/maybe/c dex?) dex?)
-  (internal:dex #/dex-internals-by-own-method dexable-get-method))
 
 
 (struct-easy (dex-internals-fix dexable-unwrap)
@@ -915,16 +1029,30 @@
     cline-for-trying-second))
 
 
-(struct-easy (convert-dex-from-cline-by-own-method get-method)
+(define-cmp-by-own-method
+  internal:cline
+  cline?
+  cline-by-own-method::raise-different-methods-error
+  cline-by-own-method::get-method
+  cline-by-own-method-delegate/c
+  cline-internals-by-own-method
+  cline-by-own-method-thorough-unchecked
+  cline-by-own-method-thorough
+  cline-by-own-method-unthorough
+  cline-by-own-method-unchecked
+  cline-by-own-method)
+
+(struct-easy (convert-dex-from-cline-by-own-method delegate)
   #:other
   
   #:property prop:procedure
   (fn this x
-    (dissect this (convert-dex-from-cline-by-own-method get-method)
-    #/expect (get-method x) (just result) (nothing)
-    #/just #/get-dex-from-cline result)))
+    (dissect this (convert-dex-from-cline-by-own-method delegate)
+    #/maybe-bind (delegate #/cline-by-own-method::get-method x)
+    #/fn method
+    #/just #/get-dex-from-cline method)))
 
-(struct-easy (cline-internals-by-own-method dexable-get-method)
+(struct-easy (cline-internals-by-own-method dexable-delegate)
   #:other
   
   #:methods internal:gen:cline-internals
@@ -935,10 +1063,10 @@
     
     (define (cline-internals-autoname this)
       (dissect this
-        (cline-internals-by-own-method #/dexable dex get-method)
+        (cline-internals-by-own-method #/dexable dex delegate)
       #/list 'tag:cline-by-own-method
         (autoname-dex dex)
-        (name-of dex get-method)))
+        (name-of dex delegate)))
     
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-by-own-method a)
@@ -947,41 +1075,32 @@
     
     (define (cline-internals-dex this)
       (dissect this
-        (cline-internals-by-own-method #/dexable dex get-method)
+        (cline-internals-by-own-method #/dexable dex delegate)
       #/dex-by-own-method #/dexable
         (dex-struct convert-dex-from-cline-by-own-method dex)
-        (convert-dex-from-cline-by-own-method get-method)))
+        (convert-dex-from-cline-by-own-method delegate)))
     
     (define (cline-internals-in? this x)
       (dissect this
-        (cline-internals-by-own-method #/dexable dex get-method)
-      #/expect (get-method x) (just method) #f
+        (cline-internals-by-own-method #/dexable dex delegate)
+      #/expect (delegate #/cline-by-own-method::get-method x)
+        (just method)
+        #f
       #/in-cline? method x))
     
     (define (cline-internals-compare this a b)
       (dissect this
-        (cline-internals-by-own-method #/dexable dex get-method)
-      #/expect (get-method a) (just a-method) (nothing)
-      #/expect (get-method b) (just b-method) (nothing)
+        (cline-internals-by-own-method #/dexable dex delegate)
+      #/maybe-bind (delegate #/cline-by-own-method::get-method a)
+      #/fn a-method
+      #/maybe-bind (delegate #/cline-by-own-method::get-method b)
+      #/fn b-method
       #/expect (compare-by-dex (dex-cline) a-method b-method)
         (just #/ordering-eq)
-        (raise-arguments-error 'cline-by-own-method
-          "obtained two different methods from the two values being compared"
-          "get-method" get-method
-          "a" a
-          "b" b
-          "a-method" a-method
-          "b-method" b-method)
+        (delegate #/cline-by-own-method::raise-different-methods-error
+          a b a-method b-method)
       #/compare-by-cline a-method a b))
   ])
-
-(define/contract (cline-by-own-method-unchecked dexable-get-method)
-  (-> (dexableof-unchecked #/-> any/c #/maybe/c cline?) cline?)
-  (internal:cline #/cline-internals-by-own-method dexable-get-method))
-
-(define/contract (cline-by-own-method dexable-get-method)
-  (-> (dexableof #/-> any/c #/maybe/c cline?) cline?)
-  (internal:cline #/cline-internals-by-own-method dexable-get-method))
 
 
 (struct-easy (convert-dex-from-cline-fix unwrap)
@@ -1340,85 +1459,203 @@
   (internal:fuse #/furge-internals-by-dex dex))
 
 
-(struct-easy
-  (furge-internals-by-own-method
-    error-name dex-furge call-furge dexable-get-method)
-  #:other
-  
-  #:methods internal:gen:furge-internals
-  [
+(define-syntax-rule
+  (define-furge-by-own-method
+    internal:furge
+    furge?
+    call-furge
+    dex-furge
+    furge-by-own-method::raise-different-input-methods-error
+    furge-by-own-method::raise-cannot-get-output-method-error
+    furge-by-own-method::raise-different-output-method-error
+    furge-by-own-method::get-method
+    furge-by-own-method-delegate/c
+    furge-internals-by-own-method
+    furge-by-own-method-thorough-unchecked
+    furge-by-own-method-thorough
+    furge-by-own-method-unthorough
+    furge-by-own-method-unchecked
+    furge-by-own-method)
+  (begin
     
-    (define (furge-internals-tag this)
-      'tag:furge-by-own-method)
+    (struct-easy
+      (furge-by-own-method::raise-different-input-methods-error
+        a b a-method b-method))
+    (struct-easy
+      (furge-by-own-method::raise-cannot-get-output-method-error
+        a b result input-method))
+    (struct-easy
+      (furge-by-own-method::raise-different-output-method-error
+        a b result input-method output-method))
+    (struct-easy
+      (furge-by-own-method::get-method source))
     
-    (define (furge-internals-autoname this)
-      (dissect this
-        (furge-internals-by-own-method _ _ _ #/dexable dex get-method)
-      #/list 'tag:furge-by-own-method
-        (autoname-dex dex)
-        (name-of dex get-method)))
+    (define/contract furge-by-own-method-delegate/c
+      contract?
+      (case->
+        (->
+          (struct/c
+            furge-by-own-method::raise-different-input-methods-error
+            any/c any/c furge? furge?)
+          none/c)
+        (->
+          (struct/c
+            furge-by-own-method::raise-cannot-get-output-method-error
+            any/c any/c any/c furge?)
+          none/c)
+        (->
+          (struct/c
+            furge-by-own-method::raise-different-output-method-error
+            any/c any/c any/c furge? furge?)
+          none/c)
+        (->
+          (struct/c furge-by-own-method::get-method any/c)
+          (maybe/c furge?))))
     
-    (define (furge-internals-autodex this other)
-      (dissect this (furge-internals-by-own-method _ _ _ a)
-      #/dissect other (furge-internals-by-own-method _ _ _ b)
-      #/compare-dexables a b))
-    
-    (define (furge-internals-call this a b)
-      (dissect this
-        (furge-internals-by-own-method error-name dex-furge call-furge
-        #/dexable dex get-method)
-      #/expect (get-method a) (just a-method) (nothing)
-      #/expect (get-method b) (just b-method) (nothing)
-      #/expect (compare-by-dex dex-furge a-method b-method)
-        (just #/ordering-eq)
-        (raise-arguments-error error-name
-          "obtained two different methods from the two input values"
-          "get-method" get-method
-          "a" a
-          "b" b
-          "a-method" a-method
-          "b-method" b-method)
-      #/expect (call-furge a-method a b) (just result) (nothing)
-      #/expect (get-method result) (just result-method)
-        (raise-arguments-error error-name
-          "could not obtain a method from the result value"
-          "get-method" get-method
-          "method" a-method
-          "a" a
-          "b" b
-          "result" result)
-      #/expect (compare-by-dex dex-furge a-method result-method)
-        (just #/ordering-eq)
-        (raise-arguments-error error-name
-          "obtained two different methods from the input and the output"
-          "get-method" get-method
-          "a" a
-          "b" b
-          "result" result
-          "a-and-b-method" a-method
-          "result-method" result-method)
-      #/just result))
-  ])
+    (struct-easy (furge-internals-by-own-method dexable-delegate)
+      #:other
+      
+      #:methods internal:gen:furge-internals
+      [
+        
+        (define (furge-internals-tag this)
+          'tag:furge-by-own-method)
+        
+        (define (furge-internals-autoname this)
+          (dissect this
+            (furge-internals-by-own-method #/dexable dex delegate)
+          #/list 'tag:furge-by-own-method
+            (autoname-dex dex)
+            (name-of dex delegate)))
+        
+        (define (furge-internals-autodex this other)
+          (dissect this (furge-internals-by-own-method a)
+          #/dissect other (furge-internals-by-own-method b)
+          #/compare-dexables a b))
+        
+        (define (furge-internals-call this a b)
+          (dissect this
+            (furge-internals-by-own-method #/dexable dex delegate)
+          #/maybe-bind (delegate #/furge-by-own-method::get-method a)
+          #/fn a-method
+          #/maybe-bind (delegate #/furge-by-own-method::get-method b)
+          #/fn b-method
+          #/expect (compare-by-dex (dex-furge) a-method b-method)
+            (just #/ordering-eq)
+            (delegate
+            #/furge-by-own-method::raise-different-input-methods-error
+              a b a-method b-method)
+          #/expect (call-furge a-method a b) (just result) (nothing)
+          #/expect
+            (delegate #/furge-by-own-method::get-method result)
+            (just result-method)
+            (delegate
+            #/furge-by-own-method::raise-cannot-get-output-method-error
+              a b result a-method)
+          #/expect (compare-by-dex (dex-furge) a-method result-method)
+            (just #/ordering-eq)
+            (delegate
+            #/furge-by-own-method::raise-different-output-method-error
+              a b result a-method result-method)
+          #/just result))
+      ])
 
-(define/contract (merge-by-own-method-unchecked dexable-get-method)
-  (-> (dexableof-unchecked #/-> any/c #/maybe/c merge?) merge?)
-  (internal:merge #/furge-internals-by-own-method
-    'merge-by-own-method (dex-merge) call-merge dexable-get-method))
+    (define/contract
+      (furge-by-own-method-thorough-unchecked dexable-delegate)
+      (-> (dexableof-unchecked furge-by-own-method-delegate/c) furge?)
+      (internal:furge
+      #/furge-internals-by-own-method dexable-delegate))
 
-(define/contract (fuse-by-own-method-unchecked dexable-get-method)
-  (-> (dexableof-unchecked #/-> any/c #/maybe/c fuse?) fuse?)
-  (internal:fuse #/furge-internals-by-own-method
-    'fuse-by-own-method (dex-fuse) call-fuse dexable-get-method))
+    (define/contract (furge-by-own-method-thorough dexable-delegate)
+      (-> (dexableof furge-by-own-method-delegate/c) furge?)
+      (furge-by-own-method-thorough-unchecked dexable-delegate))
 
-(define/contract (merge-by-own-method dexable-get-method)
-  (-> (dexableof #/-> any/c #/maybe/c merge?) merge?)
-  (internal:merge #/furge-internals-by-own-method
-    'merge-by-own-method (dex-merge) call-merge dexable-get-method))
+    (struct-easy (furge-by-own-method-unthorough get-method)
+      #:other
+      
+      #:property prop:procedure
+      (fn this command
+        (dissect this (furge-by-own-method-unthorough get-method)
+        #/mat command
+          (furge-by-own-method::raise-different-input-methods-error
+            a b a-method b-method)
+          (raise-arguments-error 'furge-by-own-method
+            "obtained two different methods from the two input values"
+            "get-method" get-method
+            "a" a
+            "b" b
+            "a-method" a-method
+            "b-method" b-method)
+        #/mat command
+          (furge-by-own-method::raise-cannot-get-output-method-error
+            a b result input-method)
+          (raise-arguments-error 'furge-by-own-method
+            "could not obtain a method from the result value"
+            "get-method" get-method
+            "a" a
+            "b" b
+            "result" result
+            "input-method" input-method)
+        #/mat command
+          (furge-by-own-method::raise-different-output-method-error
+            a b result input-method output-method)
+          (raise-arguments-error 'furge-by-own-method
+            "obtained two different methods from the input and the output"
+            "get-method" get-method
+            "a" a
+            "b" b
+            "result" result
+            "input-method" input-method
+            "output-method" output-method)
+        #/dissect command (furge-by-own-method::get-method source)
+        #/get-method source)))
 
-(define/contract (fuse-by-own-method dexable-get-method)
-  (-> (dexableof #/-> any/c #/maybe/c fuse?) fuse?)
-  (internal:fuse #/furge-internals-by-own-method
-    'fuse-by-own-method (dex-fuse) call-fuse dexable-get-method))
+    (define/contract
+      (furge-by-own-method-unchecked dexable-get-method)
+      (-> (dexableof-unchecked #/-> any/c #/maybe/c furge?) furge?)
+      (dissect dexable-get-method (dexable dex get-method)
+      #/furge-by-own-method-thorough-unchecked #/dexable
+        (dex-struct furge-by-own-method-unthorough dex)
+        (furge-by-own-method-unthorough get-method)))
+
+    (define/contract (furge-by-own-method dexable-get-method)
+      (-> (dexableof #/-> any/c #/maybe/c furge?) furge?)
+      (furge-by-own-method-unchecked dexable-get-method))
+  ))
+
+(define-furge-by-own-method
+  internal:merge
+  merge?
+  call-merge
+  dex-merge
+  merge-by-own-method::raise-different-input-methods-error
+  merge-by-own-method::raise-cannot-get-result-method-error
+  merge-by-own-method::raise-different-output-method-error
+  merge-by-own-method::get-method
+  merge-by-own-method-delegate/c
+  merge-internals-by-own-method
+  merge-by-own-method-thorough-unchecked
+  merge-by-own-method-thorough
+  merge-by-own-method-unthorough
+  merge-by-own-method-unchecked
+  merge-by-own-method)
+
+(define-furge-by-own-method
+  internal:fuse
+  fuse?
+  call-fuse
+  dex-fuse
+  fuse-by-own-method::raise-different-input-methods-error
+  fuse-by-own-method::raise-cannot-get-result-method-error
+  fuse-by-own-method::raise-different-output-method-error
+  fuse-by-own-method::get-method
+  fuse-by-own-method-delegate/c
+  fuse-internals-by-own-method
+  fuse-by-own-method-thorough-unchecked
+  fuse-by-own-method-thorough
+  fuse-by-own-method-unthorough
+  fuse-by-own-method-unchecked
+  fuse-by-own-method)
 
 
 (struct-easy
@@ -1885,59 +2122,100 @@
   #/internal:fusable-function proc))
 
 
+
 (struct-easy
-  (furge-internals-fusable-function
-    error-name call-furge dexable-arg-to-method)
+  (fuse-fusable-function::raise-cannot-combine-results-error
+    method a b a-result b-result))
+(struct-easy
+  (fuse-fusable-function::arg-to-method arg))
+
+(define/contract fuse-fusable-function-delegate/c
+  contract?
+  (case->
+    (->
+      (struct/c
+        fuse-fusable-function::raise-cannot-combine-results-error
+        fuse? any/c any/c any/c any/c)
+      none/c)
+    (->
+      (struct/c fuse-fusable-function::arg-to-method any/c)
+      (maybe/c fuse?))))
+
+(struct-easy (furge-internals-fusable-function dexable-delegate)
   #:other
   
   #:methods internal:gen:furge-internals
   [
     
     (define (furge-internals-tag this)
-      'tag:furge-fusable-function)
+      'tag:fuse-fusable-function)
     
     (define (furge-internals-autoname this)
       (dissect this
-        (furge-internals-fusable-function _ _
-        #/dexable dex arg-to-method)
+        (furge-internals-fusable-function #/dexable dex delegate)
       #/list 'tag:furge-fusable-function
         (autoname-dex dex)
-        (name-of dex arg-to-method)))
+        (name-of dex delegate)))
     
     (define (furge-internals-autodex this other)
-      (dissect this (furge-internals-fusable-function _ _ a)
-      #/dissect other (furge-internals-fusable-function _ _ b)
+      (dissect this (furge-internals-fusable-function a)
+      #/dissect other (furge-internals-fusable-function b)
       #/compare-dexables a b))
     
     (define (furge-internals-call this a b)
       (dissect this
-        (furge-internals-fusable-function error-name call-furge
-        #/dexable dex arg-to-method)
+        (furge-internals-fusable-function #/dexable dex delegate)
       #/expect (procedure? a) #t (nothing)
       #/expect (procedure? b) #t (nothing)
       #/fn arg
-        (w- method (arg-to-method arg)
+        (w- method
+          (delegate #/fuse-fusable-function::arg-to-method arg)
         #/w- a-result (a arg)
         #/w- b-result (b arg)
-        #/expect (call-furge method a-result b-result) (just result)
-          (raise-arguments-error error-name
-            "could not combine the result values"
-            "arg-to-method" arg-to-method
-            "method" method
-            "a" a
-            "b" b
-            "a-result" a-result
-            "b-result" b-result)
+        #/expect (call-fuse method a-result b-result) (just result)
+          (delegate
+          #/fuse-fusable-function::raise-cannot-combine-results-error
+            method a b a-result b-result)
           result)))
   ])
 
 (define/contract
+  (fuse-fusable-function-thorough-unchecked dexable-delegate)
+  (-> (dexableof-unchecked fuse-fusable-function-delegate/c) fuse?)
+  (internal:fuse #/furge-internals-fusable-function dexable-delegate))
+
+(define/contract (fuse-fusable-function-thorough dexable-delegate)
+  (-> (dexableof fuse-fusable-function-delegate/c) fuse?)
+  (fuse-fusable-function-thorough-unchecked dexable-delegate))
+
+(struct-easy (fuse-fusable-function-unthorough arg-to-method)
+  #:other
+  
+  #:property prop:procedure
+  (fn this command
+    (dissect this (fuse-fusable-function-unthorough arg-to-method)
+    #/mat command
+      (fuse-fusable-function::raise-cannot-combine-results-error
+        method a b a-result b-result)
+      (raise-arguments-error 'fuse-fusable-function
+        "could not combine the result values"
+        "arg-to-method" arg-to-method
+        "method" method
+        "a" a
+        "b" b
+        "a-result" a-result
+        "b-result" b-result)
+    #/dissect command (fuse-fusable-function::arg-to-method arg)
+    #/arg-to-method arg)))
+
+(define/contract
   (fuse-fusable-function-unchecked dexable-arg-to-method)
   (-> (dexableof-unchecked #/-> any/c fuse?) fuse?)
-  (internal:fuse #/furge-internals-fusable-function
-    'fuse-fusable-function call-fuse dexable-arg-to-method))
+  (dissect dexable-arg-to-method (dexable dex arg-to-method)
+  #/fuse-fusable-function-thorough-unchecked #/dexable
+    (dex-struct fuse-fusable-function-unthorough dex)
+    (fuse-fusable-function-unthorough arg-to-method)))
 
 (define/contract (fuse-fusable-function dexable-arg-to-method)
-  (-> (dexableof #/-> any/c #/maybe/c fuse?) fuse?)
-  (internal:fuse #/furge-internals-fusable-function
-    'fuse-fusable-function call-fuse dexable-arg-to-method))
+  (-> (dexableof #/-> any/c fuse?) fuse?)
+  (fuse-fusable-function-unchecked dexable-arg-to-method))
