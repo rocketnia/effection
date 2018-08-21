@@ -3,6 +3,7 @@
 
 (require #/only-in racket/generic define-generics)
 
+(require #/only-in lathe-comforts expect fn)
 (require #/only-in lathe-comforts/struct struct-easy)
 
 
@@ -39,6 +40,8 @@
 (provide #/struct-out fuse)
 
 (provide #/struct-out table)
+
+(provide #/struct-out fusable-function)
 
 
 
@@ -104,3 +107,15 @@
 ; ===== Tables =======================================================
 
 (struct-easy (table hash))
+
+
+; ===== Fusable functions ============================================
+
+(struct-easy (fusable-function proc)
+  #:other
+  
+  #:property prop:procedure
+  (fn this arg
+    (expect this (fusable-function proc)
+      (error "Expected this to be a fusable-function")
+    #/proc arg)))

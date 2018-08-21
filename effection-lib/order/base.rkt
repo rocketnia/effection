@@ -54,8 +54,9 @@
   dex-internals-autoname dex-internals-compare dex-internals-in?
   dex-internals-tag dex-internals-name-of furge-internals-autodex
   furge-internals-autoname furge-internals-call furge-internals-tag
-  fuse fuse? gen:cline-internals gen:dex-internals gen:furge-internals
-  merge merge? name ordering-private table table?)
+  fusable-function fusable-function? fuse fuse? gen:cline-internals
+  gen:dex-internals gen:furge-internals merge merge? name
+  ordering-private table table?)
 
 
 ; ==== Orderings ====
@@ -165,6 +166,14 @@
 (module+ private/unsafe #/provide
   table->sorted-list)
 (provide dex-table merge-table fuse-table)
+
+
+; ==== Fusable functions ====
+
+(provide
+  fusable-function? make-fusable-function fuse-fusable-function)
+(module+ private/unsafe #/provide
+  fuse-fusable-function-unchecked)
 
 
 
@@ -1860,3 +1869,75 @@
   (-> fuse? fuse?)
   (internal:fuse #/furge-internals-table
     autoname-fuse (dex-fuse) call-fuse fuse-val))
+
+
+
+; ===== Fusable functions ============================================
+
+
+(define/contract (fusable-function? v)
+  (-> any/c boolean?)
+  (internal:fusable-function? v))
+
+(define/contract (make-fusable-function proc)
+  (-> (-> any/c any/c) fusable-function?)
+  (if (fusable-function? proc) proc
+  #/internal:fusable-function proc))
+
+
+(struct-easy
+  (furge-internals-fusable-function
+    error-name call-furge dexable-arg-to-method)
+  #:other
+  
+  #:methods internal:gen:furge-internals
+  [
+    
+    (define (furge-internals-tag this)
+      'tag:furge-fusable-function)
+    
+    (define (furge-internals-autoname this)
+      (dissect this
+        (furge-internals-fusable-function _ _
+        #/dexable dex arg-to-method)
+      #/list 'tag:furge-fusable-function
+        (autoname-dex dex)
+        (name-of dex arg-to-method)))
+    
+    (define (furge-internals-autodex this other)
+      (dissect this (furge-internals-fusable-function _ _ a)
+      #/dissect other (furge-internals-fusable-function _ _ b)
+      #/compare-dexables a b))
+    
+    (define (furge-internals-call this a b)
+      (dissect this
+        (furge-internals-fusable-function error-name call-furge
+        #/dexable dex arg-to-method)
+      #/expect (procedure? a) #t (nothing)
+      #/expect (procedure? b) #t (nothing)
+      #/fn arg
+        (w- method (arg-to-method arg)
+        #/w- a-result (a arg)
+        #/w- b-result (b arg)
+        #/expect (call-furge method a-result b-result) (just result)
+          (raise-arguments-error error-name
+            "could not combine the result values"
+            "arg-to-method" arg-to-method
+            "method" method
+            "a" a
+            "b" b
+            "a-result" a-result
+            "b-result" b-result)
+          result)))
+  ])
+
+(define/contract
+  (fuse-fusable-function-unchecked dexable-arg-to-method)
+  (-> (dexableof-unchecked #/-> any/c fuse?) fuse?)
+  (internal:fuse #/furge-internals-fusable-function
+    'fuse-fusable-function call-fuse dexable-arg-to-method))
+
+(define/contract (fuse-fusable-function dexable-arg-to-method)
+  (-> (dexableof #/-> any/c #/maybe/c fuse?) fuse?)
+  (internal:fuse #/furge-internals-fusable-function
+    'fuse-fusable-function call-fuse dexable-arg-to-method))

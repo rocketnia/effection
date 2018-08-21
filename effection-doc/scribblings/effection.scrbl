@@ -520,6 +520,43 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
 }
 
 
+@subsection[#:tag "fusable-functions"]{Fusable Functions}
+
+The dex and cline utilities are good for early detection of equality on inductive information, information that we have access to all at once. For coinductive information -- that which we may never see the end of -- we cannot detect equality early. However, we may still do things based on an assumption of equality and then @emph{enforce} this assumption as new information comes to light.
+
+Effection uses a dedicated kind of encapsulated data, "fusable functions," for this purpose. As the name implies, fusable functions support a fuse operation. This operation returns a new fusable function right away. Subsequent calls to that function work by calling each of the original functions and fusing their results -- a computation which can cause errors if the return values turn out not to be as fusable as expected. We can use those errors to enforce our equality assumptions on the fly.
+
+Effections's dexes and clines can't do this kind of delayed enforcement because they only compute simple values like @racket[(ordering-lt)].
+
+It's arguable whether Effection's merges could do this. The property that sets apart a merge from a fuse is that a merge must be idempotent; the result of merging a value with itself must be indistinguishable from the original value. When we fuse a fusable function with itself, we end up with a function that does at least double the amount of computation, so in practice, the original and the fusion will not be indistinguishable. Because of this, Effection's fusable functions only come with a fuse operation, not a merge operation.
+
+An Effection @racket[fusable-function?] is also a @racket[procedure?] value. It can be invoked just like any other Racket procedure.
+
+There is currently no way to make a fusable function that performs a tail call. This property wouldn't be preserved by @racket[fuse-fusable-function] anyway.
+
+
+@defproc[(fusable-function? [x any/c]) boolean?]{
+  Returns whether the given value is an Effection fusable function value.
+}
+
+@defproc[
+  (make-fusable-function [proc (-> any/c any/c)])
+  fusable-function?
+]{
+  Returns a fusable function that behaves like the given single-input, single-output function.
+}
+
+@defproc[
+  (fuse-fusable-function
+    [dexable-arg-to-method (dexableof (-> any/c fuse?))])
+  fuse?
+]{
+  Given @racket[dexable-arg-to-method] as a dexable function, returns a fuse that combines fusable functions. The combined fusable function works by calling the @racket[dexable-arg-to-method] function to get a fuse, calling both of the originally fused functions to get each of their results, and fusing the results by that fuse. If the results turn out not to be in the fuse's domain, this causes an error.
+  
+  When compared by @racket[(dex-dex)], all @tt{fuse-fusable-function} values are @racket[ordering-eq] if their @racket[dexable-arg-to-method] values' dexes and values are.
+}
+
+
 @subsection[#:tag "other-data"]{Operations for Other Data Types}
 
 @defmodule[effection/order]
