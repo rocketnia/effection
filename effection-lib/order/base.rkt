@@ -19,7 +19,7 @@
   -> and/c any any/c case-> chaperone-contract? cons/c contract?
   contract-projection list/c listof none/c struct/c)
 (require #/only-in racket/contract/combinator
-  contract-first-order-passes? make-contract)
+  contract-first-order-passes? make-contract raise-blame-error)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/hash hash-union)
 (require #/only-in syntax/parse/define define-simple-macro)
@@ -339,8 +339,12 @@
       #:projection
       (fn b
         (w- c-projection ((contract-projection c) b)
-        #/dissectfn (dexable dex x)
-          (dexable dex #/c-projection x))))))
+        #/fn v
+          (expect v (dexable dex x)
+            (raise-blame-error b v
+              '(expected "a dexable" given: "~e")
+              v)
+          #/dexable dex #/c-projection x))))))
 
 (define/contract (dexableof-unchecked c)
   (-> contract? contract?)
