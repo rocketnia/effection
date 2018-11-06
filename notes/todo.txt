@@ -62,7 +62,7 @@ The act of entering that degree-1 pure region will already open a degree-1 hole 
 
 
 
-There are a number of different notionis of purity that a "pure region" could retreat to in Effection. Effection ranges from Racket-style procedural side effects to some very pure code, but there are stages in between. First we consider all the effects at play:
+There are a number of different notions of purity that a "pure region" could retreat to in Effection. Effection ranges from Racket-style procedural side effects to some very pure code, but there are stages in between. First we consider all the effects at play:
 
   * Nontrivial performance costs; time and space footprint that may exceed what the outside world is willing to provide offhand. This draws the outside world's attention in a way that can motivate them to study the program's intermediate execution state, run approximative simulations on it, make optimizations to it, or pull the plug on it without that interaction having been anticipated by the language designer or the programmer. And if these interactions are common enough, programmers may anticipate them, leading the culture around a language to assign a more impure semantics to a language than the semantics it was originally designed to have.
   

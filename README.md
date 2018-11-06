@@ -124,4 +124,4 @@ For now, Effection offers a couple of modules:
 
 API documentation is maintained in this repo and [hosted at the Racket website](https://docs.racket-lang.org/effection/).
 
-There's some work currently happening in `effection/effects/base` to implement Effection's dynamic scope/effect handler system. These definitions are not entirely documented or exported yet, and there are still several big holes in their impelementations.
+There's some work currently happening in `effection/effects/base` to implement Effection's dynamic scope/effect handler system. These definitions are not entirely documented or exported yet, and there are still several big holes in their implementations.
