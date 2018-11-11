@@ -15,11 +15,18 @@
   list-all list-kv-map list-map)
 
 
+; NOTE: The Racket documentation says `get/build-late-neg-projection`
+; is in `racket/contract/combinator`, but it isn't. It's in
+; `racket/contract/base`. Since it's also in `racket/contract` and the
+; documentation correctly says it is, we require it from there.
+(require #/only-in racket/contract get/build-late-neg-projection)
 (require #/only-in racket/contract/base
   -> and/c any any/c case-> chaperone-contract? cons/c contract?
-  contract-projection list/c listof none/c struct/c)
+  contract-name flat-contract? hash/c list/c listof none/c)
 (require #/only-in racket/contract/combinator
-  contract-first-order-passes? make-contract raise-blame-error)
+  blame-add-context coerce-contract contract-first-order-passes?
+  make-chaperone-contract make-contract make-flat-contract
+  raise-blame-error)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/hash hash-union)
 (require #/only-in syntax/parse/define define-simple-macro)
@@ -32,7 +39,7 @@
   list-all list-any list-bind list-map)
 (require #/only-in lathe-comforts/maybe
   just maybe? maybe-bind maybe/c nothing nothing?)
-(require #/only-in lathe-comforts/struct struct-easy)
+(require #/only-in lathe-comforts/struct istruct/c struct-easy)
 
 (require #/only-in effection/order/private
   dex-result? lt-autodex names-autodex make-ordering-private-gt
@@ -188,7 +195,8 @@
 ; ==== Tables ====
 
 (provide
-  table? table-get table-empty table-shadow table-map-fuse table-sort)
+  table? tableof table-get table-empty table-shadow table-map-fuse
+  table-sort)
 (module+ private/order #/provide
   assocs->table-if-mutually-unique)
 (module+ private/unsafe #/provide
@@ -211,6 +219,13 @@
 
 
 ; ===== Miscellaneous utilities ======================================
+
+(define (make-appropriate-contract c)
+  (if (flat-contract? c)
+    make-flat-contract
+  #/if (chaperone-contract? c)
+    make-chaperone-contract
+    make-contract))
 
 (begin-for-syntax
   
@@ -321,38 +336,54 @@
   (expect x (dexable dex value) #f
   #/and (dex? dex) (in-dex? dex value)))
 
-(define/contract (dexableof-internal name c)
-  (-> symbol? contract? contract?)
-  (if (chaperone-contract? c)
-    (struct/c dexable dex? c)
-    (make-contract
-      
-      #:name name
-      
-      #:first-order
-      (fn x
-        (contract-first-order-passes?
-          (struct/c dexable dex? #/fn x
-            (contract-first-order-passes? c x))
-          x))
-      
-      #:projection
-      (fn b
-        (w- c-projection ((contract-projection c) b)
-        #/fn v
-          (expect v (dexable dex x)
-            (raise-blame-error b v
-              '(expected "a dexable" given: "~e")
-              v)
-          #/dexable dex #/c-projection x))))))
-
 (define/contract (dexableof-unchecked c)
   (-> contract? contract?)
-  (dexableof-internal 'dexableof-unchecked c))
+  (w- c (coerce-contract 'dexableof-unchecked c)
+  #/ (make-appropriate-contract c)
+    
+    #:name `(dexableof-unchecked ,(contract-name c))
+    
+    #:first-order
+    (fn x
+      (contract-first-order-passes? (istruct/c dexable dex? c) x))
+    
+    #:late-neg-projection
+    (fn blame
+      (w- c-late-neg-projection
+        ( (get/build-late-neg-projection c)
+          (blame-add-context blame "the value of"))
+      #/fn v missing-party
+        (expect v (dexable dex x)
+          (raise-blame-error blame #:missing-party missing-party v
+            '(expected: "a dexable" given: "~e")
+            v)
+        #/dexable dex #/c-late-neg-projection x missing-party)))))
 
 (define/contract (dexableof c)
   (-> contract? contract?)
-  (and/c valid-dexable? (dexableof-internal 'dexableof c)))
+  (w- c (coerce-contract 'dexableof c)
+  #/ (make-appropriate-contract c)
+    
+    #:name `(dexableof ,(contract-name c))
+    
+    #:first-order
+    (fn x
+      (contract-first-order-passes?
+        (and/c valid-dexable? #/istruct/c dexable dex? c)
+        x))
+    
+    #:late-neg-projection
+    (fn blame
+      (w- c-late-neg-projection
+        ( (get/build-late-neg-projection c)
+          (blame-add-context blame "the value of"))
+      #/fn v missing-party
+        (expect (valid-dexable? v) #t
+          (raise-blame-error blame #:missing-party missing-party v
+            '(expected: "a valid dexable" given: "~e")
+            v)
+        #/dissect v (dexable dex x)
+        #/dexable dex #/c-late-neg-projection x missing-party)))))
 
 (define/contract (compare-dexables a b)
   (-> valid-dexable? valid-dexable? #/maybe/c dex-result?)
@@ -585,11 +616,11 @@
       contract?
       (case->
         (->
-          (struct/c cmp-by-own-method::raise-different-methods-error
+          (istruct/c cmp-by-own-method::raise-different-methods-error
             any/c any/c cmp? cmp?)
           none/c)
         (->
-          (struct/c cmp-by-own-method::get-method any/c)
+          (istruct/c cmp-by-own-method::get-method any/c)
           (maybe/c cmp?))))
     
     ; NOTE: If we weren't using this macro, we'd write the
@@ -1643,22 +1674,22 @@
       contract?
       (case->
         (->
-          (struct/c
+          (istruct/c
             furge-by-own-method::raise-different-input-methods-error
             any/c any/c furge? furge?)
           none/c)
         (->
-          (struct/c
+          (istruct/c
             furge-by-own-method::raise-cannot-get-output-method-error
             any/c any/c any/c furge?)
           none/c)
         (->
-          (struct/c
+          (istruct/c
             furge-by-own-method::raise-different-output-method-error
             any/c any/c any/c furge? furge?)
           none/c)
         (->
-          (struct/c furge-by-own-method::get-method any/c)
+          (istruct/c furge-by-own-method::get-method any/c)
           (maybe/c furge?))))
     
     (struct-easy (furge-internals-by-own-method dexable-delegate)
@@ -2006,6 +2037,32 @@
   (-> any/c boolean?)
   (internal:table? x))
 
+(define/contract (tableof c)
+  (-> contract? contract?)
+  (w- c (coerce-contract 'tableof c)
+  #/ (make-appropriate-contract c)
+    
+    #:name `(tableof ,(contract-name c))
+    
+    #:first-order
+    (fn x
+      (contract-first-order-passes?
+        (istruct/c internal:table #/hash/c #:immutable #t any/c c)
+        x))
+    
+    #:late-neg-projection
+    (fn blame
+      (w- c-late-neg-projection
+        ( (get/build-late-neg-projection c)
+          (blame-add-context blame "a value of"))
+      #/fn v missing-party
+        (expect v (internal:table v)
+          (raise-blame-error blame #:missing-party missing-party v
+            '(expected: "a table" given: "~e")
+            v)
+        #/internal:table #/hash-v-map v #/fn v
+          (c-late-neg-projection v missing-party))))))
+
 (define/contract (table-get key table)
   (-> name? table? maybe?)
   (dissect key (internal:name key)
@@ -2284,12 +2341,12 @@
   contract?
   (case->
     (->
-      (struct/c
+      (istruct/c
         fuse-fusable-function::raise-cannot-combine-results-error
         fuse? any/c any/c any/c any/c)
       none/c)
     (->
-      (struct/c fuse-fusable-function::arg-to-method any/c)
+      (istruct/c fuse-fusable-function::arg-to-method any/c)
       (maybe/c fuse?))))
 
 (struct-easy (furge-internals-fusable-function dexable-delegate)
