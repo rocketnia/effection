@@ -344,8 +344,8 @@
     #:name `(dexableof-unchecked ,(contract-name c))
     
     #:first-order
-    (fn x
-      (contract-first-order-passes? (istruct/c dexable dex? c) x))
+    (fn v
+      (contract-first-order-passes? (istruct/c dexable dex? c) v))
     
     #:late-neg-projection
     (fn blame
@@ -367,10 +367,10 @@
     #:name `(dexableof ,(contract-name c))
     
     #:first-order
-    (fn x
+    (fn v
       (contract-first-order-passes?
         (and/c valid-dexable? #/istruct/c dexable dex? c)
-        x))
+        v))
     
     #:late-neg-projection
     (fn blame
@@ -2045,10 +2045,10 @@
     #:name `(tableof ,(contract-name c))
     
     #:first-order
-    (fn x
+    (fn v
       (contract-first-order-passes?
         (istruct/c internal:table #/hash/c #:immutable #t any/c c)
-        x))
+        v))
     
     #:late-neg-projection
     (fn blame
