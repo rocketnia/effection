@@ -55,7 +55,7 @@
   authorized-name-get-name
   name-subname
   authorized-name-subname
-  extfx-authorized-name-split
+  extfx-claim-and-split
   
   optionally-dexable?
   optionally-dexable-of
@@ -64,6 +64,8 @@
   
   extfx-put
   extfx-get
+  
+  extfx-private-put
   extfx-private-get
   
   pub?
@@ -149,7 +151,7 @@
   (-> name? authorized-name? authorized-name?)
   'TODO)
 
-(define/contract (extfx-authorized-name-split n times then)
+(define/contract (extfx-claim-and-split n times then)
   (-> authorized-name? natural? (-> (listof authorized-name?) extfx?)
     extfx?)
   'TODO)
