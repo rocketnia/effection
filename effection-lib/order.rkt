@@ -20,12 +20,17 @@
 (provide #/all-from-out #/submod effection/order/base private/order)
 
 (provide
+  
   dex-immutable-string
   cline-immutable-string
   dex-exact-rational
   cline-exact-rational
   fuse-exact-rational-by-plus
-  fuse-exact-rational-by-times)
+  fuse-exact-rational-by-times
+  
+  eq-by-dex?
+  
+  )
 
 
 (define-syntax-rule
@@ -168,3 +173,14 @@
 (define/contract (fuse-exact-rational-by-times)
   (-> fuse?)
   (internal:fuse #/fuse-internals-exact-rational-by-times))
+
+
+(define/contract (eq-by-dex? dex a b)
+  (-> dex? any/c any/c boolean?)
+  (expect (compare-by-dex dex a b) (just comparison)
+    (raise-arguments-error 'eq-by-dex?
+      "expected a and b to be members of the domain of dex"
+      "dex" dex
+      "a" a
+      "b" b)
+  #/ordering-eq? comparison))

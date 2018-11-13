@@ -578,7 +578,7 @@ There is currently no way to make a fusable function that performs a tail call. 
 }
 
 
-@subsection[#:tag "other-data"]{Operations for Other Data Types}
+@subsection[#:tag "other-data"]{Operations for Other Data Types and Derived Operations}
 
 @defmodule[effection/order]
 
@@ -622,4 +622,8 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
   Given an association list, returns a @racket[just] of a table with the same entries if the keys are mutually unique; otherwise returns @racket[(nothing)].
   
   This is a procedure that is convenient for two purposes: It's useful for detecting duplicates in a list of names, and it's useful for constructing tables. These purposes often coincide, since data structures which contain mutually unique names are often good candidates for converting to tables.
+}
+
+@defproc[(eq-by-dex? [dex dex?] [a any/c] [b any/c]) boolean?]{
+  Given a dex and two values which must be in the dex's domain, computes whether those values are @racket[ordering-eq] according to the dex.
 }
