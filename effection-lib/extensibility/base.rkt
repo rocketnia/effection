@@ -552,32 +552,39 @@
         (next-full
           processes rev-next-processes unspent-tickets finish-value
           db-put rev-errors #t))
+    #/w- next-zero
+      (fn
+        (next-simple rev-next-processes))
+    #/w- next-one-fruitful
+      (fn process
+        (next-simple #/cons process rev-next-processes))
+    #/w- next-fruitless
+      (fn
+        ; NOTE: We can't use `next-one-fruitful` here because we don't
+        ; want to make `did-something` true if it isn't already.
+        (next-full
+          processes (cons process rev-next-processes) unspent-tickets
+          finish-value db-put rev-errors did-something))
     #/w- next-with-error
       (fn error
         (next-full
           processes rev-next-processes unspent-tickets finish-value
           db-put (cons error rev-errors) #t))
-    #/w- next-fruitless
-      (fn
-        (next-full
-          processes (cons process rev-next-processes) unspent-tickets
-          finish-value db-put rev-errors did-something))
     
     
     #/mat process (internal:extfx-noop)
-      (next-simple rev-next-processes)
+      (next-zero)
     #/mat process (internal:extfx-fused a b)
       (next-simple #/list* b a rev-next-processes)
     #/mat process (internal:extfx-later then)
-      (next-simple #/cons (then) rev-next-processes)
+      (next-one-fruitful #/then)
     #/mat process (internal:extfx-table-each t on-element then)
       'TODO
     
     #/mat process (internal:extfx-dspace-create-shadower ds then)
       (dissect ds (internal:dspace ds-symbol parents)
-      #/next-simple #/cons
-        (then #/internal:dspace (gensym) #/cons ds-symbol parents)
-        rev-next-processes)
+      #/next-one-fruitful
+      #/then #/internal:dspace (gensym) #/cons ds-symbol parents)
     
     #/mat process (internal:extfx-claim-and-split n times then)
       'TODO
@@ -658,7 +665,7 @@
           #/error "Internal error: Encountered an unknown kind of db-put entry"))
       #/check-ds-symbol #/fn already-written
       #/if already-written
-        (next-simple rev-next-processes)
+        (next-zero)
       #/w- check-parents
         (fn then
           (w-loop next parents-to-check parents
@@ -685,7 +692,7 @@
             #/error "Internal error: Encountered an unknown kind of db-put entry")))
       #/check-parents #/fn already-written
       #/if already-written
-        (next-simple rev-next-processes)
+        (next-zero)
       #/w- write-ds-symbol
         (fn db-put then
           (w- then-with-db-put-for-ds
@@ -754,9 +761,7 @@
           (next places-to-check)
         #/expect value (db-put-entry-written existing-value)
           (next places-to-check)
-        #/next-simple #/cons
-          (then #/optionally-dexable-value value)
-          rev-next-processes))
+        #/next-one-fruitful #/then #/optionally-dexable-value value))
     
     #/mat process
       (internal:extfx-private-put ds putter-name getter-name comp)
