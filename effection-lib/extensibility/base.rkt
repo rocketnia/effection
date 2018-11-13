@@ -15,27 +15,16 @@
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/math natural?)
 
-(require #/only-in lathe-comforts dissect expect fn w-)
-(require #/only-in lathe-comforts/struct istruct/c)
+(require #/only-in lathe-comforts dissect expect fn mat w-)
+(require #/only-in lathe-comforts/maybe just nothing)
+(require #/only-in lathe-comforts/struct istruct/c struct-easy)
 (require #/only-in lathe-comforts/trivial trivial?)
 
 (require #/only-in effection/order/base
-  dexable dexableof fuse? name? table? tableof valid-dexable?)
-
-
-(module private racket/base
-  
-  (require #/only-in lathe-comforts/struct struct-easy)
-  
-  (provide #/struct-out optionally-dexable-once)
-  (provide #/struct-out optionally-dexable-dexable)
-  
-  (struct-easy (optionally-dexable-once v) #:equal)
-  (struct-easy (optionally-dexable-dexable v) #:equal)
-  
-  )
-
-(require #/prefix-in internal: 'private)
+  dexable dexableof fuse? name? ordering-eq table? tableof
+  valid-dexable?)
+(require #/prefix-in unsafe: #/only-in effection/order/unsafe
+  fuse gen:furge-internals)
 
 
 ; TODO: Finish implementing each of these exports, and document them.
@@ -91,6 +80,58 @@
   )
 
 
+(module private racket/base
+  
+  (require #/only-in lathe-comforts/struct struct-easy)
+  
+  
+  (define-syntax-rule (provide-struct (name field ...) option ...)
+    (begin
+      (struct-easy (name field ...) option ...)
+      (provide #/struct-out name)))
+  
+  
+  (provide-struct (optionally-dexable-once v) #:equal)
+  (provide-struct (optionally-dexable-dexable v) #:equal)
+  
+  
+  (provide-struct (extfx-noop))
+  (provide-struct (extfx-fused a b))
+  (provide-struct (extfx-later then))
+  (provide-struct (extfx-table-each t on-element then))
+  
+  (provide-struct (extfx-dspace-create-shadower ds then))
+  
+  (provide-struct (extfx-claim-and-split n times then))
+  
+  (provide-struct (extfx-put ds n comp))
+  (provide-struct (extfx-get ds n then))
+  
+  (provide-struct (extfx-private-put ds putter-name getter-name comp))
+  (provide-struct (extfx-private-get ds putter-name getter-name then))
+  
+  (provide-struct (extfx-establish-pubsub ds pubsub-name then))
+  (provide-struct (extfx-pub ds p pubber-name arg))
+  (provide-struct (extfx-sub ds s subber-name func))
+  
+  (provide-struct (extfx-ft-split-list ticket times then))
+  (provide-struct (extfx-ft-split-table ticket times then))
+  (provide-struct (extfx-ft-subname ticket key then))
+  (provide-struct (extfx-ft-restrict ticket ds then))
+  
+  (provide-struct (extfx-ft-disburse ds hub-name comp-ticket))
+  (provide-struct (extfx-ft-claim ds t then))
+  
+  (provide-struct
+    (extfx-contribute ds collector-familiarity-ticket comp))
+  (provide-struct (extfx-collect ds collector-name then))
+  
+  
+  )
+
+(require #/prefix-in internal: 'private)
+
+
 
 ; TODO: This is also defined privately in `effection/order/base`. See
 ; if we can extract it into a library or something.
@@ -105,7 +146,42 @@
 
 (define/contract (extfx? v)
   (-> any/c boolean?)
-  'TODO)
+  
+  (mat v (internal:extfx-noop) #t
+  #/mat v (internal:extfx-fused a b) #t
+  #/mat v (internal:extfx-later then) #t
+  #/mat v (internal:extfx-table-each t on-element then) #t
+  
+  #/mat v (internal:extfx-dspace-create-shadower ds then) #t
+  
+  #/mat v (internal:extfx-claim-and-split n times then) #t
+  
+  #/mat v (internal:extfx-put ds n comp) #t
+  #/mat v (internal:extfx-get ds n then) #t
+  
+  #/mat v (internal:extfx-private-put ds putter-name getter-name comp)
+    #t
+  #/mat v (internal:extfx-private-get ds putter-name getter-name then)
+    #t
+  
+  #/mat v (internal:extfx-establish-pubsub ds pubsub-name then) #t
+  #/mat v (internal:extfx-pub ds p pubber-name arg) #t
+  #/mat v (internal:extfx-pub ds s subber-name func) #t
+  
+  #/mat v (internal:extfx-ft-split-list ticket times then) #t
+  #/mat v (internal:extfx-ft-split-table ticket times then) #t
+  #/mat v (internal:extfx-ft-subname ticket key then) #t
+  #/mat v (internal:extfx-ft-restrict ticket ds then) #t
+  
+  #/mat v (internal:extfx-ft-disburse ds hub-name comp-ticket) #t
+  #/mat v (internal:extfx-ft-claim ds t then) #t
+  
+  #/mat v
+    (internal:extfx-contribute ds collector-familiarity-ticket comp)
+    #t
+  #/mat v (internal:extfx-collect ds collector-name then) #t
+  
+    #f))
 
 (define/contract (dspace? v)
   (-> any/c boolean?)
@@ -114,25 +190,46 @@
 
 (define/contract (extfx-noop)
   (-> extfx?)
-  'TODO)
+  (internal:extfx-noop))
+
+(struct-easy (fuse-internals-extfx)
+  #:other
+  
+  #:methods unsafe:gen:furge-internals
+  [
+    
+    (define (furge-internals-tag this)
+      'tag:fuse-extfx)
+    
+    (define (furge-internals-autoname this)
+      'tag:fuse-extfx)
+    
+    (define (furge-internals-autodex this other)
+      (just #/ordering-eq))
+    
+    (define (furge-internals-call this a b)
+      (expect (extfx? a) #t (nothing)
+      #/expect (extfx? b) #t (nothing)
+      #/just #/internal:extfx-fused a b))
+  ])
 
 (define/contract (fuse-extfx)
   (-> fuse?)
-  'TODO)
+  (unsafe:fuse #/fuse-internals-extfx))
 
 (define/contract (extfx-later then)
   (-> (-> extfx?) extfx?)
-  'TODO)
+  (internal:extfx-later then))
 
 (define/contract (extfx-table-each t on-element then)
   (-> table? (-> any/c (-> any/c extfx?) extfx?) (-> table? extfx?)
     extfx?)
-  'TODO)
+  (internal:extfx-table-each t on-element then))
 
 
 (define/contract (extfx-dspace-create-shadower ds then)
   (-> dspace? (-> dspace? extfx?) extfx?)
-  'TODO)
+  (internal:extfx-dspace-create-shadower ds then))
 
 
 (define/contract (authorized-name? v)
@@ -154,7 +251,7 @@
 (define/contract (extfx-claim-and-split n times then)
   (-> authorized-name? natural? (-> (listof authorized-name?) extfx?)
     extfx?)
-  'TODO)
+  (internal:extfx-claim-and-split n times then))
 
 
 (define/contract (optionally-dexable? v)
@@ -207,11 +304,11 @@
   (-> dspace? authorized-name?
     (-> (-> optionally-dexable? extfx?) extfx?)
     extfx?)
-  'TODO)
+  (internal:extfx-put ds n comp))
 
 (define/contract (extfx-get ds n then)
   (-> dspace? name? (-> any/c extfx?) extfx?)
-  'TODO)
+  (internal:extfx-get ds n then))
 
 
 (define/contract
@@ -219,11 +316,11 @@
   (-> dspace? authorized-name? name?
     (-> (-> optionally-dexable? extfx?) extfx?)
     extfx?)
-  'TODO)
+  (internal:extfx-private-put ds putter-name getter-name comp))
 
 (define/contract (extfx-private-get ds putter-name getter-name then)
   (-> dspace? name? authorized-name? (-> any/c extfx?) extfx?)
-  'TODO)
+  (internal:extfx-private-get ds putter-name getter-name then))
 
 
 (define/contract (pub? v)
@@ -244,17 +341,17 @@
 
 (define/contract (extfx-establish-pubsub ds pubsub-name then)
   (-> dspace? authorized-name? (-> pub? sub? extfx?) extfx?)
-  'TODO)
+  (internal:extfx-establish-pubsub ds pubsub-name then))
 
 (define/contract (extfx-pub ds p pubber-name arg)
   (-> dspace? pub? authorized-name? optionally-dexable? extfx?)
-  'TODO)
+  (internal:extfx-pub ds p pubber-name arg))
 
 (define/contract (extfx-sub ds s subber-name func)
   (-> dspace? sub? authorized-name?
     (optionally-dexable-of #/-> any/c extfx?)
     extfx?)
-  'TODO)
+  (internal:extfx-sub ds s subber-name func))
 
 
 (define/contract (familiarity-ticket? v)
@@ -265,35 +362,35 @@
   (-> familiarity-ticket? natural?
     (-> (listof familiarity-ticket?) extfx?)
     extfx?)
-  'TODO)
+  (internal:extfx-ft-split-list ticket times then))
 
 (define/contract (extfx-ft-split-table ticket times then)
   (-> familiarity-ticket? (tableof trivial?)
     (-> (tableof familiarity-ticket?) extfx?)
     extfx?)
-  'TODO)
+  (internal:extfx-ft-split-table ticket times then))
 
 (define/contract (extfx-ft-subname ticket key then)
   (-> familiarity-ticket? name? (-> familiarity-ticket? extfx?)
     extfx?)
-  'TODO)
+  (internal:extfx-ft-subname ticket key then))
 
 (define/contract (extfx-ft-restrict ticket ds then)
   (-> familiarity-ticket? dspace? (-> familiarity-ticket? extfx?)
     extfx?)
-  'TODO)
+  (internal:extfx-ft-restrict ticket ds then))
 
 
 (define/contract (extfx-ft-disburse ds hub-name comp-ticket)
   (-> dspace? authorized-name?
     (-> (-> familiarity-ticket? extfx?) extfx?)
     extfx?)
-  'TODO)
+  (internal:extfx-ft-disburse ds hub-name comp-ticket))
 
 (define/contract (extfx-ft-claim ds t then)
   (-> dspace? familiarity-ticket? (-> familiarity-ticket? extfx?)
     extfx?)
-  'TODO)
+  (internal:extfx-ft-claim ds t then))
 
 
 (define/contract
@@ -301,8 +398,8 @@
   (-> dspace? familiarity-ticket?
     (-> (-> optionally-dexable? extfx?) extfx?)
     extfx?)
-  'TODO)
+  (internal:extfx-contribute ds collector-familiarity-ticket comp))
 
 (define/contract (extfx-collect ds collector-name then)
   (-> dspace? authorized-name? (-> table? extfx?) extfx?)
-  'TODO)
+  (internal:extfx-collect ds collector-name then))
