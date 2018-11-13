@@ -82,10 +82,26 @@
   
   )
 
+; TODO: Document these exports, which wind up exported from
+; `effection/extensibility/unsafe`.
+(module+ private/unsafe #/provide
+  new-dspace!
+  run-extfx!)
+;
+; NOTE: The `private/unsafe` submodule exports the `authorized-name`
+; struct, which also ends up being exported from
+; `effection/extensibility/unsafe`.
+;
+; TODO: Is there a safer way to obtain a root authorized name (e.g.
+; having `run-extfx!` create one itself to pass into its body)?
+
 
 (module private racket/base
   
   (require #/only-in lathe-comforts/struct struct-easy)
+  
+  ; TODO: Document this export.
+  (module+ unsafe #/provide #/struct-out authorized-name)
   
   
   (define-syntax-rule (provide-struct (name field ...) option ...)
@@ -459,8 +475,12 @@
   (internal:extfx-collect ds collector-name then))
 
 
-; TODO: Export this. We may need to refactor it a bit more before it's
-; stable, since it's far from being fully implemented.
+; TODO: This is an export of `effection/extensibility/unsafe` right
+; now, but we may need to refactor it a bit more before it's stable,
+; since `run-extfx!` is far from being fully implemented. Is there a
+; safer way to obtain a root definition space (e.g. having
+; `run-extfx!` create one itself to pass into its body)?
+;
 (define/contract (new-dspace!)
   (-> dspace?)
   (internal:dspace (gensym) #/list))
@@ -476,8 +496,13 @@
 (struct-easy (db-put-entry-do-not-conflict existing-values))
 (struct-easy (db-put-entry-written existing-value))
 
-; TODO: Export this. We may need to refactor it a bit more before it's
-; stable, since it's far from being fully implemented.
+; TODO: This is an export of `effection/extensibility/unsafe` right
+; now, but we may need to refactor it a bit more before it's stable,
+; since it's far from being fully implemented. Is there a safer way to
+; design this (e.g. a way to prohibit the result value from containing
+; lingering definition spaces, ticket values, authorized names, pubs,
+; subs, etc.)?
+;
 (define/contract (run-extfx! body)
   (-> (-> (-> any/c extfx?) extfx?)
     (or/c
