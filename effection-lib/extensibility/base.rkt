@@ -548,16 +548,16 @@
       #/next-full (reverse rev-next-processes) (list) unspent-tickets
         finish-value db-put rev-errors #f)
     #/w- next-simple
-      (fn rev-next-processes
+      (fn processes
         (next-full
           processes rev-next-processes unspent-tickets finish-value
           db-put rev-errors #t))
     #/w- next-zero
       (fn
-        (next-simple rev-next-processes))
+        (next-simple processes))
     #/w- next-one-fruitful
       (fn process
-        (next-simple #/cons process rev-next-processes))
+        (next-simple #/cons process processes))
     #/w- next-fruitless
       (fn
         ; NOTE: We can't use `next-one-fruitful` here because we don't
@@ -575,7 +575,7 @@
     #/mat process (internal:extfx-noop)
       (next-zero)
     #/mat process (internal:extfx-fused a b)
-      (next-simple #/list* b a rev-next-processes)
+      (next-simple #/list* b a processes)
     #/mat process (internal:extfx-later then)
       (next-one-fruitful #/then)
     #/mat process (internal:extfx-table-each t on-element then)
