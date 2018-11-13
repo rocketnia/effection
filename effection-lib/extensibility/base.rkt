@@ -27,7 +27,7 @@
   dexable dexableof dex-dex dex-name fuse? name? name-of ordering-eq
   table? table-empty table-get tableof table-shadow valid-dexable?)
 (require #/prefix-in unsafe: #/only-in effection/order/unsafe
-  fuse gen:furge-internals)
+  fuse gen:furge-internals name)
 
 
 ; TODO: Finish implementing each of these exports, and document them.
@@ -95,6 +95,9 @@
   
   
   (provide-struct (dspace ds-symbol parents))
+  
+  
+  (provide-struct (authorized-name name))
   
   
   (provide-struct (optionally-dexable-once v))
@@ -253,19 +256,31 @@
 
 (define/contract (authorized-name? v)
   (-> any/c boolean?)
-  'TODO)
+  (internal:authorized-name? v))
 
 (define/contract (authorized-name-get-name n)
   (-> authorized-name? name?)
-  'TODO)
+  (dissect n (internal:authorized-name n)
+    n))
 
 (define/contract (name-subname key-name original-name)
   (-> name? name? name?)
-  'TODO)
+  (dissect key-name (unsafe:name key-name)
+  #/dissect original-name (unsafe:name original-name)
+  
+  ; TODO: The tag `name:subname` we're using here is identical to the
+  ; one we're using for `sink-name-subname` in Cene for Racket.
+  ; Fortunately, we're using it for the exact same purpose.
+  ; Nevertheless, once we have this file working smoothly, we should
+  ; modify Cene for Racket so it uses this rather than creating its
+  ; own `name:subname` names.
+  ;
+  #/unsafe:name #/list 'name:subname key-name original-name))
 
 (define/contract (authorized-name-subname key-name original-name)
   (-> name? authorized-name? authorized-name?)
-  'TODO)
+  (dissect original-name (internal:authorized-name original-name)
+  #/internal:authorized-name #/name-subname key-name original-name))
 
 (define/contract (extfx-claim-and-split n times then)
   (-> authorized-name? natural? (-> (listof authorized-name?) extfx?)
@@ -444,6 +459,13 @@
   (internal:extfx-collect ds collector-name then))
 
 
+; TODO: Export this. We may need to refactor it a bit more before it's
+; stable, since it's far from being fully implemented.
+(define/contract (new-dspace!)
+  (-> dspace?)
+  (internal:dspace (gensym) #/list))
+
+
 (struct-easy (run-extfx-result-success value) #:equal)
 (struct-easy (run-extfx-result-failure errors) #:equal)
 
@@ -527,7 +549,10 @@
       'TODO
     
     #/mat process (internal:extfx-dspace-create-shadower ds then)
-      'TODO
+      (dissect ds (internal:dspace ds-symbol parents)
+      #/next-simple #/cons
+        (then #/internal:dspace (gensym) #/cons ds-symbol parents)
+        rev-next-processes)
     
     #/mat process (internal:extfx-claim-and-split n times then)
       'TODO
