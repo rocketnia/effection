@@ -569,7 +569,7 @@
     #/mat process (internal:extfx-fused a b)
       (next-simple #/list* b a rev-next-processes)
     #/mat process (internal:extfx-later then)
-      'TODO
+      (next-simple #/cons (then) rev-next-processes)
     #/mat process (internal:extfx-table-each t on-element then)
       'TODO
     
