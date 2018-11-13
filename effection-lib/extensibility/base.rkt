@@ -517,8 +517,7 @@
     
     rev-next-processes (list)
     unspent-tickets (hasheq finish-ticket #t)
-    finish-value (nothing)
-    db-put (hasheq)
+    db (hasheq 'finish-run (nothing) 'put (hasheq))
     rev-errors (list)
     did-something #f
     
@@ -526,13 +525,13 @@
       (mat rev-next-processes (list)
         ; If there are no processes left, we're done. We check that
         ; there are no unspent tickets, and we return either the
-        ; finish value or the collection of errors.
+        ; `finish-run` value or the collection of errors.
         (w- rev-errors
           (if (hash-empty? unspent-tickets)
             rev-errors
             (cons "Expected each ticket to be spent" rev-errors))
         #/mat rev-errors (list)
-          (dissect finish-value (just finish-value)
+          (dissect (hash-ref db 'finish-run) (just finish-value)
           #/run-extfx-result-success finish-value)
           (run-extfx-result-failure #/internal:run-extfx-errors
           #/reverse rev-errors))
@@ -546,12 +545,12 @@
             "Read from a name that was never defined")
           rev-errors)
       #/next-full (reverse rev-next-processes) (list) unspent-tickets
-        finish-value db-put rev-errors #f)
+        db rev-errors #f)
     #/w- next-simple
       (fn processes
         (next-full
-          processes rev-next-processes unspent-tickets finish-value
-          db-put rev-errors #t))
+          processes rev-next-processes unspent-tickets db rev-errors
+          #t))
     #/w- next-zero
       (fn
         (next-simple processes))
@@ -564,12 +563,13 @@
         ; want to make `did-something` true if it isn't already.
         (next-full
           processes (cons process rev-next-processes) unspent-tickets
-          finish-value db-put rev-errors did-something))
+          db rev-errors did-something))
     #/w- next-with-error
       (fn error
         (next-full
-          processes rev-next-processes unspent-tickets finish-value
-          db-put (cons error rev-errors) #t))
+          processes rev-next-processes unspent-tickets db
+          (cons error rev-errors)
+          #t))
     
     
     #/mat process (internal:extfx-noop)
@@ -590,10 +590,11 @@
       'TODO
     
     #/mat process (internal:extfx-put ds n comp)
-      ; TODO: Modify `db-put` here so that we know that this value
-      ; will be put by this process. That way, we'll be able to focus
-      ; the error message by removing "couldn't read" errors if the
-      ; corresponding writing processes had their own errors.
+      ; TODO: Modify `(hash-ref db 'put)` here so that we know that
+      ; this value will be put by this process. That way, we'll be
+      ; able to focus the error message by removing "couldn't read"
+      ; errors if the corresponding writing processes had their own
+      ; errors.
       (w- ticket (gensym)
       #/next-full
         processes
@@ -602,7 +603,7 @@
             (extfx-spend ticket #/extfx-finish-put ds n value))
           rev-next-processes)
         (hash-set unspent-tickets ticket #t)
-        finish-value db-put rev-errors #t)
+        db rev-errors #t)
     #/mat process (extfx-finish-put ds n value)
       ; If there has already been a definition installed at this name
       ; in this definition space, this checks that the proposed dex
@@ -645,6 +646,7 @@
               #/then)
             #/error "Internal error: Encountered an unknown kind of optionally dexable value")
           #/error "Internal error: Encountered an unknown kind of optionally dexable value"))
+      #/w- db-put (hash-ref db 'put)
       #/w- check-ds-symbol
         (fn then
           (expect (hash-ref-maybe db-put ds-symbol)
@@ -662,7 +664,7 @@
           #/mat entry (db-put-entry-written existing-value)
             (do-not-conflict existing-value #/fn
               (then #t))
-          #/error "Internal error: Encountered an unknown kind of db-put entry"))
+          #/error "Internal error: Encountered an unknown kind of db put entry"))
       #/check-ds-symbol #/fn already-written
       #/if already-written
         (next-zero)
@@ -689,7 +691,7 @@
               (do-not-conflict existing-value #/fn
                 (then #t))
             
-            #/error "Internal error: Encountered an unknown kind of db-put entry")))
+            #/error "Internal error: Encountered an unknown kind of db put entry")))
       #/check-parents #/fn already-written
       #/if already-written
         (next-zero)
@@ -742,8 +744,9 @@
             #/error "Internal error: Encountered an unknown kind of db-put entry")))
       #/write-parents db-put #/fn db-put
       #/next-full
-        processes rev-next-processes unspent-tickets finish-value
-        db-put rev-errors #t)
+        processes rev-next-processes unspent-tickets
+        (hash-set db 'put db-put)
+        rev-errors #t)
     #/mat process (internal:extfx-get ds n then)
       ; If there has not yet been a definition installed at this name
       ; in this definition space, we set this process aside and come
@@ -755,7 +758,8 @@
       #/w-loop next places-to-check (cons ds-symbol parents)
         (expect places-to-check (cons place places-to-check)
           (next-fruitless)
-        #/expect (hash-ref-maybe db-put place) (just db-put-for-ds)
+        #/expect (hash-ref-maybe (hash-ref db 'put) place)
+          (just db-put-for-ds)
           (next places-to-check)
         #/expect (table-get n db-put-for-ds) (just value)
           (next places-to-check)
@@ -804,12 +808,12 @@
       #/next-full
         processes rev-next-processes
         (hash-remove unspent-tickets ticket-symbol)
-        finish-value db-put rev-errors #t)
+        db rev-errors #t)
     #/mat process (extfx-finish-run value)
-      (dissect finish-value (nothing)
+      (dissect (hash-ref db 'finish-run) (nothing)
       #/next-full
         processes rev-next-processes unspent-tickets
-        (just value)
-        db-put rev-errors #t)
+        (hash-set db 'finish-run (just value))
+        rev-errors #t)
     
     #/error "Internal error: Expected process to be an extfx value")))
