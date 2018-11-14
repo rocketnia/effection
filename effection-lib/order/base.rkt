@@ -43,8 +43,8 @@
 
 (require #/only-in effection/order/private
   dex-result? lt-autodex names-autodex make-ordering-private-gt
-  make-ordering-private-lt name? ordering-private?
-  struct-type-descriptors-autodex
+  make-ordering-private-lt name? object-identities-autodex
+  ordering-private?
   
   struct:ordering-eq ordering-eq ordering-eq?
   
@@ -796,8 +796,7 @@
       #/dissect other
         (dex-internals-struct b-descriptor b-counts? b-fields)
       #/maybe-ordering-or
-        (just
-        #/struct-type-descriptors-autodex a-descriptor b-descriptor)
+        (just #/object-identities-autodex a-descriptor b-descriptor)
       #/maybe-compare-aligned-lists a-fields b-fields
       #/fn a-field b-field
         (dissect a-field (list a-getter a-position a-dex)
@@ -1290,8 +1289,7 @@
       #/dissect other
         (cline-internals-struct b-descriptor b-counts? b-fields)
       #/maybe-ordering-or
-        (just
-        #/struct-type-descriptors-autodex a-descriptor b-descriptor)
+        (just #/object-identities-autodex a-descriptor b-descriptor)
       #/maybe-compare-aligned-lists a-fields b-fields
       #/fn a-field b-field
         (dissect a-field (list a-getter a-position a-cline)
@@ -1915,8 +1913,7 @@
         (furge-internals-struct
           _ _ _ b-descriptor _ _ b-fields)
       #/maybe-ordering-or
-        (just
-        #/struct-type-descriptors-autodex a-descriptor b-descriptor)
+        (just #/object-identities-autodex a-descriptor b-descriptor)
       #/maybe-compare-aligned-lists a-fields b-fields
       #/fn a-field b-field
         (dissect a-field (list a-getter a-position a-furge)

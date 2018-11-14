@@ -73,24 +73,24 @@
 ; TODO: Test this implementation very thoroughly. We need to know what
 ; happens when this module is used through diamond dependencies, what
 ; happens if this module is somehow visited more than once, and that
-; kind of thing. We probably won't be able to guarantee struct type
-; descriptors will be sorted the same way in every phase, but we can
-; at least document why not.
-(define descriptors-semaphore* (make-semaphore 1))
-(define descriptors-to-ranks* (make-weak-hasheq))
-(define descriptors-next-rank* 0)
-(define/contract (descriptor-rank descriptor)
+; kind of thing. We probably won't be able to guarantee uninterned
+; symbols and struct type descriptors will be sorted the same way in
+; every phase, but we can at least document why not.
+(define object-identities-semaphore* (make-semaphore 1))
+(define object-identities-to-ranks* (make-weak-hasheq))
+(define object-identities-next-rank* 0)
+(define/contract (object-identity-rank object-identity)
   (-> struct-type? natural?)
-  (call-with-semaphore descriptors-semaphore* #/fn
-    (if (hash-has-key? descriptors-to-ranks* descriptor)
-      (hash-ref descriptors-to-ranks* descriptor)
-    #/w- rank descriptors-next-rank*
-      (hash-set! descriptors-to-ranks* descriptor rank)
-      (set! descriptors-next-rank* (add1 rank))
+  (call-with-semaphore object-identities-semaphore* #/fn
+    (if (hash-has-key? object-identities-to-ranks* object-identity)
+      (hash-ref object-identities-to-ranks* object-identity)
+    #/w- rank object-identities-next-rank*
+      (hash-set! object-identities-to-ranks* object-identity rank)
+      (set! object-identities-next-rank* (add1 rank))
       rank)))
-(define/contract (struct-type-descriptors-autodex a b)
-  (-> struct-type? struct-type? dex-result?)
-  (lt-autodex (descriptor-rank a) (descriptor-rank b) <))
+(define/contract (object-identities-autodex a b)
+  (-> any/c any/c dex-result?)
+  (lt-autodex (object-identity-rank a) (object-identity-rank b) <))
 
 (define/contract (exact-rational? v)
   (-> any/c boolean?)
@@ -134,5 +134,17 @@
       #/make-ordering-private-gt)
     #/if (exact-rational? b) (make-ordering-private-lt)
     
+    ; Handle the uninterned symbols.
+    #/w- uninterned-symbol?
+      (fn x
+        (and
+          (symbol? x)
+          (not #/symbol-interned? x)
+          (not #/symbol-unreadable? x)))
+    #/if (uninterned-symbol? a)
+      (if (uninterned-symbol? b) (object-identities-autodex a b)
+      #/make-ordering-private-gt)
+    #/if (uninterned-symbol? b) (make-ordering-private-lt)
+    
     ; Handle the structure type descriptors.
-    #/struct-type-descriptors-autodex a b)))
+    #/object-identities-autodex a b)))

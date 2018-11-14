@@ -58,9 +58,9 @@
 ; ===== Names, dexes, and dexables ===================================
 
 ; Internally, we represent name values as data made of structure type
-; descriptors, exact rational numbers, interned symbols, empty lists,
-; and cons cells. For sorting purposes, we consider them to ascend in
-; that order.
+; descriptors, uninterned symbols, exact rational numbers, interned
+; symbols, empty lists, and cons cells. For sorting purposes, we
+; consider them to ascend in that order.
 ;
 ; This is the struct type we "encapsulate" that in, but we offer it as
 ; an unsafe export.
