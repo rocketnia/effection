@@ -158,6 +158,110 @@
 
 
 
+; TODO:
+;
+; We should consider being more proactive about handling errors
+; (especially so that Cene for Racket can use this implementation but
+; replace its errors with a Cene concept of errors). Here's a rundown
+; of all the errors we should let the user provide handlers for.
+;
+; Note that we don't mention any errors which the user could work
+; around by performing checks on their values before passing them in.
+; Effectively, those can be handled already.
+;
+; Also, although we say think of these as "handlers," if an error ever
+; occurs, we should encourage (if not totally enforce) that the user
+; "handle" it merely by tailoring the error message. Tailored error
+; messages could send us down an extravagant path if we let
+; them -- maybe even using error-handling-time definition spaces to
+; communicate across concurrently occurring errors; adding ways for a
+; caller to analyze the errors the called code produces and replace
+; them with fewer and more focused errors; and adding ways to
+; twist-tie (so to speak) a bunch of unspent tickets into a single
+; unspent ticket which has custom error behavior when it fails to be
+; spent. All in all, these might be better termed "error customizers"
+; than "error handlers."
+;
+; A more modest short-term goal would be to handle the *successes*
+; listed here. Those "handlers" would just be `extfx?` values that get
+; run only after a success has been determined. Using these handlers
+; would be about as easy as using `fuse-extfx` to perform an
+; error-prone computation alongside another one, but the benefit is
+; that these handlers can save the program from the trouble of running
+; the second computation if there actually is an error in the first
+; one.
+;
+; Below, when we note "write-once callback," we should accompany that
+; callback parameter with an "on unspent error" parameter and update
+; the callback to take "on spend-twice error" and "on spend
+; successful" parameters. It would probably be most appropriate to
+; collect these into a data structure to simplify the interface
+; signatures.
+;
+; Below, when we note "write conflicts and successes" or "spend-twice
+; conflicts and successes," that means we should add "on write
+; conflict or spend-twice error" and "on write or spend successful"
+; parameters.
+;
+; Below, when we note "stalls," that means we should add an "on unable
+; to continue error" parameter.
+;
+; We mark other kinds of notes with "*". Notably, those might be
+; avoidable by letting the user perform more detailed checks on their
+; values.
+;
+;
+; pub-restrict
+;   * errors where the given definition space isn't a descendant of
+;     the given pub
+; sub-restrict
+;   * errors where the given definition space isn't a descendant of
+;     the given sub
+;
+; run-extfx!
+;   write-once callback
+;
+; extfx-table-each
+;   multiple write-once callbacks
+; extfx-claim-and-split
+;   write conflicts and successes
+; extfx-put (and extfx-finish-put)
+;   write-once callback
+;   write conflicts and successes
+; extfx-get
+;   stalls
+; extfx-private-put
+;   write-once callback
+;   write conflicts and successes
+; extfx-private-get
+;   stalls
+; extfx-pub
+;   write conflicts and successes
+; extfx-sub
+;   write conflicts and successes
+; extfx-ft-split-list
+;   spend-twice conflicts and successes
+; extfx-ft-split-table
+;   spend-twice conflicts and successes
+; extfx-ft-subname
+;   spend-twice conflicts and successes
+; extfx-ft-restrict
+;   * errors where the given definition space isn't a descendant of
+;     the given familiarity ticket
+;   spend-twice conflicts and successes
+; extfx-ft-disburse
+;   write-once callback
+;   spend-twice conflicts and successes
+; extfx-ft-claim
+;   spend-twice conflicts and successes
+; extfx-contribute
+;   write-once callback
+;   spend-twice conflicts and successes
+; extfx-collect
+;   stalls
+
+
+
 ; TODO: This is also defined privately in `effection/order/base`. See
 ; if we can extract it into a library or something.
 (define (make-appropriate-contract c)
