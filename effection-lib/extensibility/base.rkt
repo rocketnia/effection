@@ -516,6 +516,8 @@
   (-> any/c boolean?)
   (internal:run-extfx-errors? v))
 
+(struct-easy (unspent-ticket-entry-familiarity-ticket ds n))
+(struct-easy (unspent-ticket-entry-anonymous))
 (struct-easy (db-put-entry-do-not-conflict existing-values))
 (struct-easy (db-put-entry-written existing-value))
 
@@ -560,7 +562,12 @@
     rev-next-processes (list)
     
     unspent-tickets
-    (hasheq root-familiarity-ticket-symbol #t finish-ticket-symbol #t)
+    (hasheq
+      root-familiarity-ticket-symbol
+      (unspent-ticket-entry-familiarity-ticket
+        root-ds root-unique-name)
+      finish-ticket-symbol
+      (unspent-ticket-entry-anonymous))
     
     db (hasheq 'finish-run (nothing) 'put (hasheq))
     rev-errors (list)
@@ -659,7 +666,8 @@
             (extfx-spend root-ds ticket
             #/extfx-finish-put ds n value))
           rev-next-processes)
-        (hash-set unspent-tickets ticket #t)
+        (hash-set unspent-tickets ticket
+          (unspent-ticket-entry-anonymous))
         db rev-errors #t)
     #/mat process (extfx-finish-put ds n value)
       ; If there has already been a definition installed at this name
@@ -863,7 +871,8 @@
             rev-next-processes unspent-tickets db rev-errors #t)
         #/w- fresh-ticket-symbol (gensym)
         #/next
-          (hash-set unspent-tickets fresh-ticket-symbol #t)
+          (hash-set unspent-tickets fresh-ticket-symbol
+            (unspent-ticket-entry-familiarity-ticket ds n))
           (cons (internal:familiarity-ticket fresh-ticket-symbol ds n)
             result)))
     #/mat process (internal:extfx-ft-split-table ticket times then)
