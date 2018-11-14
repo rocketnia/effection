@@ -851,7 +851,15 @@
     
     #/mat process
       (internal:extfx-establish-pubsub ds pubsub-name then)
-      'TODO
+      ; TODO: See if we really need to enforce that `ds` descends from
+      ; `root-ds` here.
+      (expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/expect (authorized-name-for? root-ds pubsub-name) #t
+        (next-with-error "Expected pubsub-name to be a name authorized for the extfx runner's root definition space")
+      #/next-one-fruitful #/then
+        (internal:pub ds pubsub-name)
+        (internal:sub ds pubsub-name))
     #/mat process (internal:extfx-pub ds p pubber-name arg)
       'TODO
     #/mat process (internal:extfx-pub ds s subber-name func)
