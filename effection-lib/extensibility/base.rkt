@@ -82,26 +82,14 @@
   
   )
 
-; TODO: Document these exports, which wind up exported from
+; TODO: Document this export, which winds up exported from
 ; `effection/extensibility/unsafe`.
-(module+ private/unsafe #/provide
-  new-dspace!
-  run-extfx!)
-;
-; NOTE: The `private/unsafe` submodule exports the `authorized-name`
-; struct, which also ends up being exported from
-; `effection/extensibility/unsafe`.
-;
-; TODO: Is there a safer way to obtain a root authorized name (e.g.
-; having `run-extfx!` create one itself to pass into its body)?
+(module+ private/unsafe #/provide run-extfx!)
 
 
 (module private racket/base
   
   (require #/only-in lathe-comforts/struct struct-easy)
-  
-  ; TODO: Document this export.
-  (module+ unsafe #/provide #/struct-out authorized-name)
   
   
   (define-syntax-rule (provide-struct (name field ...) option ...)
@@ -110,10 +98,10 @@
       (provide #/struct-out name)))
   
   
-  (provide-struct (dspace ds-symbol parents))
+  (provide-struct (dspace ds-symbol parents-list parents-hash))
   
   
-  (provide-struct (authorized-name name))
+  (provide-struct (authorized-name ds name))
   
   
   (provide-struct (optionally-dexable-once v))
@@ -175,8 +163,8 @@
 
 (struct-easy (extfx-finish-put ds n value))
 
-(struct-easy (extfx-spend ticket-symbol then))
-(struct-easy (extfx-finish-run value))
+(struct-easy (extfx-spend ds ticket-symbol then))
+(struct-easy (extfx-finish-run ds value))
 
 (define/contract (extfx? v)
   (-> any/c boolean?)
@@ -216,8 +204,8 @@
     #t
   #/mat v (internal:extfx-collect ds collector-name then) #t
   
-  #/mat v (extfx-spend ticket-symbol then) #t
-  #/mat v (extfx-finish-run value) #t
+  #/mat v (extfx-spend ds ticket-symbol then) #t
+  #/mat v (extfx-finish-run ds value) #t
   
     #f))
 
@@ -269,14 +257,46 @@
   (-> dspace? (-> dspace? extfx?) extfx?)
   (internal:extfx-dspace-create-shadower ds then))
 
+; TODO: See if this should be exported.
+(define/contract (dspace-eq? a b)
+  (-> dspace? dspace? boolean?)
+  (dissect a (internal:dspace a-symbol _ _)
+  #/dissect a (internal:dspace b-symbol _ _)
+  #/eq? a-symbol b-symbol))
+
+; TODO: See if this should be exported.
+(define/contract (dspace-descends? ancestor descendant)
+  (-> dspace? dspace? boolean?)
+  (dissect ancestor (internal:dspace ancestor-symbol _ _)
+  #/dissect descendant
+    (internal:dspace descendant-symbol _ descendant-parents-hash)
+  #/or
+    (eq? ancestor-symbol descendant-symbol)
+    (hash-has-key? descendant-parents-hash ancestor-symbol)))
+
 
 (define/contract (authorized-name? v)
   (-> any/c boolean?)
   (internal:authorized-name? v))
 
+; TODO: See if this should be exported.
+;
+; TODO: See if this should use `dspace-descends?` instead of
+; `dspace-eq?`. At the moment don't offer any way (or at least any
+; well thought-out way) to restrict an authorized name to a shadowing
+; definition space, and if we did, we would have to figure out what it
+; meant to claim the same authorized name in two separate shadowing
+; definition spaces. But maybe we will figure that out, and once we
+; do, we might know if this needs to check for `dspace-descends?`.
+;
+(define/contract (authorized-name-for? ds name)
+  (-> dspace? authorized-name? boolean?)
+  (dissect name (internal:authorized-name name-ds _)
+  #/dspace-eq? ds name-ds))
+
 (define/contract (authorized-name-get-name n)
   (-> authorized-name? name?)
-  (dissect n (internal:authorized-name n)
+  (dissect n (internal:authorized-name ds n)
     n))
 
 (define/contract (name-subname key-name original-name)
@@ -295,8 +315,9 @@
 
 (define/contract (authorized-name-subname key-name original-name)
   (-> name? authorized-name? authorized-name?)
-  (dissect original-name (internal:authorized-name original-name)
-  #/internal:authorized-name #/name-subname key-name original-name))
+  (dissect original-name (internal:authorized-name ds original-name)
+  #/internal:authorized-name ds
+    (name-subname key-name original-name)))
 
 (define/contract (extfx-claim-and-split n times then)
   (-> authorized-name? natural? (-> (listof authorized-name?) extfx?)
@@ -475,17 +496,6 @@
   (internal:extfx-collect ds collector-name then))
 
 
-; TODO: This is an export of `effection/extensibility/unsafe` right
-; now, but we may need to refactor it a bit more before it's stable,
-; since `run-extfx!` is far from being fully implemented. Is there a
-; safer way to obtain a root definition space (e.g. having
-; `run-extfx!` create one itself to pass into its body)?
-;
-(define/contract (new-dspace!)
-  (-> dspace?)
-  (internal:dspace (gensym) #/list))
-
-
 (struct-easy (run-extfx-result-success value) #:equal)
 (struct-easy (run-extfx-result-failure errors) #:equal)
 
@@ -498,22 +508,34 @@
 
 ; TODO: This is an export of `effection/extensibility/unsafe` right
 ; now, but we may need to refactor it a bit more before it's stable,
-; since it's far from being fully implemented. Is there a safer way to
-; design this (e.g. a way to prohibit the result value from containing
-; lingering definition spaces, ticket values, authorized names, pubs,
-; subs, etc.)?
+; since it's far from being fully implemented.
+;
+; TODO: Once we have the ability to spend familiarity tickets, have
+; the body additionally take a familiarity ticket for the name
+; `root-unique-name`.
+;
+; TODO: Clients can abuse a call to `run-extfx!` just to generate a
+; fresh `name?` value for use outside that call. If there's anything
+; we can do to prevent that, let's consider doing it.
 ;
 (define/contract (run-extfx! body)
-  (-> (-> (-> any/c extfx?) extfx?)
+  (-> (-> dspace? authorized-name? (-> any/c extfx?) extfx?)
     (or/c
       (istruct/c run-extfx-result-failure run-extfx-errors?)
       (istruct/c run-extfx-result-success any/c)))
-  (w- finish-ticket (gensym)
+  (w- root-ds-symbol (gensym)
+  #/w- root-ds (internal:dspace root-ds-symbol (list) (hasheq))
+  #/w- root-unique-name
+    (unsafe:name #/list 'name:root-unique-name root-ds-symbol)
+  #/w- root-unique-authorized-name
+    (internal:authorized-name root-ds root-unique-name)
+  #/w- finish-ticket (gensym)
   #/w-loop next-full
     
     processes
-    (list #/body #/fn result
-      (extfx-spend finish-ticket #/extfx-finish-run result))
+    (list #/body root-ds root-unique-authorized-name #/fn result
+      (extfx-spend root-ds finish-ticket
+      #/extfx-finish-run root-ds result))
     
     rev-next-processes (list)
     unspent-tickets (hasheq finish-ticket #t)
@@ -582,9 +604,16 @@
       'TODO
     
     #/mat process (internal:extfx-dspace-create-shadower ds then)
-      (dissect ds (internal:dspace ds-symbol parents)
+      (dissect ds
+        (internal:dspace ds-symbol parents-list parents-hash)
+      ; TODO: See if we really need to enforce that `ds` descends from
+      ; `root-ds` here.
+      #/expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
       #/next-one-fruitful
-      #/then #/internal:dspace (gensym) #/cons ds-symbol parents)
+      #/then #/internal:dspace (gensym)
+        (cons ds-symbol parents-list)
+        (hash-set parents-hash ds-symbol #t))
     
     #/mat process (internal:extfx-claim-and-split n times then)
       'TODO
@@ -595,12 +624,17 @@
       ; able to focus the error message by removing "couldn't read"
       ; errors if the corresponding writing processes had their own
       ; errors.
-      (w- ticket (gensym)
+      (expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/expect (authorized-name-for? root-ds n) #t
+        (next-with-error "Expected n to be a name authorized for the extfx runner's root definition space")
+      #/w- ticket (gensym)
       #/next-full
         processes
         (cons
           (comp #/fn value
-            (extfx-spend ticket #/extfx-finish-put ds n value))
+            (extfx-spend root-ds ticket
+            #/extfx-finish-put ds n value))
           rev-next-processes)
         (hash-set unspent-tickets ticket #t)
         db rev-errors #t)
@@ -610,7 +644,12 @@
       ; matches the stored dex and that the proposed value matches the
       ; stored value according to that dex. Otherwise, it stores the
       ; proposed dex and value without question.
-      (dissect ds (internal:dspace ds-symbol parents)
+      (expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/expect (authorized-name-for? root-ds n) #t
+        (next-with-error "Expected n to be a name authorized for the extfx runner's root definition space")
+      #/dissect ds
+        (internal:dspace ds-symbol parents-list parents-hash)
       #/w- n (authorized-name-get-name n)
       #/w- err-once
         (fn
@@ -670,7 +709,7 @@
         (next-zero)
       #/w- check-parents
         (fn then
-          (w-loop next parents-to-check parents
+          (w-loop next parents-to-check parents-list
             (expect parents-to-check (cons parent parents-to-check)
               (then #f)
             #/expect (hash-ref-maybe db-put parent)
@@ -685,7 +724,7 @@
               ; NOTE: If we find a `db-put-entry-written` entry for
               ; even one of the parents, checking that one is enough
               ; to check all the parents. That's why we can proceed
-              ; with `then` instead of `(fn #/next parents-to-check)`
+              ; with `(then #t)` instead of `(next parents-to-check)`
               ; here.
               ;
               (do-not-conflict existing-value #/fn
@@ -716,7 +755,7 @@
       #/write-ds-symbol db-put #/fn db-put
       #/w- write-parents
         (fn db-put then
-          (w-loop next parents-to-write parents db-put db-put
+          (w-loop next parents-to-write parents-list db-put db-put
             (expect parents-to-write (cons parent parents-to-write)
               (then db-put)
             #/w- next-with-db-put-for-ds-and-existing-values
@@ -753,9 +792,11 @@
       ; back to it later. If there has, we call `then` with that
       ; defined value and set aside its result as a process to come
       ; back to later.
-      (dissect ds (internal:dspace ds-symbol parents)
-      #/w- n (authorized-name-get-name n)
-      #/w-loop next places-to-check (cons ds-symbol parents)
+      (expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/dissect ds
+        (internal:dspace ds-symbol parents-list parents-hash)
+      #/w-loop next places-to-check (cons ds-symbol parents-list)
         (expect places-to-check (cons place places-to-check)
           (next-fruitless)
         #/expect (hash-ref-maybe (hash-ref db 'put) place)
@@ -802,15 +843,19 @@
     #/mat process (internal:extfx-collect ds collector-name then)
       'TODO
     
-    #/mat process (extfx-spend ticket-symbol then)
-      (expect (hash-has-key? unspent-tickets ticket-symbol) #t
+    #/mat process (extfx-spend ds ticket-symbol then)
+      (expect (dspace-eq? root-ds ds) #t
+        (next-with-error "Expected ds to be the extfx runner's root definition space")
+      #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
         (next-with-error "Tried to spend a ticket twice")
       #/next-full
         processes rev-next-processes
         (hash-remove unspent-tickets ticket-symbol)
         db rev-errors #t)
-    #/mat process (extfx-finish-run value)
-      (dissect (hash-ref db 'finish-run) (nothing)
+    #/mat process (extfx-finish-run ds value)
+      (expect (dspace-eq? root-ds ds) #t
+        (next-with-error "Expected ds to be the extfx runner's root definition space")
+      #/dissect (hash-ref db 'finish-run) (nothing)
       #/next-full
         processes rev-next-processes unspent-tickets
         (hash-set db 'finish-run (just value))
