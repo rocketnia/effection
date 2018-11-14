@@ -109,6 +109,10 @@
     (optionally-dexable-dexable dex value name-of-dex name-of-value))
   
   
+  (provide-struct (pub ds pubsub-name))
+  (provide-struct (sub ds pubsub-name))
+  
+  
   (provide-struct (extfx-noop))
   (provide-struct (extfx-fused a b))
   (provide-struct (extfx-later then))
@@ -416,19 +420,25 @@
 
 (define/contract (pub? v)
   (-> any/c boolean?)
-  'TODO)
+  (internal:pub? v))
 
 (define/contract (sub? v)
   (-> any/c boolean?)
-  'TODO)
+  (internal:sub? v))
 
 (define/contract (pub-restrict ds p)
   (-> dspace? pub? pub?)
-  'TODO)
+  (dissect p (internal:pub original-ds pubsub-name)
+  #/expect (dspace-descends? original-ds ds) #t
+    (error "Expected ds to be a shadowing descendant of the dspace of the pub p")
+  #/internal:pub ds pubsub-name))
 
 (define/contract (sub-restrict ds s)
   (-> dspace? sub? sub?)
-  'TODO)
+  (dissect s (internal:sub original-ds pubsub-name)
+  #/expect (dspace-descends? original-ds ds) #t
+    (error "Expected ds to be a shadowing descendant of the dspace of the sub s")
+  #/internal:sub ds pubsub-name))
 
 (define/contract (extfx-establish-pubsub ds pubsub-name then)
   (-> dspace? authorized-name? (-> pub? sub? extfx?) extfx?)
