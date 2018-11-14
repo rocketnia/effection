@@ -17,7 +17,7 @@
 
 (require #/only-in lathe-comforts dissect expect fn mat w- w-loop)
 (require #/only-in lathe-comforts/hash hash-ref-maybe)
-(require #/only-in lathe-comforts/list list-map)
+(require #/only-in lathe-comforts/list list-map nat->maybe)
 (require #/only-in lathe-comforts/maybe just nothing)
 (require #/only-in lathe-comforts/struct istruct/c struct-easy)
 (require #/only-in lathe-comforts/trivial trivial?)
@@ -111,6 +111,9 @@
   
   (provide-struct (pub ds pubsub-name))
   (provide-struct (sub ds pubsub-name))
+  
+  
+  (provide-struct (familiarity-ticket ticket-symbol ds n))
   
   
   (provide-struct (extfx-noop))
@@ -457,7 +460,7 @@
 
 (define/contract (familiarity-ticket? v)
   (-> any/c boolean?)
-  'TODO)
+  (internal:familiarity-ticket? v))
 
 (define/contract (extfx-ft-split-list ticket times then)
   (-> familiarity-ticket? natural?
@@ -516,20 +519,23 @@
 (struct-easy (db-put-entry-do-not-conflict existing-values))
 (struct-easy (db-put-entry-written existing-value))
 
-; TODO: This is an export of `effection/extensibility/unsafe` right
-; now, but we may need to refactor it a bit more before it's stable,
-; since it's far from being fully implemented.
-;
-; TODO: Once we have the ability to spend familiarity tickets, have
-; the body additionally take a familiarity ticket for the name
-; `root-unique-name`.
+; NOTE: The `authorized-name?` and the `familiarity-ticket?` passed
+; into the body are for the same `name?`. The `authorized-name?`
+; allows owner-style access to state resources using this name and its
+; subnames, and the `familiarity-ticket?` allows making
+; closed-world assumption (CWA) contributions to those state
+; resources. Since the resources are all fresh, the body receives full
+; permissions over them, and it can subdivide these permissions as
+; needed for various access control policies.
 ;
 ; TODO: Clients can abuse a call to `run-extfx!` just to generate a
 ; fresh `name?` value for use outside that call. If there's anything
 ; we can do to prevent that, let's consider doing it.
 ;
 (define/contract (run-extfx! body)
-  (-> (-> dspace? authorized-name? (-> any/c extfx?) extfx?)
+  (->
+    (-> dspace? authorized-name? familiarity-ticket? (-> any/c extfx?)
+      extfx?)
     (or/c
       (istruct/c run-extfx-result-failure run-extfx-errors?)
       (istruct/c run-extfx-result-success any/c)))
@@ -539,16 +545,23 @@
     (unsafe:name #/list 'name:root-unique-name root-ds-symbol)
   #/w- root-unique-authorized-name
     (internal:authorized-name root-ds root-unique-name)
-  #/w- finish-ticket (gensym)
+  #/w- root-familiarity-ticket-symbol (gensym)
+  #/w- root-familiarity-ticket
+    (internal:familiarity-ticket
+      root-familiarity-ticket-symbol root-ds root-unique-name)
+  #/w- finish-ticket-symbol (gensym)
   #/w-loop next-full
     
     processes
     (list #/body root-ds root-unique-authorized-name #/fn result
-      (extfx-spend root-ds finish-ticket
+      (extfx-spend root-ds finish-ticket-symbol
       #/extfx-finish-run root-ds result))
     
     rev-next-processes (list)
-    unspent-tickets (hasheq finish-ticket #t)
+    
+    unspent-tickets
+    (hasheq root-familiarity-ticket-symbol #t finish-ticket-symbol #t)
+    
     db (hasheq 'finish-run (nothing) 'put (hasheq))
     rev-errors (list)
     did-something #f
@@ -834,7 +847,25 @@
       'TODO
     
     #/mat process (internal:extfx-ft-split-list ticket times then)
-      'TODO
+      (dissect ticket
+        (internal:familiarity-ticket ticket-symbol ds n)
+      #/expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
+      #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
+        (next-with-error "Tried to spend a ticket twice")
+      #/w-loop next
+        unspent-tickets (hash-remove unspent-tickets ticket-symbol)
+        result (list)
+        
+        (expect (nat->maybe times) (just times)
+          (next-full
+            (cons (then result) processes)
+            rev-next-processes unspent-tickets db rev-errors #t)
+        #/w- fresh-ticket-symbol (gensym)
+        #/next
+          (hash-set unspent-tickets fresh-ticket-symbol #t)
+          (cons (internal:familiarity-ticket fresh-ticket-symbol ds n)
+            result)))
     #/mat process (internal:extfx-ft-split-table ticket times then)
       'TODO
     #/mat process (internal:extfx-ft-subname ticket key then)
