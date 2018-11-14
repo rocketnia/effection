@@ -20,7 +20,7 @@
 (require #/only-in lathe-comforts/list list-map nat->maybe)
 (require #/only-in lathe-comforts/maybe just nothing)
 (require #/only-in lathe-comforts/struct istruct/c struct-easy)
-(require #/only-in lathe-comforts/trivial trivial?)
+(require #/only-in lathe-comforts/trivial trivial trivial?)
 
 (require #/only-in effection/order eq-by-dex?)
 (require #/only-in effection/order/base
@@ -101,7 +101,7 @@
   (provide-struct (dspace ds-symbol parents-list parents-hash))
   
   
-  (provide-struct (authorized-name ds name))
+  (provide-struct (authorized-name ds name parents))
   
   
   (provide-struct (optionally-dexable-once v))
@@ -298,12 +298,12 @@
 ;
 (define/contract (authorized-name-for? ds name)
   (-> dspace? authorized-name? boolean?)
-  (dissect name (internal:authorized-name name-ds _)
+  (dissect name (internal:authorized-name name-ds _ _)
   #/dspace-eq? ds name-ds))
 
 (define/contract (authorized-name-get-name n)
   (-> authorized-name? name?)
-  (dissect n (internal:authorized-name ds n)
+  (dissect n (internal:authorized-name ds n parents)
     n))
 
 (define/contract (name-subname key-name original-name)
@@ -322,9 +322,12 @@
 
 (define/contract (authorized-name-subname key-name original-name)
   (-> name? authorized-name? authorized-name?)
-  (dissect original-name (internal:authorized-name ds original-name)
-  #/internal:authorized-name ds
-    (name-subname key-name original-name)))
+  (dissect original-name
+    (internal:authorized-name ds original-name parents)
+  #/internal:authorized-name
+    ds
+    (name-subname key-name original-name)
+    (table-shadow original-name (just #/trivial) parents)))
 
 (define/contract (extfx-claim-and-split n times then)
   (-> authorized-name? natural? (-> (listof authorized-name?) extfx?)
@@ -546,7 +549,7 @@
   #/w- root-unique-name
     (unsafe:name #/list 'name:root-unique-name root-ds-symbol)
   #/w- root-unique-authorized-name
-    (internal:authorized-name root-ds root-unique-name)
+    (internal:authorized-name root-ds root-unique-name (table-empty))
   #/w- root-familiarity-ticket-symbol (gensym)
   #/w- root-familiarity-ticket
     (internal:familiarity-ticket
@@ -770,8 +773,7 @@
           (w- then-with-db-put-for-ds
             (fn db-put-for-ds
               (then #/hash-set db-put ds-symbol
-                (table-shadow n
-                  (just #/db-put-entry-written value)
+                (table-shadow n (just #/db-put-entry-written value)
                   db-put-for-ds)))
           #/expect (hash-ref-maybe db-put ds-symbol)
             (just db-put-for-ds)
