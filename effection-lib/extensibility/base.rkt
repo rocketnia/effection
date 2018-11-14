@@ -17,7 +17,8 @@
 
 (require #/only-in lathe-comforts dissect expect fn mat w- w-loop)
 (require #/only-in lathe-comforts/hash hash-ref-maybe)
-(require #/only-in lathe-comforts/list list-map nat->maybe)
+(require #/only-in lathe-comforts/list
+  list-map list-zip-map nat->maybe)
 (require #/only-in lathe-comforts/maybe just nothing)
 (require #/only-in lathe-comforts/struct istruct/c struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
@@ -27,7 +28,7 @@
   dexable dexableof dex-dex dex-name fuse? name? name-of ordering-eq
   table? table-empty table-get tableof table-shadow valid-dexable?)
 (require #/prefix-in unsafe: #/only-in effection/order/unsafe
-  fuse gen:furge-internals name)
+  fuse gen:furge-internals name table)
 
 
 ; TODO: Finish implementing each of these exports, and document them.
@@ -878,11 +879,54 @@
           (cons (internal:familiarity-ticket fresh-ticket-symbol ds n)
             result)))
     #/mat process (internal:extfx-ft-split-table ticket times then)
-      'TODO
+      (dissect ticket (internal:familiarity-ticket ticket-symbol ds n)
+      #/expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
+      #/dissect times (unsafe:table times)
+      #/next-one-fruitful
+      #/internal:extfx-ft-split-list ticket (hash-count times)
+      #/fn tickets
+      #/then #/unsafe:table #/make-immutable-hash
+      #/list-zip-map (hash->list times) tickets #/fn time ticket
+        (dissect time (cons k #/trivial)
+        #/cons k ticket))
     #/mat process (internal:extfx-ft-subname ticket key then)
-      'TODO
-    #/mat process (internal:extfx-ft-restrict ticket ds then)
-      'TODO
+      (dissect ticket (internal:familiarity-ticket ticket-symbol ds n)
+      #/expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
+      #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
+        (next-with-error "Tried to spend a ticket twice")
+      #/w- fresh-ticket-symbol (gensym)
+      #/w- n (name-subname key n)
+      #/next-full
+        (cons
+          (then
+          #/internal:familiarity-ticket fresh-ticket-symbol ds n)
+          rev-next-processes
+          (hash-set
+            (hash-remove unspent-tickets ticket-symbol)
+            fresh-ticket-symbol
+            (unspent-ticket-entry-familiarity-ticket ds n))
+          db rev-errors #t))
+    #/mat process (internal:extfx-ft-restrict ticket new-ds then)
+      (dissect ticket (internal:familiarity-ticket ticket-symbol ds n)
+      #/expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
+      #/expect (dspace-descends? ds new-ds) #t
+        (next-with-error "Expected ds to be a definition space descending from ticket's definition space")
+      #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
+        (next-with-error "Tried to spend a ticket twice")
+      #/w- fresh-ticket-symbol (gensym)
+      #/next-full
+        (cons
+          (then
+          #/internal:familiarity-ticket fresh-ticket-symbol new-ds n)
+          rev-next-processes
+          (hash-set
+            (hash-remove unspent-tickets ticket-symbol)
+            fresh-ticket-symbol
+            (unspent-ticket-entry-familiarity-ticket new-ds n))
+          db rev-errors #t))
     
     #/mat process (internal:extfx-ft-disburse ds hub-name comp-ticket)
       'TODO
