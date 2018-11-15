@@ -75,14 +75,14 @@
   extfx-pub
   extfx-sub
   
+  ticket?
   familiarity-ticket?
-  extfx-ft-split-list
-  extfx-ft-split-table
+  extfx-split-list
+  extfx-split-table
+  extfx-disburse
+  extfx-claim
   extfx-ft-subname
   extfx-ft-restrict
-  
-  extfx-ft-disburse
-  extfx-ft-claim
   
   extfx-contribute
   extfx-collect
@@ -143,14 +143,14 @@
   (provide-struct (extfx-pub ds p pubber-name on-conflict arg))
   (provide-struct (extfx-sub ds s subber-name on-conflict func))
   
-  (provide-struct (extfx-ft-split-list ticket times on-conflict then))
+  (provide-struct (extfx-split-list ticket times on-conflict then))
   (provide-struct
-    (extfx-ft-split-table ticket times on-conflict then))
+    (extfx-split-table ticket times on-conflict then))
+  (provide-struct (extfx-disburse ds hub-name comp-ticket))
+  (provide-struct
+    (extfx-claim ds hub-familiarity-ticket on-conflict then))
   (provide-struct (extfx-ft-subname ticket key on-conflict then))
   (provide-struct (extfx-ft-restrict ticket ds on-conflict then))
-  
-  (provide-struct (extfx-ft-disburse ds hub-name comp-ticket))
-  (provide-struct (extfx-ft-claim ds t on-conflict then))
   
   (provide-struct
     (extfx-contribute ds collector-familiarity-ticket comp))
@@ -228,11 +228,11 @@
 ;   write-once callback (which also determines a conflict handler)
 ; extfx-private-put
 ;   write-once callback (which also determines a conflict handler)
+; extfx-disburse
+;   write-once callback (which also determines a conflict handler)
 ; extfx-ft-restrict
 ;   * errors where the given definition space isn't a descendant of
 ;     the given familiarity ticket
-; extfx-ft-disburse
-;   write-once callback (which also determines a conflict handler)
 ; extfx-contribute
 ;   write-once callback (which also determines a conflict handler)
 
@@ -281,16 +281,15 @@
   #/mat v (internal:extfx-pub ds p pubber-name on-conflict arg) #t
   #/mat v (internal:extfx-sub ds s subber-name on-conflict func) #t
   
-  #/mat v (internal:extfx-ft-split-list ticket times on-conflict then)
+  #/mat v (internal:extfx-split-list ticket times on-conflict then) #t
+  #/mat v (internal:extfx-split-table ticket times on-conflict then)
     #t
+  #/mat v (internal:extfx-disburse ds hub-name comp-ticket) #t
   #/mat v
-    (internal:extfx-ft-split-table ticket times on-conflict then)
+    (internal:extfx-claim ds hub-familiarity-ticket on-conflict then)
     #t
   #/mat v (internal:extfx-ft-subname ticket key on-conflict then) #t
   #/mat v (internal:extfx-ft-restrict ticket ds on-conflict then) #t
-  
-  #/mat v (internal:extfx-ft-disburse ds hub-name comp-ticket) #t
-  #/mat v (internal:extfx-ft-claim ds t on-conflict then) #t
   
   #/mat v
     (internal:extfx-contribute ds collector-familiarity-ticket comp)
@@ -590,21 +589,37 @@
   (internal:extfx-sub ds s subber-name on-conflict func))
 
 
+(define/contract (ticket? v)
+  (-> any/c boolean?)
+  (mat v (internal:familiarity-ticket ticket-symbol ds n) #t
+    #f))
+
 (define/contract (familiarity-ticket? v)
   (-> any/c boolean?)
   (internal:familiarity-ticket? v))
 
-(define/contract (extfx-ft-split-list ticket times on-conflict then)
-  (-> familiarity-ticket? natural? error-definer?
-    (-> (listof familiarity-ticket?) extfx?)
+(define/contract (extfx-split-list ticket times on-conflict then)
+  (-> ticket? natural? error-definer? (-> (listof ticket?) extfx?)
     extfx?)
-  (internal:extfx-ft-split-list ticket times on-conflict then))
+  (internal:extfx-split-list ticket times on-conflict then))
 
-(define/contract (extfx-ft-split-table ticket times on-conflict then)
-  (-> familiarity-ticket? (tableof trivial?) error-definer?
-    (-> (tableof familiarity-ticket?) extfx?)
+(define/contract (extfx-split-table ticket times on-conflict then)
+  (-> ticket? (tableof trivial?) error-definer?
+    (-> (tableof ticket?) extfx?)
     extfx?)
-  (internal:extfx-ft-split-table ticket times on-conflict then))
+  (internal:extfx-split-table ticket times on-conflict then))
+
+(define/contract (extfx-disburse ds hub-name comp-ticket)
+  (-> dspace? authorized-name?
+    (-> (-> success-or-error-definer? ticket? extfx?) extfx?)
+    extfx?)
+  (internal:extfx-disburse ds hub-name comp-ticket))
+
+(define/contract
+  (extfx-claim ds hub-familiarity-ticket on-conflict then)
+  (-> dspace? familiarity-ticket? error-definer? (-> ticket? extfx?)
+    extfx?)
+  (internal:extfx-claim ds hub-familiarity-ticket on-conflict then))
 
 (define/contract (extfx-ft-subname ticket key on-conflict then)
   (-> familiarity-ticket? name? error-definer?
@@ -617,20 +632,6 @@
     (-> familiarity-ticket? extfx?)
     extfx?)
   (internal:extfx-ft-restrict ticket ds on-conflict then))
-
-
-(define/contract (extfx-ft-disburse ds hub-name comp-ticket)
-  (-> dspace? authorized-name?
-    (-> (-> success-or-error-definer? familiarity-ticket? extfx?)
-      extfx?)
-    extfx?)
-  (internal:extfx-ft-disburse ds hub-name comp-ticket))
-
-(define/contract (extfx-ft-claim ds t on-conflict then)
-  (-> dspace? familiarity-ticket? error-definer?
-    (-> familiarity-ticket? extfx?)
-    extfx?)
-  (internal:extfx-ft-claim ds t on-conflict then))
 
 
 (define/contract
@@ -1044,12 +1045,22 @@
       (internal:extfx-sub ds s subber-name on-conflict func)
       'TODO
     
+    #/w- parse-ticket
+      (fn ticket
+        (mat ticket (internal:familiarity-ticket ticket-symbol ds n)
+          (list
+            ticket-symbol
+            ds
+            (unspent-ticket-entry-familiarity-ticket ds n)
+            (fn new-ticket-symbol
+              (internal:familiarity-ticket new-ticket-symbol ds n)))
+        #/error "Internal error: Encountered an unrecognized ticket value"))
     #/mat process
-      (internal:extfx-ft-split-list ticket times on-conflict then)
-      (dissect ticket
-        (internal:familiarity-ticket ticket-symbol ds n)
+      (internal:extfx-split-list ticket times on-conflict then)
+      (dissect (parse-ticket ticket)
+        (list ticket-symbol ds entry wrap-fresh)
       #/expect (dspace-descends? root-ds ds) #t
-        (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
+        (next-with-error "Expected ticket to be a ticket descending from the extfx runner's root definition space")
       #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
         (next-with-error-definer on-conflict
           "Tried to spend a ticket twice")
@@ -1063,24 +1074,29 @@
             rev-next-processes unspent-tickets db rev-errors #t)
         #/w- fresh-ticket-symbol (gensym)
         #/next
-          (hash-set unspent-tickets fresh-ticket-symbol
-            (unspent-ticket-entry-familiarity-ticket ds n))
-          (cons (internal:familiarity-ticket fresh-ticket-symbol ds n)
-            result)))
+          (hash-set unspent-tickets fresh-ticket-symbol entry)
+          (cons (wrap-fresh fresh-ticket-symbol) result)))
     #/mat process
-      (internal:extfx-ft-split-table ticket times on-conflict then)
-      (dissect ticket (internal:familiarity-ticket ticket-symbol ds n)
+      (internal:extfx-split-table ticket times on-conflict then)
+      (dissect (parse-ticket ticket)
+        (list ticket-symbol ds entry wrap-fresh)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/dissect times (unsafe:table times)
       #/next-one-fruitful
-      #/internal:extfx-ft-split-list
+      #/internal:extfx-split-list
         ticket (hash-count times) on-conflict
       #/fn tickets
       #/then #/unsafe:table #/make-immutable-hash
       #/list-zip-map (hash->list times) tickets #/fn time ticket
         (dissect time (cons k #/trivial)
         #/cons k ticket))
+    #/mat process (internal:extfx-disburse ds hub-name comp-ticket)
+      'TODO
+    #/mat process
+      (internal:extfx-claim
+        ds hub-familiarity-ticket on-conflict then)
+      'TODO
     #/mat process
       (internal:extfx-ft-subname ticket key on-conflict then)
       (dissect ticket (internal:familiarity-ticket ticket-symbol ds n)
@@ -1122,11 +1138,6 @@
             fresh-ticket-symbol
             (unspent-ticket-entry-familiarity-ticket new-ds n))
           db rev-errors #t))
-    
-    #/mat process (internal:extfx-ft-disburse ds hub-name comp-ticket)
-      'TODO
-    #/mat process (internal:extfx-ft-claim ds t on-conflict then)
-      'TODO
     
     #/mat process
       (internal:extfx-contribute ds collector-familiarity-ticket comp)
