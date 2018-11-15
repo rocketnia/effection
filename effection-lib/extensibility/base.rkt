@@ -18,7 +18,7 @@
 (require #/only-in lathe-comforts dissect expect fn mat w- w-loop)
 (require #/only-in lathe-comforts/hash hash-ref-maybe)
 (require #/only-in lathe-comforts/list
-  list-map list-zip-map nat->maybe)
+  list-bind list-zip-map nat->maybe)
 (require #/only-in lathe-comforts/maybe just nothing)
 (require #/only-in lathe-comforts/struct istruct/c struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
@@ -154,7 +154,7 @@
   
   (provide-struct
     (extfx-contribute ds collector-familiarity-ticket comp))
-  (provide-struct (extfx-collect ds collector-name on-stall then))
+  (provide-struct (extfx-collect ds collector-name then))
   
   
   (provide-struct (run-extfx-errors errors))
@@ -295,7 +295,7 @@
   #/mat v
     (internal:extfx-contribute ds collector-familiarity-ticket comp)
     #t
-  #/mat v (internal:extfx-collect ds collector-name on-stall then) #t
+  #/mat v (internal:extfx-collect ds collector-name then) #t
   
   #/mat v (extfx-spend ds ticket-symbol then) #t
   #/mat v (extfx-finish-run ds value) #t
@@ -641,10 +641,9 @@
     extfx?)
   (internal:extfx-contribute ds collector-familiarity-ticket comp))
 
-(define/contract (extfx-collect ds collector-name on-stall then)
-  (-> dspace? authorized-name? error-definer? (-> table? extfx?)
-    extfx?)
-  (internal:extfx-collect ds collector-name on-stall then))
+(define/contract (extfx-collect ds collector-name then)
+  (-> dspace? authorized-name? (-> table? extfx?) extfx?)
+  (internal:extfx-collect ds collector-name then))
 
 
 (struct-easy (run-extfx-result-success value) #:equal)
@@ -737,14 +736,29 @@
         ; all the processes.
         (run-extfx-result-failure #/internal:run-extfx-errors
         #/reverse #/append
-          (list-map rev-next-processes #/fn process
-            ; TODO FRIENDLIER ERROR: Generate different errors for
-            ; different processes. Actually, each stalled process
-            ; should already specify a particular `error-definer?`
-            ; value to use in this situation (which is consistently
-            ; named `on-stall`).
-            (internal:error-definer-from-message
-              "Read from a name that was never defined"))
+          (list-bind rev-next-processes #/fn process
+            (mat process (internal:extfx-get ds n on-stall then)
+              (list
+              #/expect on-stall (internal:error-definer-uninformative)
+                on-stall
+              #/internal:error-definer-from-message
+                "Read from a name that was never defined")
+            #/mat process
+              (internal:extfx-private-get
+                ds putter-name getter-name on-stall then)
+              (list
+              #/expect on-stall (internal:error-definer-uninformative)
+                on-stall
+              #/internal:error-definer-from-message
+                "Read from a private name that was never defined")
+            #/mat process
+              (internal:extfx-collect ds collector-name then)
+              ; NOTE: These processes can't stall unless there's still
+              ; an unspent ticket at large, so the error message for
+              ; that unspent ticket can describe a more proximal cause
+              ; than we can here.
+              (list)
+            #/error "Internal error: Encountered a stalled process that shouldn't have been able to stall"))
           rev-errors)
       #/next-full (reverse rev-next-processes) (list) unspent-tickets
         db rev-errors #f)
@@ -1117,8 +1131,7 @@
     #/mat process
       (internal:extfx-contribute ds collector-familiarity-ticket comp)
       'TODO
-    #/mat process
-      (internal:extfx-collect ds collector-name on-stall then)
+    #/mat process (internal:extfx-collect ds collector-name then)
       'TODO
     
     #/mat process (extfx-spend ds ticket-symbol then)
