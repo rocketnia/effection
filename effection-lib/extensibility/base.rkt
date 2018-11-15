@@ -806,20 +806,22 @@
     
     (expect processes (cons process processes)
       (mat rev-next-processes (list)
-        ; If there are no processes left, we're done. We check that
-        ; there are no unspent tickets, and we return either the
-        ; `finish-run` value or the collection of errors.
+        ; If there are no processes left, we're done. We add errors
+        ; corresponding to any unspent tickets, and we return either
+        ; the collection of errors (if there are any) or `finish-run`
+        ; value (otherwise).
         (w- rev-errors
-          (if (hash-empty? unspent-tickets)
-            rev-errors
-            ; TODO FRIENDLIER ERRORS: Generate different errors for
-            ; different tickets. Actually, each ticket should already
-            ; specify a particular `error-definer?` value to use in
-            ; this situation.
-            (cons
-              (internal:error-definer-from-message
-                "Expected each ticket to be spent")
-              rev-errors))
+          (append
+            (list-map (hash->list unspent-tickets)
+            #/dissectfn (cons ticket-symbol entry)
+              (mat entry
+                (unspent-ticket-entry-familiarity-ticket
+                  on-unspent ds n)
+                on-unspent
+              #/mat entry (unspent-ticket-entry-anonymous on-unspent)
+                on-unspent
+              #/error "Internal error: Encountered an unrecognized unspent ticket entry"))
+            rev-errors)
         #/mat rev-errors (list)
           (dissect (hash-ref db 'finish-run) (just finish-value)
           #/run-extfx-result-success finish-value)
