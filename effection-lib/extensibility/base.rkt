@@ -19,7 +19,7 @@
   dissect dissectfn expect fn mat w- w-loop)
 (require #/only-in lathe-comforts/hash hash-ref-maybe)
 (require #/only-in lathe-comforts/list
-  list-bind list-zip-map nat->maybe)
+  list-bind list-map list-zip-map nat->maybe)
 (require #/only-in lathe-comforts/maybe just nothing)
 (require #/only-in lathe-comforts/struct istruct/c struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
@@ -61,7 +61,7 @@
   authorized-name-get-name
   name-subname
   authorized-name-subname
-  extfx-claim-and-split
+  extfx-claim-unique
   
   optionally-dexable?
   optionally-dexable-of
@@ -139,7 +139,9 @@
   
   (provide-struct (extfx-dspace-create-shadower ds then))
   
-  (provide-struct (extfx-claim-and-split n times on-conflict then))
+  (provide-struct
+    (extfx-claim-unique
+      n on-conflict on-familiarity-ticket-unspent then))
   
   (provide-struct (extfx-put ds n on-cont-unspent comp))
   (provide-struct (extfx-get ds n on-stall then))
@@ -252,7 +254,10 @@
   
   #/mat v (internal:extfx-dspace-create-shadower ds then) #t
   
-  #/mat v (internal:extfx-claim-and-split n times on-conflict then) #t
+  #/mat v
+    (internal:extfx-claim-unique
+      n on-conflict on-familiarity-ticket-unspent then)
+    #t
   
   #/mat v (internal:extfx-put ds n on-cont-unspent comp) #t
   #/mat v (extfx-finish-put ds n on-conflict value) #t
@@ -322,6 +327,12 @@
 (define/contract (error-definer-from-message message)
   (-> string? error-definer?)
   (internal:error-definer-from-message message))
+
+; TODO: See if we should export this.
+(define/contract (error-definer-or-message ed message)
+  (-> error-definer? string? error-definer?)
+  (expect ed (internal:error-definer-uninformative) ed
+  #/internal:error-definer-from-message message))
 
 ; NOTE: In our interfaces here, the point of
 ; `success-or-error-definer?` values is not only to let conflicts be
@@ -507,11 +518,23 @@
     (name-subname key-name original-name)
     (table-shadow original-name (just #/trivial) parents)))
 
-(define/contract (extfx-claim-and-split n times on-conflict then)
-  (-> authorized-name? natural? error-definer?
-    (-> (listof authorized-name?) extfx?)
+; NOTE: The `authorized-name?` and the `familiarity-ticket?` passed
+; into the body are for the same `name?`. The `authorized-name?`
+; allows owner-style access to state resources using this name and its
+; subnames, and the `familiarity-ticket?` allows making
+; closed-world assumption (CWA) contributions to those state
+; resources. Since the resources are all fresh, the body receives full
+; permissions over them, and it can subdivide these permissions as
+; needed for various access control policies.
+;
+(define/contract
+  (extfx-claim-unique
+    n on-conflict on-familiarity-ticket-unspent then)
+  (-> authorized-name? error-definer? error-definer?
+    (-> authorized-name? familiarity-ticket? extfx?)
     extfx?)
-  (internal:extfx-claim-and-split n times on-conflict then))
+  (internal:extfx-claim-unique
+    n on-conflict on-familiarity-ticket-unspent then))
 
 
 (define/contract (optionally-dexable? v)
@@ -737,28 +760,12 @@
 (struct-easy (db-put-entry-do-not-conflict existing-values))
 (struct-easy (db-put-entry-written existing-value))
 
-; NOTE: The `authorized-name?` and the `familiarity-ticket?` passed
-; into the body are for the same `name?`. The `authorized-name?`
-; allows owner-style access to state resources using this name and its
-; subnames, and the `familiarity-ticket?` allows making
-; closed-world assumption (CWA) contributions to those state
-; resources. Since the resources are all fresh, the body receives full
-; permissions over them, and it can subdivide these permissions as
-; needed for various access control policies.
-;
 ; TODO: Clients can abuse a call to `run-extfx!` just to generate a
 ; fresh `name?` value for use outside that call. If there's anything
 ; we can do to prevent that, let's consider doing it.
-;
-(define/contract
-  (run-extfx!
-    on-familiarity-ticket-unspent
-    on-continuation-ticket-unspent
-    body)
-  (-> error-definer? error-definer?
-    (-> dspace? authorized-name? familiarity-ticket?
-      continuation-ticket?
-      extfx?)
+(define/contract (run-extfx! on-continuation-ticket-unspent body)
+  (-> error-definer?
+    (-> dspace? authorized-name? continuation-ticket? extfx?)
     (or/c
       (istruct/c run-extfx-result-failure run-extfx-errors?)
       (istruct/c run-extfx-result-success any/c)))
@@ -768,13 +775,6 @@
     (unsafe:name #/list 'name:root-unique-name root-ds-symbol)
   #/w- root-unique-authorized-name
     (internal:authorized-name root-ds root-unique-name (table-empty))
-  #/w- root-familiarity-ticket-symbol (gensym)
-  #/w- root-familiarity-ticket
-    (internal:familiarity-ticket
-      root-familiarity-ticket-symbol
-      on-familiarity-ticket-unspent
-      root-ds
-      root-unique-name)
   #/w- root-continuation-ticket-symbol (gensym)
   #/w- root-continuation-ticket
     (internal:continuation-ticket
@@ -787,20 +787,22 @@
     
     processes
     (list
-    #/body root-ds root-unique-authorized-name root-familiarity-ticket
+    #/body root-ds root-unique-authorized-name
       root-continuation-ticket)
     
     rev-next-processes (list)
     
     unspent-tickets
     (hasheq
-      root-familiarity-ticket-symbol
-      (unspent-ticket-entry-familiarity-ticket
-        on-familiarity-ticket-unspent root-ds root-unique-name)
       root-continuation-ticket-symbol
       (unspent-ticket-entry-anonymous on-continuation-ticket-unspent))
     
-    db (hasheq 'finish-run (nothing) 'put (hasheq))
+    db
+    (hasheq
+      'claim-unique (table-empty)
+      'put (hasheq)
+      'finish-run (nothing))
+    
     rev-errors (list)
     did-something #f
     
@@ -834,18 +836,12 @@
         #/reverse #/append
           (list-bind rev-next-processes #/fn process
             (mat process (internal:extfx-get ds n on-stall then)
-              (list
-              #/expect on-stall (internal:error-definer-uninformative)
-                on-stall
-              #/internal:error-definer-from-message
+              (list #/error-definer-or-message on-stall
                 "Read from a name that was never defined")
             #/mat process
               (internal:extfx-private-get
                 ds putter-name getter-name on-stall then)
-              (list
-              #/expect on-stall (internal:error-definer-uninformative)
-                on-stall
-              #/internal:error-definer-from-message
+              (list #/error-definer-or-message on-stall
                 "Read from a private name that was never defined")
             #/mat process
               (internal:extfx-collect ds collector-name then)
@@ -880,10 +876,7 @@
       (fn on-error default-message
         (next-full
           processes rev-next-processes unspent-tickets db
-          (cons
-            (mat on-error (internal:error-definer-uninformative)
-              (internal:error-definer-from-message default-message)
-              on-error)
+          (cons (error-definer-or-message on-error default-message)
             rev-errors)
           #t))
     #/w- next-with-error
@@ -915,8 +908,46 @@
         (hash-set parents-hash ds-symbol #t))
     
     #/mat process
-      (internal:extfx-claim-and-split n times on-conflict then)
-      'TODO
+      (internal:extfx-claim-unique
+        n on-conflict on-familiarity-ticket-unspent then)
+      (expect (authorized-name-for? root-ds n) #t
+        (next-with-error "Expected n to be a name authorized for the extfx runner's root definition space")
+      #/w- n (authorized-name-get-name n)
+      #/w- db-claim-unique (hash-ref db 'claim-unique)
+      #/expect (table-get n db-claim-unique) (nothing)
+        (next-with-error-definer on-conflict
+          "Tried to claim a name unique twice")
+      #/w- fresh-ticket-symbol (gensym)
+      #/w- fresh-name
+        (unsafe:name #/list 'name:claim-unique-result root-ds-symbol)
+      #/w- fresh-authorized-name
+        (internal:authorized-name root-ds fresh-name (table-empty))
+      #/w- familiarity-ticket-symbol (gensym)
+      #/w- on-familiarity-ticket-unspent
+        (error-definer-or-message on-familiarity-ticket-unspent
+          "Expected an extfx-put continuation to be continued")
+      #/w- familiarity-ticket
+        (internal:familiarity-ticket
+          familiarity-ticket-symbol on-familiarity-ticket-unspent
+          
+          ; NOTE: This creates a familiarity ticket for `root-ds`,
+          ; even if the part of the program that performs an
+          ; `extfx-claim-unique` effect is otherwise localized to a
+          ; descendant shadowing definition space.
+          ;
+          root-ds
+          
+          fresh-name)
+      #/next-full
+        (cons (then fresh-authorized-name familiarity-ticket)
+          processes)
+        rev-next-processes
+        (hash-set unspent-tickets familiarity-ticket-symbol
+          (unspent-ticket-entry-familiarity-ticket
+            on-familiarity-ticket-unspent root-ds fresh-name))
+        (hash-set db 'claim-unique
+          (table-shadow n (just #/trivial) db-claim-unique))
+        rev-errors #t)
     
     #/mat process (internal:extfx-put ds n on-cont-unspent comp)
       ; TODO: Modify `(hash-ref db 'put)` here so that we know that
@@ -930,9 +961,7 @@
         (next-with-error "Expected n to be a name authorized for the extfx runner's root definition space")
       #/w- continuation-ticket-symbol (gensym)
       #/w- on-cont-unspent
-        (expect on-cont-unspent (internal:error-definer-uninformative)
-          on-cont-unspent
-        #/internal:error-definer-from-message
+        (error-definer-or-message on-cont-unspent
           "Expected an extfx-put continuation to be continued")
       #/w- continuation-ticket
         (internal:continuation-ticket
@@ -1003,7 +1032,7 @@
           (expect (hash-ref-maybe db-put ds-symbol)
             (just db-put-for-ds)
             (then #f)
-          #/expect (table-get db-put-for-ds n) (just entry)
+          #/expect (table-get n db-put-for-ds) (just entry)
             (then #f)
           #/mat entry (db-put-entry-do-not-conflict existing-values)
             (w-loop next existing-values existing-values
@@ -1027,7 +1056,7 @@
             #/expect (hash-ref-maybe db-put parent)
               (just db-put-for-ds)
               (next parents-to-check)
-            #/expect (table-get db-put-for-ds n) (just entry)
+            #/expect (table-get n db-put-for-ds) (just entry)
               (next parents-to-check)
             #/mat entry (db-put-entry-do-not-conflict existing-values)
               (next parents-to-check)
@@ -1056,7 +1085,7 @@
           #/expect (hash-ref-maybe db-put ds-symbol)
             (just db-put-for-ds)
             (then-with-db-put-for-ds #/table-empty)
-          #/expect (table-get db-put-for-ds n) (just entry)
+          #/expect (table-get n db-put-for-ds) (just entry)
             (then-with-db-put-for-ds db-put-for-ds)
           #/mat entry (db-put-entry-do-not-conflict existing-values)
             (then-with-db-put-for-ds db-put-for-ds)
@@ -1081,7 +1110,7 @@
               (next-with-db-put-for-ds-and-existing-values
                 (table-empty)
                 (list))
-            #/expect (table-get db-put-for-ds n) (just entry)
+            #/expect (table-get n db-put-for-ds) (just entry)
               (next-with-db-put-for-ds-and-existing-values
                 db-put-for-ds
                 (list))
