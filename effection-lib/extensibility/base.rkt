@@ -477,13 +477,23 @@
 
 ; TODO: See if this should be exported.
 ;
-; TODO: See if this should use `dspace-descends?` instead of
-; `dspace-eq?`. At the moment we don't offer any way (or at least any
-; well thought-out way) to restrict an authorized name to a shadowing
-; definition space, and if we did, we would have to figure out what it
-; meant to claim the same authorized name in two separate shadowing
-; definition spaces. But maybe we will figure that out, and once we
-; do, we might know if this needs to check for `dspace-descends?`.
+; NOTE:
+;
+; We use `dspace-eq?` here, not `dspace-descends?`, because we don't
+; have any use (nor offer any method) for creating authorized names
+; that are associated with non-root definition spaces.
+;
+; In fact we actively don't want to associate names with non-root
+; definition spaces because it would raise some confusion in
+; `extfx-claim-unique`. If we claim a unique name, we should not be
+; able to claim the same unique name again just because we're working
+; in two separate shadowing definition spaces. If we could, we would
+; have to worry about whether those two parts of the code are
+; observing the familiarity tickets as a result. They would need to,
+; since they should be deterministic; but they also would need not to,
+; since making an exclusive claim to a unique name is the only reason
+; we're justified in creating a familiarity ticket out of thin air in
+; the first place.
 ;
 (define/contract (authorized-name-for? ds name)
   (-> dspace? authorized-name? boolean?)
