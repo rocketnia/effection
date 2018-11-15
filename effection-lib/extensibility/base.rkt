@@ -37,6 +37,12 @@
   extfx?
   dspace?
   
+  error-definer?
+  error-definer-uninformative
+  error-definer-from-message
+  success-or-error-definer?
+  success-or-error-definer
+  
   extfx-noop
   fuse-extfx
   extfx-later
@@ -101,18 +107,18 @@
   
   (provide-struct (dspace ds-symbol parents-list parents-hash))
   
+  (provide-struct (error-definer-uninformative))
+  (provide-struct (error-definer-from-message message))
+  (provide-struct (success-or-error-definer on-error on-success))
   
   (provide-struct (authorized-name ds name parents))
-  
   
   (provide-struct (optionally-dexable-once v))
   (provide-struct
     (optionally-dexable-dexable dex value name-of-dex name-of-value))
   
-  
   (provide-struct (pub ds pubsub-name))
   (provide-struct (sub ds pubsub-name))
-  
   
   (provide-struct (familiarity-ticket ticket-symbol ds n))
   
@@ -124,29 +130,31 @@
   
   (provide-struct (extfx-dspace-create-shadower ds then))
   
-  (provide-struct (extfx-claim-and-split n times then))
+  (provide-struct (extfx-claim-and-split n times on-conflict then))
   
   (provide-struct (extfx-put ds n comp))
-  (provide-struct (extfx-get ds n then))
+  (provide-struct (extfx-get ds n on-stall then))
   
   (provide-struct (extfx-private-put ds putter-name getter-name comp))
-  (provide-struct (extfx-private-get ds putter-name getter-name then))
+  (provide-struct
+    (extfx-private-get ds putter-name getter-name on-stall then))
   
   (provide-struct (extfx-establish-pubsub ds pubsub-name then))
-  (provide-struct (extfx-pub ds p pubber-name arg))
-  (provide-struct (extfx-sub ds s subber-name func))
+  (provide-struct (extfx-pub ds p pubber-name on-conflict arg))
+  (provide-struct (extfx-sub ds s subber-name on-conflict func))
   
-  (provide-struct (extfx-ft-split-list ticket times then))
-  (provide-struct (extfx-ft-split-table ticket times then))
-  (provide-struct (extfx-ft-subname ticket key then))
-  (provide-struct (extfx-ft-restrict ticket ds then))
+  (provide-struct (extfx-ft-split-list ticket times on-conflict then))
+  (provide-struct
+    (extfx-ft-split-table ticket times on-conflict then))
+  (provide-struct (extfx-ft-subname ticket key on-conflict then))
+  (provide-struct (extfx-ft-restrict ticket ds on-conflict then))
   
   (provide-struct (extfx-ft-disburse ds hub-name comp-ticket))
-  (provide-struct (extfx-ft-claim ds t then))
+  (provide-struct (extfx-ft-claim ds t on-conflict then))
   
   (provide-struct
     (extfx-contribute ds collector-familiarity-ticket comp))
-  (provide-struct (extfx-collect ds collector-name then))
+  (provide-struct (extfx-collect ds collector-name on-stall then))
   
   
   (provide-struct (run-extfx-errors errors))
@@ -158,12 +166,13 @@
 
 
 
-; TODO:
+; TODO FRIENDLIER ERRORS:
 ;
 ; We should consider being more proactive about handling errors
 ; (especially so that Cene for Racket can use this implementation but
 ; replace its errors with a Cene concept of errors). Here's a rundown
-; of all the errors we should let the user provide handlers for.
+; of all the remaining errors we should let the user provide handlers
+; for.
 ;
 ; Note that we don't mention any errors which the user could work
 ; around by performing checks on their values before passing them in.
@@ -198,14 +207,6 @@
 ; collect these into a data structure to simplify the interface
 ; signatures.
 ;
-; Below, when we note "write conflicts and successes" or "spend-twice
-; conflicts and successes," that means we should add "on write
-; conflict or spend-twice error" and "on write or spend successful"
-; parameters.
-;
-; Below, when we note "stalls," that means we should add an "on unable
-; to continue error" parameter.
-;
 ; We mark other kinds of notes with "*". Notably, those might be
 ; avoidable by letting the user perform more detailed checks on their
 ; values.
@@ -223,42 +224,17 @@
 ;
 ; extfx-table-each
 ;   multiple write-once callbacks
-; extfx-claim-and-split
-;   write conflicts and successes
 ; extfx-put (and extfx-finish-put)
-;   write-once callback
-;   write conflicts and successes
-; extfx-get
-;   stalls
+;   write-once callback (which also determines a conflict handler)
 ; extfx-private-put
-;   write-once callback
-;   write conflicts and successes
-; extfx-private-get
-;   stalls
-; extfx-pub
-;   write conflicts and successes
-; extfx-sub
-;   write conflicts and successes
-; extfx-ft-split-list
-;   spend-twice conflicts and successes
-; extfx-ft-split-table
-;   spend-twice conflicts and successes
-; extfx-ft-subname
-;   spend-twice conflicts and successes
+;   write-once callback (which also determines a conflict handler)
 ; extfx-ft-restrict
 ;   * errors where the given definition space isn't a descendant of
 ;     the given familiarity ticket
-;   spend-twice conflicts and successes
 ; extfx-ft-disburse
-;   write-once callback
-;   spend-twice conflicts and successes
-; extfx-ft-claim
-;   spend-twice conflicts and successes
+;   write-once callback (which also determines a conflict handler)
 ; extfx-contribute
-;   write-once callback
-;   spend-twice conflicts and successes
-; extfx-collect
-;   stalls
+;   write-once callback (which also determines a conflict handler)
 
 
 
@@ -273,7 +249,7 @@
 
 
 
-(struct-easy (extfx-finish-put ds n value))
+(struct-easy (extfx-finish-put ds n on-conflict value))
 
 (struct-easy (extfx-spend ds ticket-symbol then))
 (struct-easy (extfx-finish-run ds value))
@@ -288,33 +264,38 @@
   
   #/mat v (internal:extfx-dspace-create-shadower ds then) #t
   
-  #/mat v (internal:extfx-claim-and-split n times then) #t
+  #/mat v (internal:extfx-claim-and-split n times on-conflict then) #t
   
   #/mat v (internal:extfx-put ds n comp) #t
-  #/mat v (extfx-finish-put ds n value) #t
-  #/mat v (internal:extfx-get ds n then) #t
+  #/mat v (extfx-finish-put ds n on-conflict value) #t
+  #/mat v (internal:extfx-get ds n on-stall then) #t
   
   #/mat v (internal:extfx-private-put ds putter-name getter-name comp)
     #t
-  #/mat v (internal:extfx-private-get ds putter-name getter-name then)
+  #/mat v
+    (internal:extfx-private-get
+      ds putter-name getter-name on-stall then)
     #t
   
   #/mat v (internal:extfx-establish-pubsub ds pubsub-name then) #t
-  #/mat v (internal:extfx-pub ds p pubber-name arg) #t
-  #/mat v (internal:extfx-pub ds s subber-name func) #t
+  #/mat v (internal:extfx-pub ds p pubber-name on-conflict arg) #t
+  #/mat v (internal:extfx-sub ds s subber-name on-conflict func) #t
   
-  #/mat v (internal:extfx-ft-split-list ticket times then) #t
-  #/mat v (internal:extfx-ft-split-table ticket times then) #t
-  #/mat v (internal:extfx-ft-subname ticket key then) #t
-  #/mat v (internal:extfx-ft-restrict ticket ds then) #t
+  #/mat v (internal:extfx-ft-split-list ticket times on-conflict then)
+    #t
+  #/mat v
+    (internal:extfx-ft-split-table ticket times on-conflict then)
+    #t
+  #/mat v (internal:extfx-ft-subname ticket key on-conflict then) #t
+  #/mat v (internal:extfx-ft-restrict ticket ds on-conflict then) #t
   
   #/mat v (internal:extfx-ft-disburse ds hub-name comp-ticket) #t
-  #/mat v (internal:extfx-ft-claim ds t then) #t
+  #/mat v (internal:extfx-ft-claim ds t on-conflict then) #t
   
   #/mat v
     (internal:extfx-contribute ds collector-familiarity-ticket comp)
     #t
-  #/mat v (internal:extfx-collect ds collector-name then) #t
+  #/mat v (internal:extfx-collect ds collector-name on-stall then) #t
   
   #/mat v (extfx-spend ds ticket-symbol then) #t
   #/mat v (extfx-finish-run ds value) #t
@@ -324,6 +305,37 @@
 (define/contract (dspace? v)
   (-> any/c boolean?)
   (internal:dspace? v))
+
+
+(define/contract (error-definer? v)
+  (-> any/c boolean?)
+  (mat v (internal:error-definer-uninformative) #t
+  #/mat v (internal:error-definer-from-message message) #t
+    #f))
+
+; TODO FRIENDLIER ERRORS: Add more expressive ways to create
+; `error-definer?` values. It seems like in general, they should be
+; similar to top-level Cene definitions (i.e. `extfx?`-returning
+; functions which take a unique `authorized-name?` and a
+; `(-> name? authorized-name?)` qualify function), but with the
+; distinction that the information they define is only used to
+; construct a good error message.
+
+(define/contract (error-definer-uninformative)
+  (-> error-definer?)
+  (internal:error-definer-uninformative))
+
+(define/contract (error-definer-from-message message)
+  (-> string? error-definer?)
+  (internal:error-definer-from-message message))
+
+(define/contract (success-or-error-definer? v)
+  (-> any/c boolean?)
+  (internal:success-or-error-definer? v))
+
+(define/contract (success-or-error-definer on-error on-success)
+  (-> error-definer? extfx? success-or-error-definer?)
+  (internal:success-or-error-definer on-error on-success))
 
 
 (define/contract (extfx-noop)
@@ -394,7 +406,7 @@
 ; TODO: See if this should be exported.
 ;
 ; TODO: See if this should use `dspace-descends?` instead of
-; `dspace-eq?`. At the moment don't offer any way (or at least any
+; `dspace-eq?`. At the moment we don't offer any way (or at least any
 ; well thought-out way) to restrict an authorized name to a shadowing
 ; definition space, and if we did, we would have to figure out what it
 ; meant to claim the same authorized name in two separate shadowing
@@ -434,10 +446,11 @@
     (name-subname key-name original-name)
     (table-shadow original-name (just #/trivial) parents)))
 
-(define/contract (extfx-claim-and-split n times then)
-  (-> authorized-name? natural? (-> (listof authorized-name?) extfx?)
+(define/contract (extfx-claim-and-split n times on-conflict then)
+  (-> authorized-name? natural? error-definer?
+    (-> (listof authorized-name?) extfx?)
     extfx?)
-  (internal:extfx-claim-and-split n times then))
+  (internal:extfx-claim-and-split n times on-conflict then))
 
 
 (define/contract (optionally-dexable? v)
@@ -508,25 +521,30 @@
 
 (define/contract (extfx-put ds n comp)
   (-> dspace? authorized-name?
-    (-> (-> optionally-dexable? extfx?) extfx?)
+    (-> (-> success-or-error-definer? optionally-dexable? extfx?)
+      extfx?)
     extfx?)
   (internal:extfx-put ds n comp))
 
-(define/contract (extfx-get ds n then)
-  (-> dspace? name? (-> any/c extfx?) extfx?)
-  (internal:extfx-get ds n then))
+(define/contract (extfx-get ds n on-stall then)
+  (-> dspace? name? error-definer? (-> any/c extfx?) extfx?)
+  (internal:extfx-get ds n on-stall then))
 
 
 (define/contract
   (extfx-private-put ds putter-name getter-name comp)
   (-> dspace? authorized-name? name?
-    (-> (-> optionally-dexable? extfx?) extfx?)
+    (-> (-> success-or-error-definer? optionally-dexable? extfx?)
+      extfx?)
     extfx?)
   (internal:extfx-private-put ds putter-name getter-name comp))
 
-(define/contract (extfx-private-get ds putter-name getter-name then)
-  (-> dspace? name? authorized-name? (-> any/c extfx?) extfx?)
-  (internal:extfx-private-get ds putter-name getter-name then))
+(define/contract
+  (extfx-private-get ds putter-name getter-name on-stall then)
+  (-> dspace? name? authorized-name? error-definer? (-> any/c extfx?)
+    extfx?)
+  (internal:extfx-private-get
+    ds putter-name getter-name on-stall then))
 
 
 (define/contract (pub? v)
@@ -555,66 +573,78 @@
   (-> dspace? authorized-name? (-> pub? sub? extfx?) extfx?)
   (internal:extfx-establish-pubsub ds pubsub-name then))
 
-(define/contract (extfx-pub ds p pubber-name arg)
-  (-> dspace? pub? authorized-name? optionally-dexable? extfx?)
-  (internal:extfx-pub ds p pubber-name arg))
+(define/contract (extfx-pub ds p pubber-name on-conflict arg)
+  (->
+    dspace?
+    pub?
+    authorized-name?
+    success-or-error-definer?
+    optionally-dexable?
+    extfx?)
+  (internal:extfx-pub ds p pubber-name on-conflict arg))
 
-(define/contract (extfx-sub ds s subber-name func)
-  (-> dspace? sub? authorized-name?
+(define/contract (extfx-sub ds s subber-name on-conflict func)
+  (-> dspace? sub? authorized-name? success-or-error-definer?
     (optionally-dexable-of #/-> any/c extfx?)
     extfx?)
-  (internal:extfx-sub ds s subber-name func))
+  (internal:extfx-sub ds s subber-name on-conflict func))
 
 
 (define/contract (familiarity-ticket? v)
   (-> any/c boolean?)
   (internal:familiarity-ticket? v))
 
-(define/contract (extfx-ft-split-list ticket times then)
-  (-> familiarity-ticket? natural?
+(define/contract (extfx-ft-split-list ticket times on-conflict then)
+  (-> familiarity-ticket? natural? error-definer?
     (-> (listof familiarity-ticket?) extfx?)
     extfx?)
-  (internal:extfx-ft-split-list ticket times then))
+  (internal:extfx-ft-split-list ticket times on-conflict then))
 
-(define/contract (extfx-ft-split-table ticket times then)
-  (-> familiarity-ticket? (tableof trivial?)
+(define/contract (extfx-ft-split-table ticket times on-conflict then)
+  (-> familiarity-ticket? (tableof trivial?) error-definer?
     (-> (tableof familiarity-ticket?) extfx?)
     extfx?)
-  (internal:extfx-ft-split-table ticket times then))
+  (internal:extfx-ft-split-table ticket times on-conflict then))
 
-(define/contract (extfx-ft-subname ticket key then)
-  (-> familiarity-ticket? name? (-> familiarity-ticket? extfx?)
+(define/contract (extfx-ft-subname ticket key on-conflict then)
+  (-> familiarity-ticket? name? error-definer?
+    (-> familiarity-ticket? extfx?)
     extfx?)
-  (internal:extfx-ft-subname ticket key then))
+  (internal:extfx-ft-subname ticket key on-conflict then))
 
-(define/contract (extfx-ft-restrict ticket ds then)
-  (-> familiarity-ticket? dspace? (-> familiarity-ticket? extfx?)
+(define/contract (extfx-ft-restrict ticket ds on-conflict then)
+  (-> familiarity-ticket? dspace? error-definer?
+    (-> familiarity-ticket? extfx?)
     extfx?)
-  (internal:extfx-ft-restrict ticket ds then))
+  (internal:extfx-ft-restrict ticket ds on-conflict then))
 
 
 (define/contract (extfx-ft-disburse ds hub-name comp-ticket)
   (-> dspace? authorized-name?
-    (-> (-> familiarity-ticket? extfx?) extfx?)
+    (-> (-> success-or-error-definer? familiarity-ticket? extfx?)
+      extfx?)
     extfx?)
   (internal:extfx-ft-disburse ds hub-name comp-ticket))
 
-(define/contract (extfx-ft-claim ds t then)
-  (-> dspace? familiarity-ticket? (-> familiarity-ticket? extfx?)
+(define/contract (extfx-ft-claim ds t on-conflict then)
+  (-> dspace? familiarity-ticket? error-definer?
+    (-> familiarity-ticket? extfx?)
     extfx?)
-  (internal:extfx-ft-claim ds t then))
+  (internal:extfx-ft-claim ds t on-conflict then))
 
 
 (define/contract
   (extfx-contribute ds collector-familiarity-ticket comp)
   (-> dspace? familiarity-ticket?
-    (-> (-> optionally-dexable? extfx?) extfx?)
+    (-> (-> success-or-error-definer? optionally-dexable? extfx?)
+      extfx?)
     extfx?)
   (internal:extfx-contribute ds collector-familiarity-ticket comp))
 
-(define/contract (extfx-collect ds collector-name then)
-  (-> dspace? authorized-name? (-> table? extfx?) extfx?)
-  (internal:extfx-collect ds collector-name then))
+(define/contract (extfx-collect ds collector-name on-stall then)
+  (-> dspace? authorized-name? error-definer? (-> table? extfx?)
+    extfx?)
+  (internal:extfx-collect ds collector-name on-stall then))
 
 
 (struct-easy (run-extfx-result-success value) #:equal)
@@ -689,7 +719,14 @@
         (w- rev-errors
           (if (hash-empty? unspent-tickets)
             rev-errors
-            (cons "Expected each ticket to be spent" rev-errors))
+            ; TODO FRIENDLIER ERRORS: Generate different errors for
+            ; different tickets. Actually, each ticket should already
+            ; specify a particular `error-definer?` value to use in
+            ; this situation.
+            (cons
+              (internal:error-definer-from-message
+                "Expected each ticket to be spent")
+              rev-errors))
         #/mat rev-errors (list)
           (dissect (hash-ref db 'finish-run) (just finish-value)
           #/run-extfx-result-success finish-value)
@@ -701,8 +738,13 @@
         (run-extfx-result-failure #/internal:run-extfx-errors
         #/reverse #/append
           (list-map rev-next-processes #/fn process
-            ; TODO: Generate different errors for different processes.
-            "Read from a name that was never defined")
+            ; TODO FRIENDLIER ERROR: Generate different errors for
+            ; different processes. Actually, each stalled process
+            ; should already specify a particular `error-definer?`
+            ; value to use in this situation (which is consistently
+            ; named `on-stall`).
+            (internal:error-definer-from-message
+              "Read from a name that was never defined"))
           rev-errors)
       #/next-full (reverse rev-next-processes) (list) unspent-tickets
         db rev-errors #f)
@@ -724,12 +766,21 @@
         (next-full
           processes (cons process rev-next-processes) unspent-tickets
           db rev-errors did-something))
-    #/w- next-with-error
-      (fn error
+    #/w- next-with-error-definer
+      (fn on-error default-message
         (next-full
           processes rev-next-processes unspent-tickets db
-          (cons error rev-errors)
+          (cons
+            (mat on-error (internal:error-definer-uninformative)
+              (internal:error-definer-from-message default-message)
+              on-error)
+            rev-errors)
           #t))
+    #/w- next-with-error
+      (fn error
+        (next-with-error-definer
+          (internal:error-definer-uninformative)
+          error))
     
     
     #/mat process (internal:extfx-noop)
@@ -753,7 +804,8 @@
         (cons ds-symbol parents-list)
         (hash-set parents-hash ds-symbol #t))
     
-    #/mat process (internal:extfx-claim-and-split n times then)
+    #/mat process
+      (internal:extfx-claim-and-split n times on-conflict then)
       'TODO
     
     #/mat process (internal:extfx-put ds n comp)
@@ -770,14 +822,14 @@
       #/next-full
         processes
         (cons
-          (comp #/fn value
+          (comp #/fn on-conflict value
             (extfx-spend root-ds ticket
-            #/extfx-finish-put ds n value))
+            #/extfx-finish-put ds n on-conflict value))
           rev-next-processes)
         (hash-set unspent-tickets ticket
           (unspent-ticket-entry-anonymous))
         db rev-errors #t)
-    #/mat process (extfx-finish-put ds n value)
+    #/mat process (extfx-finish-put ds n on-conflict value)
       ; If there has already been a definition installed at this name
       ; in this definition space, this checks that the proposed dex
       ; matches the stored dex and that the proposed value matches the
@@ -787,12 +839,15 @@
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
       #/expect (authorized-name-for? root-ds n) #t
         (next-with-error "Expected n to be a name authorized for the extfx runner's root definition space")
+      #/dissect on-conflict
+        (internal:success-or-error-definer on-conflict on-no-conflict)
       #/dissect ds
         (internal:dspace ds-symbol parents-list parents-hash)
       #/w- n (authorized-name-get-name n)
       #/w- err-once
         (fn
-          (next-with-error "Wrote to the same name where at least one of the writes was only expecting one write overall"))
+          (next-with-error-definer on-conflict
+            "Wrote to the same name where at least one of the writes was only expecting one write overall"))
       #/w- do-not-conflict
         (fn existing-value then
           (mat existing-value
@@ -814,13 +869,15 @@
                   name-of-existing-dex
                   name-of-dex)
                 #t
-                (next-with-error "Wrote to the same name where two of the writes were dexable with different dexes")
+                (next-with-error-definer on-conflict
+                  "Wrote to the same name where two of the writes were dexable with different dexes")
               #/expect
                 (eq-by-dex? (dex-name)
                   name-of-existing-value
                   name-of-value)
                 #t
-                (next-with-error "Wrote to the same name where two of the writes were dexable with different values")
+                (next-with-error-definer on-conflict
+                  "Wrote to the same name where two of the writes were dexable with different values")
               #/then)
             #/error "Internal error: Encountered an unknown kind of optionally dexable value")
           #/error "Internal error: Encountered an unknown kind of optionally dexable value"))
@@ -921,10 +978,11 @@
             #/error "Internal error: Encountered an unknown kind of db-put entry")))
       #/write-parents db-put #/fn db-put
       #/next-full
-        processes rev-next-processes unspent-tickets
+        (cons on-no-conflict processes)
+        rev-next-processes unspent-tickets
         (hash-set db 'put db-put)
         rev-errors #t)
-    #/mat process (internal:extfx-get ds n then)
+    #/mat process (internal:extfx-get ds n on-stall then)
       ; If there has not yet been a definition installed at this name
       ; in this definition space, we set this process aside and come
       ; back to it later. If there has, we call `then` with that
@@ -950,7 +1008,8 @@
       (internal:extfx-private-put ds putter-name getter-name comp)
       'TODO
     #/mat process
-      (internal:extfx-private-get ds putter-name getter-name then)
+      (internal:extfx-private-get
+        ds putter-name getter-name on-stall then)
       'TODO
     
     #/mat process
@@ -964,18 +1023,22 @@
       #/next-one-fruitful #/then
         (internal:pub ds pubsub-name)
         (internal:sub ds pubsub-name))
-    #/mat process (internal:extfx-pub ds p pubber-name arg)
+    #/mat process
+      (internal:extfx-pub ds p pubber-name on-conflict arg)
       'TODO
-    #/mat process (internal:extfx-pub ds s subber-name func)
+    #/mat process
+      (internal:extfx-sub ds s subber-name on-conflict func)
       'TODO
     
-    #/mat process (internal:extfx-ft-split-list ticket times then)
+    #/mat process
+      (internal:extfx-ft-split-list ticket times on-conflict then)
       (dissect ticket
         (internal:familiarity-ticket ticket-symbol ds n)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
-        (next-with-error "Tried to spend a ticket twice")
+        (next-with-error-definer on-conflict
+          "Tried to spend a ticket twice")
       #/w-loop next
         unspent-tickets (hash-remove unspent-tickets ticket-symbol)
         result (list)
@@ -990,24 +1053,28 @@
             (unspent-ticket-entry-familiarity-ticket ds n))
           (cons (internal:familiarity-ticket fresh-ticket-symbol ds n)
             result)))
-    #/mat process (internal:extfx-ft-split-table ticket times then)
+    #/mat process
+      (internal:extfx-ft-split-table ticket times on-conflict then)
       (dissect ticket (internal:familiarity-ticket ticket-symbol ds n)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/dissect times (unsafe:table times)
       #/next-one-fruitful
-      #/internal:extfx-ft-split-list ticket (hash-count times)
+      #/internal:extfx-ft-split-list
+        ticket (hash-count times) on-conflict
       #/fn tickets
       #/then #/unsafe:table #/make-immutable-hash
       #/list-zip-map (hash->list times) tickets #/fn time ticket
         (dissect time (cons k #/trivial)
         #/cons k ticket))
-    #/mat process (internal:extfx-ft-subname ticket key then)
+    #/mat process
+      (internal:extfx-ft-subname ticket key on-conflict then)
       (dissect ticket (internal:familiarity-ticket ticket-symbol ds n)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
-        (next-with-error "Tried to spend a ticket twice")
+        (next-with-error-definer on-conflict
+          "Tried to spend a ticket twice")
       #/w- fresh-ticket-symbol (gensym)
       #/w- n (name-subname key n)
       #/next-full
@@ -1020,14 +1087,16 @@
             fresh-ticket-symbol
             (unspent-ticket-entry-familiarity-ticket ds n))
           db rev-errors #t))
-    #/mat process (internal:extfx-ft-restrict ticket new-ds then)
+    #/mat process
+      (internal:extfx-ft-restrict ticket new-ds on-conflict then)
       (dissect ticket (internal:familiarity-ticket ticket-symbol ds n)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/expect (dspace-descends? ds new-ds) #t
         (next-with-error "Expected ds to be a definition space descending from ticket's definition space")
       #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
-        (next-with-error "Tried to spend a ticket twice")
+        (next-with-error-definer on-conflict
+          "Tried to spend a ticket twice")
       #/w- fresh-ticket-symbol (gensym)
       #/next-full
         (cons
@@ -1042,13 +1111,14 @@
     
     #/mat process (internal:extfx-ft-disburse ds hub-name comp-ticket)
       'TODO
-    #/mat process (internal:extfx-ft-claim ds t then)
+    #/mat process (internal:extfx-ft-claim ds t on-conflict then)
       'TODO
     
     #/mat process
       (internal:extfx-contribute ds collector-familiarity-ticket comp)
       'TODO
-    #/mat process (internal:extfx-collect ds collector-name then)
+    #/mat process
+      (internal:extfx-collect ds collector-name on-stall then)
       'TODO
     
     #/mat process (extfx-spend ds ticket-symbol then)
