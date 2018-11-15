@@ -76,11 +76,11 @@
   
   pub?
   sub?
-  pub-restrict
-  sub-restrict
   extfx-establish-pubsub
-  extfx-pub
-  extfx-sub
+  extfx-pub-restrict
+  extfx-sub-restrict
+  extfx-pub-write
+  extfx-sub-write
   
   extfx-freshen
   extfx-split-list
@@ -153,8 +153,12 @@
     (extfx-private-get ds putter-name getter-name on-stall then))
   
   (provide-struct (extfx-establish-pubsub ds pubsub-name then))
-  (provide-struct (extfx-pub ds p pubber-name on-conflict arg))
-  (provide-struct (extfx-sub ds s subber-name on-conflict func))
+  (provide-struct
+    (extfx-pub-restrict p new-ds on-restriction-error then))
+  (provide-struct
+    (extfx-sub-restrict s new-ds on-restriction-error then))
+  (provide-struct (extfx-pub-write ds p pubber-name on-conflict arg))
+  (provide-struct (extfx-sub-write ds s subber-name on-conflict func))
   
   (provide-struct (extfx-freshen ticket on-conflict then))
   (provide-struct (extfx-split-list ticket times on-conflict then))
@@ -166,7 +170,9 @@
     (extfx-imburse ds hub-familiarity-ticket on-conflict then))
   (provide-struct (extfx-ct-continue ticket on-conflict value))
   (provide-struct (extfx-ft-subname ticket key on-conflict then))
-  (provide-struct (extfx-ft-restrict ticket ds on-conflict then))
+  (provide-struct
+    (extfx-ft-restrict
+      ticket ds on-conflict on-restriction-error then))
   
   (provide-struct
     (extfx-contribute
@@ -180,49 +186,6 @@
   )
 
 (require #/prefix-in internal: 'private)
-
-
-
-; TODO FRIENDLIER ERRORS:
-;
-; We should consider being more proactive about handling errors
-; (especially so that Cene for Racket can use this implementation but
-; replace its errors with a Cene concept of errors). Here's a rundown
-; of all the remaining errors we should let the user provide handlers
-; for.
-;
-; Note that we don't mention any errors which the user could work
-; around by performing checks on their values before passing them in.
-; Effectively, those can be handled already.
-;
-; Also, although we say think of these as "handlers," if an error ever
-; occurs, we should encourage (if not totally enforce) that the user
-; "handle" it merely by tailoring the error message. Tailored error
-; messages could send us down an extravagant path if we let
-; them -- maybe even using error-handling-time definition spaces to
-; communicate across concurrently occurring errors; adding ways for a
-; caller to analyze the errors the called code produces and replace
-; them with fewer and more focused errors; and adding ways to
-; twist-tie (so to speak) a bunch of unspent tickets into a single
-; unspent ticket which has custom error behavior when it fails to be
-; spent. All in all, these might be better termed "error customizers"
-; than "error handlers." The term we use in the code here is
-; `error-definer?`.
-;
-; We've actually whittled this list down to one particular kind of
-; error at this point. This kind of error might be avoidable by
-; letting the user perform more detailed checks on their values.
-;
-;
-; pub-restrict
-;   errors where the given definition space isn't a descendant of the
-;     given pub
-; sub-restrict
-;   errors where the given definition space isn't a descendant of the
-;     given sub
-; extfx-ft-restrict
-;   errors where the given definition space isn't a descendant of the
-;     given familiarity ticket
 
 
 
@@ -273,8 +236,16 @@
     #t
   
   #/mat v (internal:extfx-establish-pubsub ds pubsub-name then) #t
-  #/mat v (internal:extfx-pub ds p pubber-name on-conflict arg) #t
-  #/mat v (internal:extfx-sub ds s subber-name on-conflict func) #t
+  #/mat v
+    (internal:extfx-pub-restrict p new-ds on-restriction-error then)
+    #t
+  #/mat v
+    (internal:extfx-sub-restrict s new-ds on-restriction-error then)
+    #t
+  #/mat v (internal:extfx-pub-write ds p pubber-name on-conflict arg)
+    #t
+  #/mat v (internal:extfx-sub-write ds s subber-name on-conflict func)
+    #t
   
   #/mat v (internal:extfx-freshen ticket on-conflict then) #t
   #/mat v (internal:extfx-split-list ticket times on-conflict then) #t
@@ -289,7 +260,10 @@
     #t
   #/mat v (internal:extfx-ct-continue ticket on-conflict value) #t
   #/mat v (internal:extfx-ft-subname ticket key on-conflict then) #t
-  #/mat v (internal:extfx-ft-restrict ticket ds on-conflict then) #t
+  #/mat v
+    (internal:extfx-ft-restrict
+      ticket ds on-conflict on-restriction-error then)
+    #t
   
   #/mat v
     (internal:extfx-contribute
@@ -306,19 +280,64 @@
   (internal:dspace? v))
 
 
+; An `error-definer?` is a way of specifying a custom error message.
+; Although all the ways of constructing `error-definer?` values are
+; currently very simple, they may someday (TODO) perform more
+; sophisticated computations to produce holistic error reports.
+;
+; NOTE:
+;
+; Once they do this, it may be tempting to call them "error handlers".
+; However, they cannot be used to recover from an error. They can only
+; produce an error report.
+;
+; The Effection extensibility process calculus depends on monotonicity
+; of all state resources to ensure the backwards compatibility of each
+; extension. If Effection-safe computations had a way to recover from
+; all errors, then a computation could positively depend on the
+; *presence* of an error, even an error that results from the *lack*
+; of some definition or an *incmplete* implementation, meaning that
+; the very act of implementing an unimplemented thing could break
+; backwards compatibility. We can't very well disallow implementing
+; things, so we disallow recovering from errors instead.
+
+; TODO:
+;
+; Add more expressive ways to create `error-definer?` values. It seems
+; like in general, they should be similar to top-level Cene
+; definitions (i.e. `extfx?`-returning functions which take a unique
+; `authorized-name?` and a `(-> name? authorized-name?)` name
+; qualification function), but with the distinction that the
+; information they define is only used to construct a detailed and
+; focused error report.
+;
+; Treating them as *services* (i.e. top-level definitions which have
+; familiarity tickets for each other) this way would make it possible
+; for them to coordinate to produce *simpler* error reports than they
+; could produce independently. However, for them to obtain familiarity
+; tickets for each other, we'll need to create variations of
+; `extfx-split-list`, `extfx-split-table`, and `extfx-disburse` which
+; take their own top-level definitions that act like phone operator
+; switchboards to allow cousin unspent ticket errors to connect with
+; each other. We may also need variations of `fuse-extfn` and
+; `extfn-table-each` which do the same kind of thing to allow
+; concurrent processes' error definers to coordinate with each other,
+; as well as possibly some more effects (unlike any we currently have)
+; which allow concurrent errors and unspent ticket errors to interact
+; with each other.
+;
+; It's possible we may also want a way to twist-tie (so to speak) some
+; ticket values so that their unspent ticket errors are managed
+; together. Perhaps in order to do this, we could hide them all inside
+; a single ticket value until it's unwrapped again, but it seems like
+; we might just be able to install this kind of connection using a
+; side effect without changing the way we pass the tickets around.
+
 (define/contract (error-definer? v)
   (-> any/c boolean?)
   (mat v (internal:error-definer-uninformative) #t
   #/mat v (internal:error-definer-from-message message) #t
     #f))
-
-; TODO FRIENDLIER ERRORS: Add more expressive ways to create
-; `error-definer?` values. It seems like in general, they should be
-; similar to top-level Cene definitions (i.e. `extfx?`-returning
-; functions which take a unique `authorized-name?` and a
-; `(-> name? authorized-name?)` qualify function), but with the
-; distinction that the information they define is only used to
-; construct a good error message.
 
 (define/contract (error-definer-uninformative)
   (-> error-definer?)
@@ -654,25 +673,21 @@
   (-> any/c boolean?)
   (internal:sub? v))
 
-(define/contract (pub-restrict ds p)
-  (-> dspace? pub? pub?)
-  (dissect p (internal:pub original-ds pubsub-name)
-  #/expect (dspace-descends? original-ds ds) #t
-    (error "Expected ds to be a shadowing descendant of the dspace of the pub p")
-  #/internal:pub ds pubsub-name))
-
-(define/contract (sub-restrict ds s)
-  (-> dspace? sub? sub?)
-  (dissect s (internal:sub original-ds pubsub-name)
-  #/expect (dspace-descends? original-ds ds) #t
-    (error "Expected ds to be a shadowing descendant of the dspace of the sub s")
-  #/internal:sub ds pubsub-name))
-
 (define/contract (extfx-establish-pubsub ds pubsub-name then)
   (-> dspace? authorized-name? (-> pub? sub? extfx?) extfx?)
   (internal:extfx-establish-pubsub ds pubsub-name then))
 
-(define/contract (extfx-pub ds p pubber-name on-conflict arg)
+(define/contract
+  (extfx-pub-restrict p new-ds on-restriction-error then)
+  (-> pub? dspace? error-definer? (-> pub? extfx?) extfx?)
+  (internal:extfx-pub-restrict p new-ds on-restriction-error then))
+
+(define/contract
+  (extfx-sub-restrict s new-ds on-restriction-error then)
+  (-> pub? dspace? error-definer? (-> pub? extfx?) extfx?)
+  (internal:extfx-sub-restrict s new-ds on-restriction-error then))
+
+(define/contract (extfx-pub-write ds p pubber-name on-conflict arg)
   (->
     dspace?
     pub?
@@ -680,13 +695,13 @@
     success-or-error-definer?
     optionally-dexable?
     extfx?)
-  (internal:extfx-pub ds p pubber-name on-conflict arg))
+  (internal:extfx-pub-write ds p pubber-name on-conflict arg))
 
-(define/contract (extfx-sub ds s subber-name on-conflict func)
+(define/contract (extfx-sub-write ds s subber-name on-conflict func)
   (-> dspace? sub? authorized-name? success-or-error-definer?
     (optionally-dexable-of #/-> any/c extfx?)
     extfx?)
-  (internal:extfx-sub ds s subber-name on-conflict func))
+  (internal:extfx-sub-write ds s subber-name on-conflict func))
 
 
 (define/contract (extfx-freshen ticket on-conflict then)
@@ -732,11 +747,13 @@
     extfx?)
   (internal:extfx-ft-subname ticket key on-conflict then))
 
-(define/contract (extfx-ft-restrict ticket ds on-conflict then)
-  (-> familiarity-ticket? dspace? error-definer?
+(define/contract
+  (extfx-ft-restrict ticket ds on-conflict on-restriction-error then)
+  (-> familiarity-ticket? dspace? error-definer? error-definer?
     (-> familiarity-ticket? extfx?)
     extfx?)
-  (internal:extfx-ft-restrict ticket ds on-conflict then))
+  (internal:extfx-ft-restrict
+    ticket ds on-conflict on-restriction-error then))
 
 
 (define/contract
@@ -1180,10 +1197,24 @@
         (internal:pub ds pubsub-name)
         (internal:sub ds pubsub-name))
     #/mat process
-      (internal:extfx-pub ds p pubber-name on-conflict arg)
+      (internal:extfx-pub-restrict p new-ds on-restriction-error then)
+      (dissect p (internal:pub original-ds pubsub-name)
+      #/expect (dspace-descends? original-ds new-ds) #t
+        (next-with-error-definer on-error
+          "Expected new-ds to be a shadowing descendant of the dspace of the pub p")
+      #/next-one-fruitful #/then #/internal:pub new-ds pubsub-name)
+    #/mat process
+      (internal:extfx-sub-restrict s new-ds on-restriction-error then)
+      (dissect s (internal:sub original-ds pubsub-name)
+      #/expect (dspace-descends? original-ds new-ds) #t
+        (next-with-error-definer on-error
+          "Expected new-ds to be a shadowing descendant of the dspace of the sub s")
+      #/next-one-fruitful #/then #/internal:sub new-ds pubsub-name)
+    #/mat process
+      (internal:extfx-pub-write ds p pubber-name on-conflict arg)
       'TODO
     #/mat process
-      (internal:extfx-sub ds s subber-name on-conflict func)
+      (internal:extfx-sub-write ds s subber-name on-conflict func)
       'TODO
     
     #/w- parse-ticket
@@ -1308,13 +1339,15 @@
           (unspent-ticket-entry-familiarity-ticket on-unspent ds n))
         db rev-errors #t)
     #/mat process
-      (internal:extfx-ft-restrict ticket new-ds on-conflict then)
+      (internal:extfx-ft-restrict
+        ticket new-ds on-conflict on-restriction-error then)
       (dissect ticket
         (internal:familiarity-ticket ticket-symbol on-unspent ds n)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/expect (dspace-descends? ds new-ds) #t
-        (next-with-error "Expected ds to be a definition space descending from ticket's definition space")
+        (next-with-error-definer on-restriction-error
+          "Expected ds to be a definition space descending from ticket's definition space")
       #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
         (next-with-error-definer on-conflict
           "Tried to spend a ticket twice")
