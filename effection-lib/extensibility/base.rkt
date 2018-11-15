@@ -19,7 +19,7 @@
   dissect dissectfn expect fn mat w- w-loop)
 (require #/only-in lathe-comforts/hash hash-ref-maybe)
 (require #/only-in lathe-comforts/list
-  list-bind list-map list-zip-map nat->maybe)
+  list-any list-bind list-map list-zip-map nat->maybe)
 (require #/only-in lathe-comforts/maybe just nothing)
 (require #/only-in lathe-comforts/struct istruct/c struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
@@ -188,6 +188,11 @@
 (require #/prefix-in internal: 'private)
 
 
+
+; TODO: Consider putting this into Lathe Comforts.
+(define/contract (list-keep lst check)
+  (-> list? (-> any/c boolean?) list?)
+  (filter check lst))
 
 (define (make-appropriate-chaperone-contract c)
   (if (chaperone-contract? c)
@@ -781,6 +786,7 @@
   (internal:run-extfx-errors? v))
 
 
+(struct-easy (process-entry reads process))
 (struct-easy
   (unspent-ticket-entry-familiarity-ticket on-unspent ds n))
 (struct-easy (unspent-ticket-entry-anonymous on-unspent))
@@ -813,9 +819,13 @@
   #/w-loop next-full
     
     processes
-    (list
-    #/body root-ds root-unique-authorized-name
-      root-continuation-ticket)
+    (list #/process-entry
+      (hasheq
+        'spend-ticket (hasheq)
+        'claim-unique (table-empty)
+        'put (hasheq))
+      (body root-ds root-unique-authorized-name
+        root-continuation-ticket))
     
     rev-next-processes (list)
     
@@ -833,7 +843,7 @@
     rev-errors (list)
     did-something #f
     
-    (expect processes (cons process processes)
+    (expect processes (cons this-process-entry processes)
       (mat rev-next-processes (list)
         ; If there are no processes left, we're done. We add errors
         ; corresponding to any unspent tickets, and we return either
@@ -861,7 +871,8 @@
         ; all the processes.
         (run-extfx-result-failure #/internal:run-extfx-errors
         #/reverse #/append
-          (list-bind rev-next-processes #/fn process
+          (list-bind rev-next-processes
+          #/dissectfn (process-entry reads process)
             (mat process (internal:extfx-get ds n on-stall then)
               (list #/error-definer-or-message on-stall
                 "Read from a name that was never defined")
@@ -881,6 +892,7 @@
           rev-errors)
       #/next-full (reverse rev-next-processes) (list) unspent-tickets
         db rev-errors #f)
+    #/dissect this-process-entry (process-entry reads process)
     #/w- next-simple
       (fn processes
         (next-full
@@ -897,8 +909,8 @@
         ; NOTE: We can't use `next-one-fruitful` here because we don't
         ; want to make `did-something` true if it isn't already.
         (next-full
-          processes (cons process rev-next-processes) unspent-tickets
-          db rev-errors did-something))
+          processes (cons this-process-entry rev-next-processes)
+          unspent-tickets db rev-errors did-something))
     #/w- next-with-error-definer
       (fn on-error default-message
         (next-full
@@ -911,12 +923,74 @@
         (next-with-error-definer
           (internal:error-definer-uninformative)
           error))
+    #/w- next-purging
+      (fn on-error default-message should-keep
+        (next-full
+          (list-keep processes #/dissectfn (process-entry reads _)
+            (should-keep reads))
+          (list-keep rev-next-processes
+          #/dissectfn (process-entry reads _)
+            (should-keep reads))
+          
+          ; TODO:
+          ;
+          ; Filter `unspent-tickets`, `db`, and `rev-errors` the way
+          ; we're already filtering `processes` and
+          ; `rev-next-processes`. It'll be particularly complicated to
+          ; filter `db`, since we may want to remove entries that were
+          ; based on conflicts but not remove certain entries that are
+          ; actively causing conflicts themselves. If we remove all
+          ; but one of the conflicting entries for something, should
+          ; the last one suddenly proceed as though there wasn't a
+          ; conflict? I suppose it should... in which case we should
+          ; really be doing all this filtering-out in a way we can
+          ; restore again when the conflict has been cleared up.
+          ;
+          ; There might be an easier approach where if we *would* add
+          ; a process with a new `reads` entry to the list, we set it
+          ; aside instead. We only unblock the set-aside processes
+          ; once we've run out of other processes, and we only unblock
+          ; the ones whose dependencies we haven't encountered
+          ; conflicts for yet (and we unblock them all at once, for
+          ; determinism's sake). When we encounter a conflict, if it's
+          ; for a dependency we haven't approved yet, we simply never
+          ; run the things that depend on it. If it's for a dependency
+          ; we *have* approved, then... we have a more complicated
+          ; situation.
+          ;
+          ; In that case, for the sake of conveying as much
+          ; information as possible, we could unblock various
+          ; *possible subsets* of the processes we unblocked and
+          ; report each of the errors that happens in each of those
+          ; cases. However, those alternate universes are bound to be
+          ; pretty confusing for someone who's trying to read an error
+          ; report, and it could take a long time to compute them all.
+          ;
+          ; How about this: If a conflict is caused purely by the
+          ; recently unblocked processes, we try purging those and
+          ; reporting the error as though we didn't unblock them,
+          ; treating the newer writes as non-canonical. If there is no
+          ; error after we purge them, then we go ahead and report the
+          ; errors they cause, but the errors reported this way may
+          ; vary from one run to the next depending on race conditions
+          ; in `run-extfx!`, choices made by a user through a step
+          ; debugger interface, or slight, seemingly unrelated
+          ; differences in the architecture of the program.
+          ;
+          unspent-tickets db rev-errors
+          (cons (error-definer-or-message on-error default-message)
+            rev-errors)
+          
+          #t))
     
     
     #/mat process (internal:extfx-noop)
       (next-zero)
     #/mat process (internal:extfx-fused a b)
-      (next-simple #/list* b a processes)
+      (next-simple #/list*
+        (process-entry reads b)
+        (process-entry reads a)
+        processes)
     #/mat process (internal:extfx-later then)
       (next-one-fruitful #/then)
     #/mat process (internal:extfx-table-each t on-element then)
@@ -942,8 +1016,12 @@
       #/w- n (authorized-name-get-name n)
       #/w- db-claim-unique (hash-ref db 'claim-unique)
       #/expect (table-get n db-claim-unique) (nothing)
-        (next-with-error-definer on-conflict
-          "Tried to claim a name unique twice")
+        (next-purging on-conflict
+          "Tried to claim a name unique twice"
+          (fn reads
+            (mat (table-get n #/hash-ref reads 'claim-unique) (just _)
+              #t
+              #f)))
       #/w- fresh-ticket-symbol (gensym)
       #/w- fresh-name
         (unsafe:name #/list 'name:claim-unique-result root-ds-symbol)
@@ -952,7 +1030,7 @@
       #/w- familiarity-ticket-symbol (gensym)
       #/w- on-familiarity-ticket-unspent
         (error-definer-or-message on-familiarity-ticket-unspent
-          "Expected an extfx-put continuation to be continued")
+          "Expected an extfx-claim-unique continuation to be continued")
       #/w- familiarity-ticket
         (internal:familiarity-ticket
           familiarity-ticket-symbol on-familiarity-ticket-unspent
@@ -966,7 +1044,12 @@
           
           fresh-name)
       #/next-full
-        (cons (then fresh-authorized-name familiarity-ticket)
+        (cons
+          (process-entry
+            (hash-set reads 'claim-unique
+              (table-shadow n (just #/trivial)
+                (hash-ref reads 'claim-unique)))
+            (then fresh-authorized-name familiarity-ticket))
           processes)
         rev-next-processes
         (hash-set unspent-tickets familiarity-ticket-symbol
@@ -996,7 +1079,8 @@
           (dissectfn (list on-conflict value)
             (extfx-finish-put ds n on-conflict value)))
       #/next-full
-        (cons (comp continuation-ticket) processes)
+        (cons (process-entry reads (comp continuation-ticket))
+          processes)
         rev-next-processes
         (hash-set unspent-tickets continuation-ticket
           (unspent-ticket-entry-anonymous on-cont-unspent))
@@ -1016,9 +1100,20 @@
       #/dissect ds
         (internal:dspace ds-symbol parents-list parents-hash)
       #/w- n (authorized-name-get-name n)
+      #/w- next-conflict
+        (fn message
+          (next-purging on-conflict message #/fn reads
+            (w- reads-put (hash-ref reads 'put)
+            #/list-any (cons ds-symbol parents-list) #/fn parent
+              (expect (hash-ref-maybe reads-put parent)
+                (just reads-put-parent)
+                #f
+              #/mat (table-get n reads-put-parent) (just _)
+                #t
+                #f))))
       #/w- err-once
         (fn
-          (next-with-error-definer on-conflict
+          (next-conflict
             "Wrote to the same name where at least one of the writes was only expecting one write overall"))
       #/w- do-not-conflict
         (fn existing-value then
@@ -1041,45 +1136,58 @@
                   name-of-existing-dex
                   name-of-dex)
                 #t
-                (next-with-error-definer on-conflict
+                (next-conflict
                   "Wrote to the same name where two of the writes were dexable with different dexes")
               #/expect
                 (eq-by-dex? (dex-name)
                   name-of-existing-value
                   name-of-value)
                 #t
-                (next-with-error-definer on-conflict
+                (next-conflict
                   "Wrote to the same name where two of the writes were dexable with different values")
               #/then)
             #/error "Internal error: Encountered an unknown kind of optionally dexable value")
           #/error "Internal error: Encountered an unknown kind of optionally dexable value"))
       #/w- db-put (hash-ref db 'put)
+      #/w- next-after-put
+        (fn ds-symbol-written-to db
+          (next-full
+            (cons
+              (process-entry
+                (hash-set reads 'put
+                  (hash-set (hash-ref reads 'put) ds-symbol-written-to
+                    (table-shadow n (just #/trivial)
+                      (hash-ref (hash-ref reads 'put)
+                        ds-symbol-written-to))))
+                on-no-conflict)
+              processes)
+            rev-next-processes unspent-tickets db rev-errors #t))
       #/w- check-ds-symbol
         (fn then
           (expect (hash-ref-maybe db-put ds-symbol)
             (just db-put-for-ds)
-            (then #f)
+            (then #/nothing)
           #/expect (table-get n db-put-for-ds) (just entry)
-            (then #f)
+            (then #/nothing)
           #/mat entry (db-put-entry-do-not-conflict existing-values)
             (w-loop next existing-values existing-values
               (expect existing-values
                 (cons existing-value existing-values)
-                (then #f)
+                (then #/nothing)
               #/do-not-conflict existing-value #/fn
                 (next existing-values)))
           #/mat entry (db-put-entry-written existing-value)
             (do-not-conflict existing-value #/fn
-              (then #t))
+              (then #/just ds-symbol))
           #/error "Internal error: Encountered an unknown kind of db put entry"))
       #/check-ds-symbol #/fn already-written
-      #/if already-written
-        (next-zero)
+      #/mat already-written (just ds-symbol-written-to)
+        (next-after-put ds-symbol-written-to db)
       #/w- check-parents
         (fn then
           (w-loop next parents-to-check parents-list
             (expect parents-to-check (cons parent parents-to-check)
-              (then #f)
+              (then #/nothing)
             #/expect (hash-ref-maybe db-put parent)
               (just db-put-for-ds)
               (next parents-to-check)
@@ -1092,16 +1200,16 @@
               ; NOTE: If we find a `db-put-entry-written` entry for
               ; even one of the parents, checking that one is enough
               ; to check all the parents. That's why we can proceed
-              ; with `(then #t)` instead of `(next parents-to-check)`
-              ; here.
+              ; with `(then #/just parent)` instead of
+              ; `(next parents-to-check)` here.
               ;
               (do-not-conflict existing-value #/fn
-                (then #t))
+                (then #/just parent))
             
             #/error "Internal error: Encountered an unknown kind of db put entry")))
       #/check-parents #/fn already-written
-      #/if already-written
-        (next-zero)
+      #/mat already-written (just ds-symbol-written-to)
+        (next-after-put ds-symbol-written-to db)
       #/w- write-ds-symbol
         (fn db-put then
           (w- then-with-db-put-for-ds
@@ -1149,11 +1257,7 @@
               (error "Internal error: Expected already-written to become true if any of the parents had db-put-entry-written")
             #/error "Internal error: Encountered an unknown kind of db-put entry")))
       #/write-parents db-put #/fn db-put
-      #/next-full
-        (cons on-no-conflict processes)
-        rev-next-processes unspent-tickets
-        (hash-set db 'put db-put)
-        rev-errors #t)
+      #/next-after-put ds-symbol (hash-set db 'put db-put))
     #/mat process (internal:extfx-get ds n on-stall then)
       ; If there has not yet been a definition installed at this name
       ; in this definition space, we set this process aside and come
@@ -1200,14 +1304,14 @@
       (internal:extfx-pub-restrict p new-ds on-restriction-error then)
       (dissect p (internal:pub original-ds pubsub-name)
       #/expect (dspace-descends? original-ds new-ds) #t
-        (next-with-error-definer on-error
+        (next-with-error-definer on-restriction-error
           "Expected new-ds to be a shadowing descendant of the dspace of the pub p")
       #/next-one-fruitful #/then #/internal:pub new-ds pubsub-name)
     #/mat process
       (internal:extfx-sub-restrict s new-ds on-restriction-error then)
       (dissect s (internal:sub original-ds pubsub-name)
       #/expect (dspace-descends? original-ds new-ds) #t
-        (next-with-error-definer on-error
+        (next-with-error-definer on-restriction-error
           "Expected new-ds to be a shadowing descendant of the dspace of the sub s")
       #/next-one-fruitful #/then #/internal:sub new-ds pubsub-name)
     #/mat process
@@ -1245,11 +1349,20 @@
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a ticket descending from the extfx runner's root definition space")
       #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
-        (next-with-error-definer on-conflict
-          "Tried to spend a ticket twice")
+        (next-purging on-conflict
+          "Tried to spend a ticket twice"
+          (fn reads
+            (hash-has-key? ticket-symbol
+            #/hash-ref reads 'spend-ticket)))
       #/w- fresh-ticket-symbol (gensym)
       #/next-full
-        (cons (then #/wrap-fresh fresh-ticket-symbol) processes)
+        (cons
+          (process-entry
+            (hash-set reads 'spend-ticket
+              (hash-set (hash-ref reads 'spend-ticket) ticket-symbol
+                (trivial)))
+            (then #/wrap-fresh fresh-ticket-symbol))
+          processes)
         rev-next-processes
         (hash-set
           (hash-remove unspent-tickets ticket-symbol)
@@ -1263,15 +1376,25 @@
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a ticket descending from the extfx runner's root definition space")
       #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
-        (next-with-error-definer on-conflict
-          "Tried to spend a ticket twice")
+        (next-purging on-conflict
+          "Tried to spend a ticket twice"
+          (fn reads
+            (hash-has-key? ticket-symbol
+            #/hash-ref reads 'spend-ticket)))
       #/w-loop next
         unspent-tickets (hash-remove unspent-tickets ticket-symbol)
         result (list)
         
         (expect (nat->maybe times) (just times)
           (next-full
-            (cons (then result) processes)
+            (cons
+              (process-entry
+                (hash-set reads 'spend-ticket
+                  (hash-set (hash-ref reads 'spend-ticket)
+                    ticket-symbol
+                    (trivial)))
+                (then result))
+              processes)
             rev-next-processes unspent-tickets db rev-errors #t)
         #/w- fresh-ticket-symbol (gensym)
         #/next
@@ -1308,10 +1431,19 @@
       #/expect (dspace-eq? root-ds ds) #t
         (next-with-error "Expected ticket to be a continuation ticket associated with the extfx runner's root definition space")
       #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
-        (next-with-error-definer on-conflict
-          "Tried to spend a ticket twice")
+        (next-purging on-conflict
+          "Tried to spend a ticket twice"
+          (fn reads
+            (hash-has-key? ticket-symbol
+            #/hash-ref reads 'spend-ticket)))
       #/next-full
-        (cons (then value) processes)
+        (cons
+          (process-entry
+            (hash-set reads 'spend-ticket
+              (hash-set (hash-ref reads 'spend-ticket) ticket-symbol
+                (trivial)))
+            (then value))
+          processes)
         rev-next-processes
         (hash-remove unspent-tickets ticket-symbol)
         db rev-errors #t)
@@ -1322,15 +1454,22 @@
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
-        (next-with-error-definer on-conflict
-          "Tried to spend a ticket twice")
+        (next-purging on-conflict
+          "Tried to spend a ticket twice"
+          (fn reads
+            (hash-has-key? ticket-symbol
+            #/hash-ref reads 'spend-ticket)))
       #/w- fresh-ticket-symbol (gensym)
       #/w- n (name-subname key n)
       #/next-full
         (cons
-          (then
-          #/internal:familiarity-ticket
-            fresh-ticket-symbol on-unspent ds n)
+          (process-entry
+            (hash-set reads 'spend-ticket
+              (hash-set (hash-ref reads 'spend-ticket) ticket-symbol
+                (trivial)))
+            (then
+            #/internal:familiarity-ticket
+              fresh-ticket-symbol on-unspent ds n))
           processes)
         rev-next-processes
         (hash-set
@@ -1349,14 +1488,21 @@
         (next-with-error-definer on-restriction-error
           "Expected ds to be a definition space descending from ticket's definition space")
       #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
-        (next-with-error-definer on-conflict
-          "Tried to spend a ticket twice")
+        (next-purging on-conflict
+          "Tried to spend a ticket twice"
+          (fn reads
+            (hash-has-key? ticket-symbol
+            #/hash-ref reads 'spend-ticket)))
       #/w- fresh-ticket-symbol (gensym)
       #/next-full
         (cons
-          (then
-          #/internal:familiarity-ticket
-            fresh-ticket-symbol on-unspent new-ds n)
+          (process-entry
+            (hash-set reads 'spend-ticket
+              (hash-set (hash-ref reads 'spend-ticket) ticket-symbol
+                (trivial)))
+            (then
+            #/internal:familiarity-ticket
+              fresh-ticket-symbol on-unspent new-ds n))
           processes)
         rev-next-processes
         (hash-set
