@@ -301,13 +301,15 @@
 (define/contract (dspace-descends? ancestor descendant)
   (-> dspace? dspace? boolean?)
   (dissect ancestor
-    (internal:dspace ancestor-runtime-symbol ancestor-name _)
+    (internal:dspace
+      ancestor-runtime-symbol ancestor-name ancestor-parents-list)
   #/dissect descendant
     (internal:dspace
       descendant-runtime-symbol
       descendant-name
       descendant-parents-list)
   #/and (eq? ancestor-runtime-symbol descendant-runtime-symbol)
+  #/mat ancestor-parents-list (list) #t
   #/list-any (cons descendant-name descendant-parents-list) #/fn name
     (eq-by-dex? (dex-name) ancestor-name name)))
 
@@ -842,7 +844,9 @@
       (istruct/c run-extfx-result-success any/c)))
   (w- runtime-symbol (gensym)
   #/w- root-ds
-    (internal:dspace runtime-symbol (unsafe:name 'name:dspace) (list))
+    (internal:dspace runtime-symbol
+      (unsafe:name #/list 'name:dspace runtime-symbol)
+      (list))
   #/w- root-unique-name
     (unsafe:name #/list 'name:root-unique-name runtime-symbol)
   #/w- root-unique-authorized-name
