@@ -59,6 +59,8 @@
   extfx-table-each
   
   authorized-name?
+  authorized-name-dspace-descends?
+  authorized-name-ancestor/c
   authorized-name-get-name
   name-subname
   authorized-name-subname
@@ -506,31 +508,45 @@
   (-> any/c boolean?)
   (internal:authorized-name? v))
 
-; TODO: See if this should be exported.
-;
 ; NOTE:
 ;
-; We use `dspace-eq?` here, not `dspace-descends?`, because we don't
-; have any use (nor offer any method) for creating authorized names
-; that are associated with non-root definition spaces.
+; We always associate authorized names with root definition spaces,
+; never with shadowing definition spaces. That's because we don't want
+; to have to worry about whether those two parts of the code obtain
+; the same familiarity tickets when they use `extfx-claim-unique` on
+; the same authorized name value. They must, since that operation must
+; be deterministic, but they must not, since the familiarity ticket is
+; supposed to represent exclusive access.
 ;
-; In fact we actively don't want to associate names with non-root
-; definition spaces because it would raise some confusion in
-; `extfx-claim-unique`. If we claim a unique name, we should not be
-; able to claim the same unique name again just because we're working
-; in two separate shadowing definition spaces. If we could, we would
-; have to worry about whether those two parts of the code were
-; observing the same familiarity tickets as a result. On the one hand,
-; they should see the same familiarity tickets in order to be
-; deterministic; on the other hand, the idea that only one part of
-; the program can ever claim a given name unique is the only reason
-; we're justified in creating a familiarity ticket out of thin air in
-; the first place.
+; Most programs will only deal with a single call to `run-extfx!` and
+; hence a single root definition space, which makes the
+; `authorized-name-dspace-descends?` utility unnecessary. So the
+; design of this utility is focused on serving the use needs of
+; programs that use `run-extfx!` more than once.
 ;
-(define/contract (authorized-name-for? ds name)
-  (-> dspace? authorized-name? boolean?)
+; In this utility, we could just compare using `dspace-eq?` instead of
+; `dspace-descends?`. However, it's reasonable that some parts of a
+; program that might like to check for error conditions will only have
+; access to a shadowing definition space, not the root. By using
+; `dspace-descends?` here, we allow those programs to perform their
+; checks.
+;
+(define/contract (authorized-name-dspace-descends? name ds)
+  (-> authorized-name? dspace? boolean?)
   (dissect name (internal:authorized-name name-ds _ _)
-  #/dspace-eq? ds name-ds))
+  #/dspace-descends? name-ds ds))
+
+(define/contract (authorized-name-ancestor/c ds)
+  (-> dspace? contract?)
+  (make-flat-contract
+    
+    #:name `(authorized-name-ancestor/c ,ds)
+    
+    #:first-order
+    (fn v
+      (and
+        (authorized-name? v)
+        (authorized-name-dspace-descends? v ds)))))
 
 (define/contract (authorized-name-get-name n)
   (-> authorized-name? name?)
@@ -646,12 +662,17 @@
 
 
 (define/contract (extfx-put ds n on-cont-unspent comp)
-  (-> dspace? authorized-name? error-definer?
-    (->
-      (continuation-ticket-of
-      #/list/c success-or-error-definer? optionally-dexable?)
-      extfx?)
-    extfx?)
+  (->i
+    (
+      [ds dspace?]
+      [n (ds) (authorized-name-ancestor/c ds)]
+      [on-cont-unspent error-definer?]
+      [comp
+        (->
+          (continuation-ticket-of
+          #/list/c success-or-error-definer? optionally-dexable?)
+          extfx?)])
+    [_ extfx?])
   (internal:extfx-put ds n on-cont-unspent comp))
 
 (define/contract (extfx-get ds n on-stall then)
@@ -661,19 +682,31 @@
 
 (define/contract
   (extfx-private-put ds putter-name getter-name on-cont-unspent comp)
-  (-> dspace? authorized-name? name? error-definer?
-    (->
-      (continuation-ticket-of
-      #/list/c success-or-error-definer? optionally-dexable?)
-      extfx?)
-    extfx?)
+  (->i
+    (
+      [ds dspace?]
+      [putter-name (ds) (authorized-name-ancestor/c ds)]
+      [getter-name name?]
+      [on-cont-unspent error-definer?]
+      [comp
+        (->
+          (continuation-ticket-of
+          #/list/c success-or-error-definer? optionally-dexable?)
+          extfx?)])
+    [_ extfx?])
   (internal:extfx-private-put
     ds putter-name getter-name on-cont-unspent comp))
 
 (define/contract
   (extfx-private-get ds putter-name getter-name on-stall then)
-  (-> dspace? name? authorized-name? error-definer? (-> any/c extfx?)
-    extfx?)
+  (->i
+    (
+      [ds dspace?]
+      [putter-name name?]
+      [getter-name (ds) (authorized-name-ancestor/c ds)]
+      [on-stall error-definer?]
+      [then (-> any/c extfx?)])
+    [_ extfx?])
   (internal:extfx-private-get
     ds putter-name getter-name on-stall then))
 
@@ -718,34 +751,45 @@
 
 (define/contract (pub-restrict new-ds p)
   (->i ([new-ds dspace?] [p (new-ds) (pub-ancestor/c new-ds)])
-    [_ pub?])
+    [_ (new-ds) (pub-ancestor/c new-ds)])
   (dissect p (internal:pub original-ds pubsub-name)
   #/internal:pub new-ds pubsub-name))
 
 (define/contract (sub-restrict new-ds s)
   (->i ([new-ds dspace?] [s (new-ds) (sub-ancestor/c new-ds)])
-    [_ sub?])
+    [_ (new-ds) (pub-ancestor/c new-ds)])
   (dissect s (internal:sub original-ds pubsub-name)
   #/internal:sub new-ds pubsub-name))
 
 (define/contract (extfx-establish-pubsub ds pubsub-name then)
-  (-> dspace? authorized-name? (-> pub? sub? extfx?) extfx?)
+  (->i
+    (
+      [ds dspace?]
+      [pubsub-name (ds) (authorized-name-ancestor/c ds)]
+      [then (ds) (-> (pub-ancestor/c ds) (sub-ancestor/c ds) extfx?)])
+    [_ extfx?])
   (internal:extfx-establish-pubsub ds pubsub-name then))
 
 (define/contract (extfx-pub-write ds p pubber-name on-conflict arg)
-  (->
-    dspace?
-    pub?
-    authorized-name?
-    success-or-error-definer?
-    optionally-dexable?
-    extfx?)
+  (->i
+    (
+      [ds dspace?]
+      [p (ds) (pub-ancestor/c ds)]
+      [pubber-name (ds) (authorized-name-ancestor/c ds)]
+      [on-conflict success-or-error-definer?]
+      [arg optionally-dexable?])
+    [_ extfx?])
   (internal:extfx-pub-write ds p pubber-name on-conflict arg))
 
 (define/contract (extfx-sub-write ds s subber-name on-conflict func)
-  (-> dspace? sub? authorized-name? success-or-error-definer?
-    (optionally-dexable-of #/-> any/c extfx?)
-    extfx?)
+  (->i
+    (
+      [ds dspace?]
+      [s (ds) (sub-ancestor/c ds)]
+      [pubber-name (ds) (authorized-name-ancestor/c ds)]
+      [on-conflict success-or-error-definer?]
+      [func (optionally-dexable-of #/-> any/c extfx?)])
+    [_ extfx?])
   (internal:extfx-sub-write ds s subber-name on-conflict func))
 
 
@@ -767,12 +811,17 @@
 
 (define/contract
   (extfx-disburse ds hub-name on-cont-unspent comp-ticket)
-  (-> dspace? authorized-name? error-definer?
-    (->
-      (continuation-ticket-of
-      #/list/c success-or-error-definer? intuitionistic-ticket?)
-      extfx?)
-    extfx?)
+  (->i
+    (
+      [ds dspace?]
+      [hub-name (ds) (authorized-name-ancestor/c ds)]
+      [on-cont-unspent error-definer?]
+      [comp-ticket
+        (->
+          (continuation-ticket-of
+          #/list/c success-or-error-definer? intuitionistic-ticket?)
+          extfx?)])
+    [_ extfx?])
   (internal:extfx-disburse ds hub-name on-cont-unspent comp-ticket))
 
 (define/contract
@@ -814,7 +863,12 @@
     ds collector-familiarity-ticket on-cont-unspent comp))
 
 (define/contract (extfx-collect ds collector-name then)
-  (-> dspace? authorized-name? (-> table? extfx?) extfx?)
+  (->i
+    (
+      [ds dspace?]
+      [collector-name (ds) (authorized-name-ancestor/c ds)]
+      [then (-> table? extfx?)])
+    [_ extfx?])
   (internal:extfx-collect ds collector-name then))
 
 
@@ -838,7 +892,12 @@
 ; we can do to prevent that, let's consider doing it.
 (define/contract (run-extfx! on-continuation-ticket-unspent body)
   (-> error-definer?
-    (-> dspace? authorized-name? continuation-ticket? extfx?)
+    (->i
+      (
+        [ds dspace?]
+        [unique-name (ds) (authorized-name-ancestor/c ds)]
+        [then continuation-ticket?])
+      [_ extfx?])
     (or/c
       (istruct/c run-extfx-result-failure run-extfx-errors?)
       (istruct/c run-extfx-result-success any/c)))
@@ -1042,7 +1101,7 @@
     #/mat process
       (internal:extfx-claim-unique
         n on-conflict on-familiarity-ticket-unspent then)
-      (expect (authorized-name-for? root-ds n) #t
+      (expect (authorized-name-dspace-descends? n root-ds) #t
         (next-with-error "Expected n to be a name authorized for the extfx runner's root definition space")
       #/w- n (authorized-name-get-name n)
       #/expect (table-get n (hash-ref db 'claim-unique)) (nothing)
@@ -1096,8 +1155,6 @@
       ; errors.
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
-      #/expect (authorized-name-for? root-ds n) #t
-        (next-with-error "Expected n to be a name authorized for the extfx runner's root definition space")
       #/w- continuation-ticket-symbol (gensym)
       #/w- on-cont-unspent
         (error-definer-or-message on-cont-unspent
@@ -1122,8 +1179,6 @@
       ; proposed dex and value without question.
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
-      #/expect (authorized-name-for? root-ds n) #t
-        (next-with-error "Expected n to be a name authorized for the extfx runner's root definition space")
       #/dissect on-conflict
         (internal:success-or-error-definer on-conflict on-no-conflict)
       #/dissect ds (internal:dspace _ ds-name parents-list)
@@ -1306,8 +1361,6 @@
       ; `root-ds` here.
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
-      #/expect (authorized-name-for? root-ds pubsub-name) #t
-        (next-with-error "Expected pubsub-name to be a name authorized for the extfx runner's root definition space")
       #/next-one-fruitful #/process-entry
         reads
         (then
