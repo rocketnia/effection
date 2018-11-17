@@ -1121,6 +1121,29 @@
           
           #t))
     
+    #/w- parse-ticket
+      (fn ticket
+        (mat ticket
+          (internal:continuation-ticket
+            ticket-symbol on-unspent ds then)
+          (list
+            ticket-symbol
+            ds
+            (unspent-ticket-entry-anonymous on-unspent)
+            (fn new-ticket-symbol
+              (internal:continuation-ticket
+                new-ticket-symbol on-unspent ds then)))
+        #/mat ticket
+          (internal:familiarity-ticket ticket-symbol on-unspent ds n)
+          (list
+            ticket-symbol
+            ds
+            (unspent-ticket-entry-familiarity-ticket on-unspent ds n)
+            (fn new-ticket-symbol
+              (internal:familiarity-ticket
+                new-ticket-symbol on-unspent ds n)))
+        #/error "Internal error: Encountered an unrecognized ticket value"))
+    
     
     #/mat process (internal:extfx-noop)
       (next-zero)
@@ -1434,28 +1457,6 @@
       (internal:extfx-sub-write ds s subber-name on-conflict func)
       'TODO
     
-    #/w- parse-ticket
-      (fn ticket
-        (mat ticket
-          (internal:continuation-ticket
-            ticket-symbol on-unspent ds then)
-          (list
-            ticket-symbol
-            ds
-            (unspent-ticket-entry-anonymous on-unspent)
-            (fn new-ticket-symbol
-              (internal:continuation-ticket
-                new-ticket-symbol on-unspent ds then)))
-        #/mat ticket
-          (internal:familiarity-ticket ticket-symbol on-unspent ds n)
-          (list
-            ticket-symbol
-            ds
-            (unspent-ticket-entry-familiarity-ticket on-unspent ds n)
-            (fn new-ticket-symbol
-              (internal:familiarity-ticket
-                new-ticket-symbol on-unspent ds n)))
-        #/error "Internal error: Encountered an unrecognized ticket value"))
     #/mat process (internal:extfx-freshen ticket on-conflict then)
       (dissect (parse-ticket ticket)
         (list ticket-symbol ds entry wrap-fresh)
