@@ -55,13 +55,13 @@
   extfx-later
   extfx-table-each
   
-  extfx-dspace-create-shadower
-  
   authorized-name?
   authorized-name-get-name
   name-subname
   authorized-name-subname
   extfx-claim-unique
+  
+  extfx-dspace-create-shadower
   
   optionally-dexable?
   optionally-dexable-of
@@ -137,11 +137,12 @@
   (provide-struct (extfx-later then))
   (provide-struct (extfx-table-each t on-element then))
   
-  (provide-struct (extfx-dspace-create-shadower ds then))
-  
   (provide-struct
     (extfx-claim-unique
       n on-conflict on-familiarity-ticket-unspent then))
+  
+  (provide-struct
+    (extfx-dspace-create-shadower unique-name ds on-conflict then))
   
   (provide-struct (extfx-put ds n on-cont-unspent comp))
   (provide-struct (extfx-get ds n on-stall then))
@@ -220,11 +221,14 @@
   #/mat v (internal:extfx-later then) #t
   #/mat v (internal:extfx-table-each t on-element then) #t
   
-  #/mat v (internal:extfx-dspace-create-shadower ds then) #t
-  
   #/mat v
     (internal:extfx-claim-unique
       n on-conflict on-familiarity-ticket-unspent then)
+    #t
+  
+  #/mat v
+    (internal:extfx-dspace-create-shadower
+      unique-name ds on-conflict then)
     #t
   
   #/mat v (internal:extfx-put ds n on-cont-unspent comp) #t
@@ -473,28 +477,6 @@
   (internal:extfx-table-each t on-element then))
 
 
-(define/contract (extfx-dspace-create-shadower ds then)
-  (-> dspace? (-> dspace? extfx?) extfx?)
-  (internal:extfx-dspace-create-shadower ds then))
-
-; TODO: See if this should be exported.
-(define/contract (dspace-eq? a b)
-  (-> dspace? dspace? boolean?)
-  (dissect a (internal:dspace a-symbol _ _)
-  #/dissect a (internal:dspace b-symbol _ _)
-  #/eq? a-symbol b-symbol))
-
-; TODO: See if this should be exported.
-(define/contract (dspace-descends? ancestor descendant)
-  (-> dspace? dspace? boolean?)
-  (dissect ancestor (internal:dspace ancestor-symbol _ _)
-  #/dissect descendant
-    (internal:dspace descendant-symbol _ descendant-parents-hash)
-  #/or
-    (eq? ancestor-symbol descendant-symbol)
-    (hash-has-key? descendant-parents-hash ancestor-symbol)))
-
-
 (define/contract (authorized-name? v)
   (-> any/c boolean?)
   (internal:authorized-name? v))
@@ -569,6 +551,31 @@
     extfx?)
   (internal:extfx-claim-unique
     n on-conflict on-familiarity-ticket-unspent then))
+
+
+(define/contract
+  (extfx-dspace-create-shadower unique-name ds on-conflict then)
+  (-> authorized-name? dspace? error-definer? (-> dspace? extfx?)
+    extfx?)
+  (internal:extfx-dspace-create-shadower
+    unique-name ds on-conflict then))
+
+; TODO: See if this should be exported.
+(define/contract (dspace-eq? a b)
+  (-> dspace? dspace? boolean?)
+  (dissect a (internal:dspace a-symbol _ _)
+  #/dissect a (internal:dspace b-symbol _ _)
+  #/eq? a-symbol b-symbol))
+
+; TODO: See if this should be exported.
+(define/contract (dspace-descends? ancestor descendant)
+  (-> dspace? dspace? boolean?)
+  (dissect ancestor (internal:dspace ancestor-symbol _ _)
+  #/dissect descendant
+    (internal:dspace descendant-symbol _ descendant-parents-hash)
+  #/or
+    (eq? ancestor-symbol descendant-symbol)
+    (hash-has-key? descendant-parents-hash ancestor-symbol)))
 
 
 (define/contract (optionally-dexable? v)
@@ -992,21 +999,9 @@
         (process-entry reads a)
         processes)
     #/mat process (internal:extfx-later then)
-      (next-one-fruitful #/then)
+      (next-one-fruitful #/process-entry reads (then))
     #/mat process (internal:extfx-table-each t on-element then)
       'TODO
-    
-    #/mat process (internal:extfx-dspace-create-shadower ds then)
-      (dissect ds
-        (internal:dspace ds-symbol parents-list parents-hash)
-      ; TODO: See if we really need to enforce that `ds` descends from
-      ; `root-ds` here.
-      #/expect (dspace-descends? root-ds ds) #t
-        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
-      #/next-one-fruitful
-      #/then #/internal:dspace (gensym)
-        (cons ds-symbol parents-list)
-        (hash-set parents-hash ds-symbol #t))
     
     #/mat process
       (internal:extfx-claim-unique
@@ -1057,6 +1052,43 @@
             on-familiarity-ticket-unspent root-ds fresh-name))
         (hash-set db 'claim-unique
           (table-shadow n (just #/trivial) db-claim-unique))
+        rev-errors #t)
+    
+    #/mat process
+      (internal:extfx-dspace-create-shadower
+        unique-name ds on-conflict then)
+      (expect (authorized-name-for? root-ds unique-name) #t
+        (next-with-error "Expected unique-name to be a name authorized for the extfx runner's root definition space")
+      #/dissect ds
+        (internal:dspace ds-symbol parents-list parents-hash)
+      ; TODO: See if we really need to enforce that `ds` descends from
+      ; `root-ds` here.
+      #/expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/w- unique-name (authorized-name-get-name unique-name)
+      #/w- db-claim-unique (hash-ref db 'claim-unique)
+      #/expect (table-get unique-name db-claim-unique) (nothing)
+        (next-purging on-conflict
+          "Tried to claim a name unique twice"
+          (fn reads
+            (mat
+              (table-get unique-name #/hash-ref reads 'claim-unique)
+              (just _)
+              #t
+              #f)))
+      #/next-full
+        (cons
+          (process-entry
+            (hash-set reads 'claim-unique
+              (table-shadow unique-name (just #/trivial)
+                (hash-ref reads 'claim-unique)))
+            (then #/internal:dspace (gensym)
+              (cons ds-symbol parents-list)
+              (hash-set parents-hash ds-symbol #t)))
+          processes)
+        rev-next-processes unspent-tickets
+        (hash-set db 'claim-unique
+          (table-shadow unique-name (just #/trivial) db-claim-unique))
         rev-errors #t)
     
     #/mat process (internal:extfx-put ds n on-cont-unspent comp)
@@ -1278,7 +1310,12 @@
           (next places-to-check)
         #/expect value (db-put-entry-written existing-value)
           (next places-to-check)
-        #/next-one-fruitful #/then #/optionally-dexable-value value))
+        #/next-one-fruitful #/process-entry
+          (hash-set reads 'put
+            (hash-set (hash-ref reads 'put) place
+              (table-shadow n (just #/trivial)
+                (hash-ref (hash-ref reads 'put) place))))
+          (then #/optionally-dexable-value value)))
     
     #/mat process
       (internal:extfx-private-put
@@ -1297,23 +1334,29 @@
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
       #/expect (authorized-name-for? root-ds pubsub-name) #t
         (next-with-error "Expected pubsub-name to be a name authorized for the extfx runner's root definition space")
-      #/next-one-fruitful #/then
-        (internal:pub ds pubsub-name)
-        (internal:sub ds pubsub-name))
+      #/next-one-fruitful #/process-entry
+        reads
+        (then
+          (internal:pub ds pubsub-name)
+          (internal:sub ds pubsub-name)))
     #/mat process
       (internal:extfx-pub-restrict p new-ds on-restriction-error then)
       (dissect p (internal:pub original-ds pubsub-name)
       #/expect (dspace-descends? original-ds new-ds) #t
         (next-with-error-definer on-restriction-error
           "Expected new-ds to be a shadowing descendant of the dspace of the pub p")
-      #/next-one-fruitful #/then #/internal:pub new-ds pubsub-name)
+      #/next-one-fruitful #/process-entry
+        reads
+        (then #/internal:pub new-ds pubsub-name))
     #/mat process
       (internal:extfx-sub-restrict s new-ds on-restriction-error then)
       (dissect s (internal:sub original-ds pubsub-name)
       #/expect (dspace-descends? original-ds new-ds) #t
         (next-with-error-definer on-restriction-error
           "Expected new-ds to be a shadowing descendant of the dspace of the sub s")
-      #/next-one-fruitful #/then #/internal:sub new-ds pubsub-name)
+      #/next-one-fruitful #/process-entry
+        reads
+        (then #/internal:sub new-ds pubsub-name))
     #/mat process
       (internal:extfx-pub-write ds p pubber-name on-conflict arg)
       'TODO
@@ -1407,14 +1450,15 @@
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/dissect times (unsafe:table times)
-      #/next-one-fruitful
-      #/internal:extfx-split-list
-        ticket (hash-count times) on-conflict
-      #/fn tickets
-      #/then #/unsafe:table #/make-immutable-hash
-      #/list-zip-map (hash->list times) tickets #/fn time ticket
-        (dissect time (cons k #/trivial)
-        #/cons k ticket))
+      #/next-one-fruitful #/process-entry
+        reads
+        (internal:extfx-split-list
+          ticket (hash-count times) on-conflict
+        #/fn tickets
+        #/then #/unsafe:table #/make-immutable-hash
+        #/list-zip-map (hash->list times) tickets #/fn time ticket
+          (dissect time (cons k #/trivial)
+          #/cons k ticket)))
     #/mat process
       (internal:extfx-disburse
         ds hub-name on-cont-unspent comp-ticket)
