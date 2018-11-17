@@ -517,10 +517,11 @@
 ; `extfx-claim-unique`. If we claim a unique name, we should not be
 ; able to claim the same unique name again just because we're working
 ; in two separate shadowing definition spaces. If we could, we would
-; have to worry about whether those two parts of the code are
-; observing the familiarity tickets as a result. They would need to,
-; since they should be deterministic; but they also would need not to,
-; since making an exclusive claim to a unique name is the only reason
+; have to worry about whether those two parts of the code were
+; observing the same familiarity tickets as a result. On the one hand,
+; they should see the same familiarity tickets in order to be
+; deterministic; on the other hand, the idea that only one part of
+; the program can ever claim a given name unique is the only reason
 ; we're justified in creating a familiarity ticket out of thin air in
 ; the first place.
 ;
