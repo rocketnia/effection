@@ -949,22 +949,32 @@
     
     (expect processes (cons this-process-entry processes)
       (mat rev-next-processes (list)
-        ; If there are no processes left, we're done. We add errors
-        ; corresponding to any unspent tickets, and we return either
-        ; the collection of errors (if there are any) or `finish-run`
-        ; value (otherwise).
+        
+        ; If there are no processes left, we're done. If we haven't
+        ; encountered any particular errors yet, then we look for
+        ; unspent tickets and assemble the errors associated with
+        ; those. Then, if we have any errors, we return that
+        ; collection of errors. Otherwise, we return the `finish-run`
+        ; value.
+        ;
+        ; NOTE: We could have this report the unspent ticket errors
+        ; all the time, but if we've encountered any other errors,
+        ; those are more likely to describe the proximal cause of the
+        ; problems with the program. After all, if the computation had
+        ; been able to proceed without encountering those errors, it
+        ; would have had more chances to spend the remaining tickets.
+        ;
         (w- rev-errors
-          (append
-            (list-map (hash->list unspent-tickets)
-            #/dissectfn (cons ticket-symbol entry)
-              (mat entry
-                (unspent-ticket-entry-familiarity-ticket
-                  on-unspent ds n)
-                on-unspent
-              #/mat entry (unspent-ticket-entry-anonymous on-unspent)
-                on-unspent
-              #/error "Internal error: Encountered an unrecognized unspent ticket entry"))
-            rev-errors)
+          (expect rev-errors (list) rev-errors
+          #/list-map (hash->list unspent-tickets)
+          #/dissectfn (cons ticket-symbol entry)
+            (mat entry
+              (unspent-ticket-entry-familiarity-ticket
+                on-unspent ds n)
+              on-unspent
+            #/mat entry (unspent-ticket-entry-anonymous on-unspent)
+              on-unspent
+            #/error "Internal error: Encountered an unrecognized unspent ticket entry"))
         #/mat rev-errors (list)
           (dissect (hash-ref db 'finish-run) (just finish-value)
           #/run-extfx-result-success finish-value)
