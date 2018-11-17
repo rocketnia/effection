@@ -13,13 +13,15 @@
   make-chaperone-contract make-contract make-flat-contract
   raise-blame-error)
 (require #/only-in racket/contract/region define/contract)
+(require #/only-in racket/hash hash-union)
 (require #/only-in racket/math natural?)
 
 (require #/only-in lathe-comforts
   dissect dissectfn expect fn mat w- w-loop)
-(require #/only-in lathe-comforts/hash hash-ref-maybe)
+(require #/only-in lathe-comforts/hash
+  hash-ref-maybe hash-v-all hash-v-map)
 (require #/only-in lathe-comforts/list
-  list-any list-bind list-map list-zip-map nat->maybe)
+  list-any list-bind list-foldl list-map list-zip-map nat->maybe)
 (require #/only-in lathe-comforts/maybe just maybe-bind nothing)
 (require #/only-in lathe-comforts/struct istruct/c struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
@@ -214,8 +216,22 @@
     (just #/func #/mat (table-get t k) (just v) v default-v)
     t))
 
+; TODO: Consider putting this into `effection/order`.
+(define/contract (table-union a b func)
+  (-> table? table? (-> any/c any/c any/c) table?)
+  (dissect a (unsafe:table a)
+  #/dissect b (unsafe:table b)
+  #/unsafe:table #/hash-union a b #:update #/fn a b #/func a b))
+
+(define/contract (trivial-union a b)
+  (-> trivial? trivial? trivial?)
+  (trivial))
 
 
+
+(struct-easy
+  (extfx-finish-table-each-element ds table-each-symbol k result))
+(struct-easy (extfx-finish-table-each-then ds table-each-symbol then))
 (struct-easy (extfx-finish-put ds n on-conflict value))
 (struct-easy
   (extfx-finish-private-put
@@ -230,6 +246,10 @@
   #/mat v (internal:extfx-fused a b) #t
   #/mat v (internal:extfx-later then) #t
   #/mat v (internal:extfx-table-each t on-element then) #t
+  #/mat v
+    (extfx-finish-table-each-element ds table-each-symbol k result)
+    #t
+  #/mat v (extfx-finish-table-each-then ds table-each-symbol then) #t
   
   #/mat v
     (internal:extfx-claim-unique
@@ -887,6 +907,8 @@
 (struct-easy
   (unspent-ticket-entry-familiarity-ticket on-unspent ds n))
 (struct-easy (unspent-ticket-entry-anonymous on-unspent))
+(struct-easy (db-table-each-entry-incomplete))
+(struct-easy (db-table-each-entry-complete reads v))
 (struct-easy
   (db-put-entry-not-written
     do-not-conflict-values continuation-ticket-symbols))
@@ -923,6 +945,43 @@
       root-ds
       (fn result
         (extfx-finish-run root-ds result)))
+  #/w- reads-merge
+    ; TODO: Use this in `handle-generic-get`.
+    (fn a b
+      (hasheq
+        
+        'spend-ticket
+        (hash-union
+          (hash-ref a 'spend-ticket)
+          (hash-ref b 'spend-ticket)
+          #:combine
+        #/fn a b
+        #/trivial-union a b)
+        
+        'claim-unique
+        (table-union
+          (hash-ref a 'claim-unique)
+          (hash-ref b 'claim-unique)
+        #/fn a b
+        #/trivial-union a b)
+        
+        'put
+        (table-union
+          (hash-ref a 'put)
+          (hash-ref b 'put)
+        #/fn a b
+        #/table-union a b #/fn a b
+        #/table-union a b #/fn a b
+        #/trivial-union a b)
+        
+        'private-put
+        (table-union
+          (hash-ref a 'private-put)
+          (hash-ref b 'private-put)
+        #/fn a b
+        #/table-union a b #/fn a b
+        #/table-union a b #/fn a b
+        #/trivial-union a b)))
   #/w-loop next-full
     
     processes
@@ -945,7 +1004,9 @@
     db
     (hasheq
       'claim-unique (table-empty)
-      'put (hasheq)
+      'table-each (hasheq)
+      'put (table-empty)
+      'private-put (table-empty)
       'finish-run (nothing))
     
     rev-errors (list)
@@ -1017,6 +1078,13 @@
                     (error "Internal error: Expected an extfx-get not to be stalled if any of the parents had db-put-entry-written")
                   #/error "Internal error: Encountered an unknown kind of db-put entry")))
             
+            #/mat process
+              (extfx-finish-table-each-then ds table-each-symbol then)
+              ; NOTE: These processes can't stall unless there's still
+              ; an unspent ticket at large, so the error message for
+              ; that unspent ticket can describe a more proximal cause
+              ; than we can here.
+              (list)
             #/mat process (internal:extfx-get ds n on-stall then)
               (handle-generic-get ds
                 (error-definer-or-message on-stall
@@ -1372,7 +1440,88 @@
     #/mat process (internal:extfx-later then)
       (next-one-fruitful #/process-entry reads (then))
     #/mat process (internal:extfx-table-each t on-element then)
-      'TODO
+      (dissect t (unsafe:table t)
+      #/w- table-each-symbol (gensym)
+      #/w- entries (hash->list t)
+      #/mat entries (list)
+        (next-one-fruitful #/process-entry reads (then #/table-empty))
+      #/w-loop next
+        entries (hash->list t)
+        db-table-each-entry (table-empty)
+        processes processes
+        unspent-tickets unspent-tickets
+        
+        (expect entries (cons entry entries)
+          (next-full
+            (cons
+              (process-entry
+                reads
+                (extfx-finish-table-each-then
+                  root-ds table-each-symbol then))
+              processes)
+            rev-next-processes unspent-tickets
+            (hash-update db 'table-each #/fn db-table-each
+              (hash-set db-table-each table-each-symbol
+                db-table-each-entry))
+            rev-errors #t)
+        #/dissect entry (cons k v)
+        #/w- k (unsafe:name k)
+        #/dissect (on-element v) (list on-cont-unspent then)
+        #/w- on-cont-unspent
+          (error-definer-or-message on-cont-unspent
+            "Expected an extfx-table-each continuation to be continued")
+        #/w- element-continuation-ticket-symbol (gensym)
+        #/w- element-continuation-ticket
+          (internal:continuation-ticket
+            element-continuation-ticket-symbol
+            on-cont-unspent
+            root-ds
+            (fn result
+              (extfx-finish-table-each-element
+                root-ds table-each-symbol k result)))
+        #/next
+          entries
+          (table-shadow k (db-table-each-entry-incomplete)
+            db-table-each-entry)
+          (cons
+            (process-entry
+              reads
+              (then element-continuation-ticket))
+            processes)
+          (hash-set unspent-tickets element-continuation-ticket-symbol
+            (unspent-ticket-entry-anonymous on-cont-unspent))))
+    #/mat process
+      (extfx-finish-table-each-element ds table-each-symbol k result)
+      (expect (dspace-eq? root-ds ds) #t
+        (next-with-error "Expected ds to be the extfx runner's root definition space")
+      #/next-full
+        processes rev-next-processes unspent-tickets
+        (hash-update db 'table-each #/fn db-table-each
+          (hash-ref db-table-each table-each-symbol #/fn db-part
+            (table-shadow k
+              (just #/db-table-each-entry-complete reads result)
+              db-part)))
+        rev-errors #t)
+    #/mat process
+      (extfx-finish-table-each-then ds table-each-symbol then)
+      (expect (dspace-eq? root-ds ds) #t
+        (next-with-error "Expected ds to be the extfx runner's root definition space")
+      #/dissect
+        (hash-ref (hash-ref db 'table-each) table-each-symbol)
+        (unsafe:table db-part)
+      #/expect
+        (hash-v-all db-part #/fn v
+          (mat v (db-table-each-entry-complete reads v) #t #f))
+        #t
+        (next-fruitless)
+      #/next-one-fruitful #/process-entry
+        (list-foldl reads (hash->list db-part) #/fn reads entry
+          (dissect entry
+            (cons k #/db-table-each-entry-complete more-reads v)
+          #/reads-merge reads more-reads))
+        (then #/unsafe:table #/hash-v-map db-part #/fn v
+          (dissect v (db-table-each-entry-complete reads v)
+            v)))
     
     #/mat process
       (internal:extfx-claim-unique
