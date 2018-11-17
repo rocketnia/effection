@@ -37,6 +37,9 @@
   
   extfx?
   dspace?
+  dspace-shadower
+  dspace-eq?
+  dspace-descends?
   
   error-definer?
   error-definer-uninformative
@@ -60,8 +63,6 @@
   name-subname
   authorized-name-subname
   extfx-claim-unique
-  
-  extfx-dspace-create-shadower
   
   optionally-dexable?
   optionally-dexable-of
@@ -112,7 +113,7 @@
       (provide #/struct-out name)))
   
   
-  (provide-struct (dspace ds-symbol parents-list parents-hash))
+  (provide-struct (dspace runtime-symbol name parents-list))
   
   (provide-struct (error-definer-uninformative))
   (provide-struct (error-definer-from-message message))
@@ -140,9 +141,6 @@
   (provide-struct
     (extfx-claim-unique
       n on-conflict on-familiarity-ticket-unspent then))
-  
-  (provide-struct
-    (extfx-dspace-create-shadower unique-name ds on-conflict then))
   
   (provide-struct (extfx-put ds n on-cont-unspent comp))
   (provide-struct (extfx-get ds n on-stall then))
@@ -207,6 +205,13 @@
     make-flat-contract
   #/make-appropriate-chaperone-contract c))
 
+; TODO: Consider putting this into `effection/order`.
+(define/contract (table-update-default t k default-v func)
+  (-> table? name? any/c (-> any/c any/c) table?)
+  (table-shadow k
+    (just #/func #/mat (table-get t k) (just v) v default-v)
+    t))
+
 
 
 (struct-easy (extfx-finish-put ds n on-conflict value))
@@ -224,11 +229,6 @@
   #/mat v
     (internal:extfx-claim-unique
       n on-conflict on-familiarity-ticket-unspent then)
-    #t
-  
-  #/mat v
-    (internal:extfx-dspace-create-shadower
-      unique-name ds on-conflict then)
     #t
   
   #/mat v (internal:extfx-put ds n on-cont-unspent comp) #t
@@ -287,6 +287,35 @@
 (define/contract (dspace? v)
   (-> any/c boolean?)
   (internal:dspace? v))
+
+(define/contract (dspace-shadower key-name ds)
+  (-> name? dspace? dspace?)
+  (dissect ds (internal:dspace runtime-symbol name parents-list)
+  #/internal:dspace
+    runtime-symbol
+    (name-subname key-name name)
+    (cons name parents-list)))
+
+; TODO: See if we should offer a `dex-dspace`.
+(define/contract (dspace-eq? a b)
+  (-> dspace? dspace? boolean?)
+  (dissect a (internal:dspace a-runtime-symbol a-name _)
+  #/dissect a (internal:dspace b-runtime-symbol b-name _)
+  #/and (eq? a-runtime-symbol b-runtime-symbol)
+  #/eq-by-dex? (dex-name) a-name b-name))
+
+(define/contract (dspace-descends? ancestor descendant)
+  (-> dspace? dspace? boolean?)
+  (dissect ancestor
+    (internal:dspace ancestor-runtime-symbol ancestor-name _)
+  #/dissect descendant
+    (internal:dspace
+      descendant-runtime-symbol
+      descendant-name
+      descendant-parents-list)
+  #/and (eq? ancestor-runtime-symbol descendant-runtime-symbol)
+  #/list-any (cons descendant-name descendant-parents-list) #/fn name
+    (eq-by-dex? (dex-name) ancestor-name name)))
 
 
 ; An `error-definer?` is a way of specifying a custom error message.
@@ -553,31 +582,6 @@
     n on-conflict on-familiarity-ticket-unspent then))
 
 
-(define/contract
-  (extfx-dspace-create-shadower unique-name ds on-conflict then)
-  (-> authorized-name? dspace? error-definer? (-> dspace? extfx?)
-    extfx?)
-  (internal:extfx-dspace-create-shadower
-    unique-name ds on-conflict then))
-
-; TODO: See if this should be exported.
-(define/contract (dspace-eq? a b)
-  (-> dspace? dspace? boolean?)
-  (dissect a (internal:dspace a-symbol _ _)
-  #/dissect a (internal:dspace b-symbol _ _)
-  #/eq? a-symbol b-symbol))
-
-; TODO: See if this should be exported.
-(define/contract (dspace-descends? ancestor descendant)
-  (-> dspace? dspace? boolean?)
-  (dissect ancestor (internal:dspace ancestor-symbol _ _)
-  #/dissect descendant
-    (internal:dspace descendant-symbol _ descendant-parents-hash)
-  #/or
-    (eq? ancestor-symbol descendant-symbol)
-    (hash-has-key? descendant-parents-hash ancestor-symbol)))
-
-
 (define/contract (optionally-dexable? v)
   (-> any/c boolean?)
   (or
@@ -809,10 +813,11 @@
     (or/c
       (istruct/c run-extfx-result-failure run-extfx-errors?)
       (istruct/c run-extfx-result-success any/c)))
-  (w- root-ds-symbol (gensym)
-  #/w- root-ds (internal:dspace root-ds-symbol (list) (hasheq))
+  (w- runtime-symbol (gensym)
+  #/w- root-ds
+    (internal:dspace runtime-symbol (unsafe:name 'name:dspace) (list))
   #/w- root-unique-name
-    (unsafe:name #/list 'name:root-unique-name root-ds-symbol)
+    (unsafe:name #/list 'name:root-unique-name runtime-symbol)
   #/w- root-unique-authorized-name
     (internal:authorized-name root-ds root-unique-name (table-empty))
   #/w- root-continuation-ticket-symbol (gensym)
@@ -1009,8 +1014,7 @@
       (expect (authorized-name-for? root-ds n) #t
         (next-with-error "Expected n to be a name authorized for the extfx runner's root definition space")
       #/w- n (authorized-name-get-name n)
-      #/w- db-claim-unique (hash-ref db 'claim-unique)
-      #/expect (table-get n db-claim-unique) (nothing)
+      #/expect (table-get n (hash-ref db 'claim-unique)) (nothing)
         (next-purging on-conflict
           "Tried to claim a name unique twice"
           (fn reads
@@ -1019,7 +1023,7 @@
               #f)))
       #/w- fresh-ticket-symbol (gensym)
       #/w- fresh-name
-        (unsafe:name #/list 'name:claim-unique-result root-ds-symbol)
+        (unsafe:name #/list 'name:claim-unique-result (gensym))
       #/w- fresh-authorized-name
         (internal:authorized-name root-ds fresh-name (table-empty))
       #/w- familiarity-ticket-symbol (gensym)
@@ -1041,54 +1045,16 @@
       #/next-full
         (cons
           (process-entry
-            (hash-set reads 'claim-unique
-              (table-shadow n (just #/trivial)
-                (hash-ref reads 'claim-unique)))
+            (hash-update reads 'claim-unique #/fn reads-claim-unique
+              (table-shadow n (just #/trivial) reads-claim-unique))
             (then fresh-authorized-name familiarity-ticket))
           processes)
         rev-next-processes
         (hash-set unspent-tickets familiarity-ticket-symbol
           (unspent-ticket-entry-familiarity-ticket
             on-familiarity-ticket-unspent root-ds fresh-name))
-        (hash-set db 'claim-unique
+        (hash-update db 'claim-unique #/fn db-claim-unique
           (table-shadow n (just #/trivial) db-claim-unique))
-        rev-errors #t)
-    
-    #/mat process
-      (internal:extfx-dspace-create-shadower
-        unique-name ds on-conflict then)
-      (expect (authorized-name-for? root-ds unique-name) #t
-        (next-with-error "Expected unique-name to be a name authorized for the extfx runner's root definition space")
-      #/dissect ds
-        (internal:dspace ds-symbol parents-list parents-hash)
-      ; TODO: See if we really need to enforce that `ds` descends from
-      ; `root-ds` here.
-      #/expect (dspace-descends? root-ds ds) #t
-        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
-      #/w- unique-name (authorized-name-get-name unique-name)
-      #/w- db-claim-unique (hash-ref db 'claim-unique)
-      #/expect (table-get unique-name db-claim-unique) (nothing)
-        (next-purging on-conflict
-          "Tried to claim a name unique twice"
-          (fn reads
-            (mat
-              (table-get unique-name #/hash-ref reads 'claim-unique)
-              (just _)
-              #t
-              #f)))
-      #/next-full
-        (cons
-          (process-entry
-            (hash-set reads 'claim-unique
-              (table-shadow unique-name (just #/trivial)
-                (hash-ref reads 'claim-unique)))
-            (then #/internal:dspace (gensym)
-              (cons ds-symbol parents-list)
-              (hash-set parents-hash ds-symbol #t)))
-          processes)
-        rev-next-processes unspent-tickets
-        (hash-set db 'claim-unique
-          (table-shadow unique-name (just #/trivial) db-claim-unique))
         rev-errors #t)
     
     #/mat process (internal:extfx-put ds n on-cont-unspent comp)
@@ -1129,15 +1095,14 @@
         (next-with-error "Expected n to be a name authorized for the extfx runner's root definition space")
       #/dissect on-conflict
         (internal:success-or-error-definer on-conflict on-no-conflict)
-      #/dissect ds
-        (internal:dspace ds-symbol parents-list parents-hash)
+      #/dissect ds (internal:dspace _ ds-name parents-list)
       #/w- n (authorized-name-get-name n)
       #/w- next-conflict
         (fn message
           (next-purging on-conflict message #/fn reads
             (w- reads-put (hash-ref reads 'put)
-            #/list-any (cons ds-symbol parents-list) #/fn parent
-              (expect (hash-ref-maybe reads-put parent)
+            #/list-any (cons ds-name parents-list) #/fn parent
+              (expect (table-get parent reads-put)
                 (just reads-put-parent)
                 #f
               #/mat (table-get n reads-put-parent) (just _)
@@ -1182,22 +1147,22 @@
           #/error "Internal error: Encountered an unknown kind of optionally dexable value"))
       #/w- db-put (hash-ref db 'put)
       #/w- next-after-put
-        (fn ds-symbol-written-to db
+        (fn ds-name-written-to db
           (next-full
             (cons
               (process-entry
-                (hash-set reads 'put
-                  (hash-set (hash-ref reads 'put) ds-symbol-written-to
+                (hash-update reads 'put #/fn reads-put
+                  (table-update-default reads-put ds-name-written-to
+                    (table-empty)
+                  #/fn reads-put-for-ds
                     (table-shadow n (just #/trivial)
-                      (hash-ref (hash-ref reads 'put)
-                        ds-symbol-written-to))))
+                      reads-put-for-ds)))
                 on-no-conflict)
               processes)
             rev-next-processes unspent-tickets db rev-errors #t))
-      #/w- check-ds-symbol
+      #/w- check-ds-name
         (fn then
-          (expect (hash-ref-maybe db-put ds-symbol)
-            (just db-put-for-ds)
+          (expect (table-get ds-name db-put) (just db-put-for-ds)
             (then #/nothing)
           #/expect (table-get n db-put-for-ds) (just entry)
             (then #/nothing)
@@ -1210,11 +1175,11 @@
                 (next existing-values)))
           #/mat entry (db-put-entry-written existing-value)
             (do-not-conflict existing-value #/fn
-              (then #/just ds-symbol))
+              (then #/just ds-name))
           #/error "Internal error: Encountered an unknown kind of db put entry"))
-      #/check-ds-symbol #/fn already-written
-      #/mat already-written (just ds-symbol-written-to)
-        (next-after-put ds-symbol-written-to db)
+      #/check-ds-name #/fn already-written
+      #/mat already-written (just ds-name-written-to)
+        (next-after-put ds-name-written-to db)
       #/w- check-parents
         (fn then
           (w-loop next parents-to-check parents-list
@@ -1240,56 +1205,35 @@
             
             #/error "Internal error: Encountered an unknown kind of db put entry")))
       #/check-parents #/fn already-written
-      #/mat already-written (just ds-symbol-written-to)
-        (next-after-put ds-symbol-written-to db)
-      #/w- write-ds-symbol
-        (fn db-put then
-          (w- then-with-db-put-for-ds
-            (fn db-put-for-ds
-              (then #/hash-set db-put ds-symbol
-                (table-shadow n (just #/db-put-entry-written value)
-                  db-put-for-ds)))
-          #/expect (hash-ref-maybe db-put ds-symbol)
-            (just db-put-for-ds)
-            (then-with-db-put-for-ds #/table-empty)
-          #/expect (table-get n db-put-for-ds) (just entry)
-            (then-with-db-put-for-ds db-put-for-ds)
-          #/mat entry (db-put-entry-do-not-conflict existing-values)
-            (then-with-db-put-for-ds db-put-for-ds)
-          #/mat entry (db-put-entry-written existing-value)
-            (then db-put)
-          #/error "Internal error: Encountered an unknown kind of db-put entry"))
-      #/write-ds-symbol db-put #/fn db-put
+      #/mat already-written (just ds-name-written-to)
+        (next-after-put ds-name-written-to db)
+      ; We write the entry for `ds-name`.
+      #/w- db-put
+        (table-update-default db-put ds-name (table-empty)
+        #/fn db-put-for-ds
+          (table-shadow n (just #/db-put-entry-written value)
+            db-put-for-ds))
+      ; We write the entries for `parents-list`.
       #/w- write-parents
         (fn db-put then
           (w-loop next parents-to-write parents-list db-put db-put
             (expect parents-to-write (cons parent parents-to-write)
               (then db-put)
-            #/w- next-with-db-put-for-ds-and-existing-values
-              (fn db-put-for-ds existing-values
-                (next parents-to-write #/hash-set db-put ds-symbol
-                  (table-shadow n
-                    (just #/db-put-entry-do-not-conflict
+            #/next parents-to-write
+              (table-update-default db-put ds-name (table-empty)
+              #/fn db-put-for-ds
+                (table-update-default db-put-for-ds n
+                  (db-put-entry-do-not-conflict (list))
+                #/fn entry
+                  (mat entry
+                    (db-put-entry-do-not-conflict existing-values)
+                    (db-put-entry-do-not-conflict
                     #/cons value existing-values)
-                    db-put-for-ds)))
-            #/expect (hash-ref-maybe db-put parent)
-              (just db-put-for-ds)
-              (next-with-db-put-for-ds-and-existing-values
-                (table-empty)
-                (list))
-            #/expect (table-get n db-put-for-ds) (just entry)
-              (next-with-db-put-for-ds-and-existing-values
-                db-put-for-ds
-                (list))
-            #/mat entry (db-put-entry-do-not-conflict existing-values)
-              (next-with-db-put-for-ds-and-existing-values
-                db-put-for-ds
-                existing-values)
-            #/mat entry (db-put-entry-written existing-value)
-              (error "Internal error: Expected already-written to become true if any of the parents had db-put-entry-written")
-            #/error "Internal error: Encountered an unknown kind of db-put entry")))
+                  #/mat entry (db-put-entry-written existing-value)
+                    (error "Internal error: Expected already-written to become true if any of the parents had db-put-entry-written")
+                  #/error "Internal error: Encountered an unknown kind of db-put entry"))))))
       #/write-parents db-put #/fn db-put
-      #/next-after-put ds-symbol (hash-set db 'put db-put))
+      #/next-after-put ds-name (hash-set db 'put db-put))
     #/mat process (internal:extfx-get ds n on-stall then)
       ; If there has not yet been a definition installed at this name
       ; in this definition space, we set this process aside and come
@@ -1298,12 +1242,11 @@
       ; back to later.
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
-      #/dissect ds
-        (internal:dspace ds-symbol parents-list parents-hash)
-      #/w-loop next places-to-check (cons ds-symbol parents-list)
+      #/dissect ds (internal:dspace _ ds-name parents-list)
+      #/w-loop next places-to-check (cons ds-name parents-list)
         (expect places-to-check (cons place places-to-check)
           (next-fruitless)
-        #/expect (hash-ref-maybe (hash-ref db 'put) place)
+        #/expect (table-get place (hash-ref db 'put))
           (just db-put-for-ds)
           (next places-to-check)
         #/expect (table-get n db-put-for-ds) (just value)
@@ -1311,10 +1254,10 @@
         #/expect value (db-put-entry-written existing-value)
           (next places-to-check)
         #/next-one-fruitful #/process-entry
-          (hash-set reads 'put
-            (hash-set (hash-ref reads 'put) place
-              (table-shadow n (just #/trivial)
-                (hash-ref (hash-ref reads 'put) place))))
+          (hash-update reads 'put #/fn reads-put
+            (table-update-default reads-put place (table-empty)
+            #/fn reads-put-for-ds
+              (table-shadow n (just #/trivial) reads-put-for-ds)))
           (then #/optionally-dexable-value value)))
     
     #/mat process
@@ -1401,9 +1344,8 @@
       #/next-full
         (cons
           (process-entry
-            (hash-set reads 'spend-ticket
-              (hash-set (hash-ref reads 'spend-ticket) ticket-symbol
-                (trivial)))
+            (hash-update reads 'spend-ticket #/fn reads-spend-ticket
+              (hash-set reads-spend-ticket ticket-symbol (trivial)))
             (then #/wrap-fresh fresh-ticket-symbol))
           processes)
         rev-next-processes
@@ -1432,9 +1374,9 @@
           (next-full
             (cons
               (process-entry
-                (hash-set reads 'spend-ticket
-                  (hash-set (hash-ref reads 'spend-ticket)
-                    ticket-symbol
+                (hash-update reads 'spend-ticket
+                #/fn reads-spend-ticket
+                  (hash-set reads-spend-ticket ticket-symbol
                     (trivial)))
                 (then result))
               processes)
@@ -1483,9 +1425,8 @@
       #/next-full
         (cons
           (process-entry
-            (hash-set reads 'spend-ticket
-              (hash-set (hash-ref reads 'spend-ticket) ticket-symbol
-                (trivial)))
+            (hash-update reads 'spend-ticket #/fn reads-spend-ticket
+              (hash-set reads-spend-ticket ticket-symbol (trivial)))
             (then value))
           processes)
         rev-next-processes
@@ -1508,9 +1449,8 @@
       #/next-full
         (cons
           (process-entry
-            (hash-set reads 'spend-ticket
-              (hash-set (hash-ref reads 'spend-ticket) ticket-symbol
-                (trivial)))
+            (hash-update reads 'spend-ticket #/fn reads-spend-ticket
+              (hash-set reads-spend-ticket ticket-symbol (trivial)))
             (then
             #/internal:familiarity-ticket
               fresh-ticket-symbol on-unspent ds n))
@@ -1541,9 +1481,8 @@
       #/next-full
         (cons
           (process-entry
-            (hash-set reads 'spend-ticket
-              (hash-set (hash-ref reads 'spend-ticket) ticket-symbol
-                (trivial)))
+            (hash-update reads 'spend-ticket #/fn reads-spend-ticket
+              (hash-set reads-spend-ticket ticket-symbol (trivial)))
             (then
             #/internal:familiarity-ticket
               fresh-ticket-symbol on-unspent new-ds n))
