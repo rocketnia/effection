@@ -355,8 +355,8 @@
 ; `extfx-split-list`, `extfx-split-table`, and `extfx-disburse` which
 ; take their own top-level definitions that act like phone operator
 ; switchboards to allow cousin unspent ticket errors to connect with
-; each other. We may also need variations of `fuse-extfn` and
-; `extfn-table-each` which do the same kind of thing to allow
+; each other. We may also need variations of `fuse-extfx` and
+; `extfx-table-each` which do the same kind of thing to allow
 ; concurrent processes' error definers to coordinate with each other,
 ; as well as possibly some more effects (unlike any we currently have)
 ; which allow concurrent errors and unspent ticket errors to interact
