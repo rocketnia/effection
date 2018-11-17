@@ -20,7 +20,7 @@
 (require #/only-in lathe-comforts/hash hash-ref-maybe)
 (require #/only-in lathe-comforts/list
   list-any list-bind list-map list-zip-map nat->maybe)
-(require #/only-in lathe-comforts/maybe just nothing)
+(require #/only-in lathe-comforts/maybe just maybe-bind nothing)
 (require #/only-in lathe-comforts/struct istruct/c struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
 
@@ -217,6 +217,9 @@
 
 
 (struct-easy (extfx-finish-put ds n on-conflict value))
+(struct-easy
+  (extfx-finish-private-put
+    ds putter-name getter-name on-conflict value))
 
 (struct-easy (extfx-finish-run ds value))
 
@@ -927,7 +930,8 @@
       (hasheq
         'spend-ticket (hasheq)
         'claim-unique (table-empty)
-        'put (hasheq))
+        'put (table-empty)
+        'private-put (table-empty))
       (body root-ds root-unique-authorized-name
         root-continuation-ticket))
     
@@ -991,9 +995,7 @@
               (fn ds on-stall maybe-db-part
                 (dissect ds (internal:dspace _ ds-name parents-list)
                 #/w-loop next places (cons ds-name parents-list)
-                  (expect places (cons place places)
-                    (list #/error-definer-or-message on-stall
-                      "Read from a name that was never defined")
+                  (expect places (cons place places) (list on-stall)
                   #/expect maybe-db-part (just db-part)
                     (next places)
                   #/expect (table-get place db-part) (just entry)
@@ -1016,12 +1018,21 @@
                   #/error "Internal error: Encountered an unknown kind of db-put entry")))
             
             #/mat process (internal:extfx-get ds n on-stall then)
-              (handle-generic-get ds (table-get n (hash-ref db 'put)))
+              (handle-generic-get ds
+                (error-definer-or-message on-stall
+                  "Read from a name that was never defined")
+                (table-get n (hash-ref db 'put)))
             #/mat process
               (internal:extfx-private-get
                 ds putter-name getter-name on-stall then)
-              (list #/error-definer-or-message on-stall
-                "Read from a private name that was never defined")
+              (w- getter-name (authorized-name-get-name getter-name)
+              #/handle-generic-get ds
+                (error-definer-or-message on-stall
+                  "Read from a private name that was never defined")
+                (maybe-bind
+                  (table-get putter-name (hash-ref db 'private-put))
+                #/fn db-private-put-for-putter
+                #/table-get getter-name db-private-put-for-putter))
             #/mat process
               (internal:extfx-collect ds collector-name then)
               ; NOTE: These processes can't stall unless there's still
@@ -1162,6 +1173,12 @@
           rev-errors #t))
     #/w- handle-generic-finish-put
       (fn ds db-get db-update on-conflict value
+        ; If there has already been a definition installed for this
+        ; purpose in this definition space, this checks that the
+        ; proposed dex matches the stored dex and that the proposed
+        ; value matches the stored value according to that dex.
+        ; Otherwise, it stores the proposed dex and value without
+        ; question.
         (dissect on-conflict
           (internal:success-or-error-definer
             on-conflict on-no-conflict)
@@ -1303,6 +1320,11 @@
         #/next-after-put ds-name db))
     #/w- handle-generic-get
       (fn ds db-get db-update then
+        ; If there has not yet been a definition installed for this
+        ; purpose in this definition space, we set this process aside
+        ; and come back to it later. If there has, we call `then` with
+        ; that defined value and set up its result process to be
+        ; handled next.
         (dissect ds (internal:dspace _ ds-name parents-list)
         #/expect (db-get db) (just db-part) (next-fruitless)
         #/w-loop next places-to-check (cons ds-name parents-list)
@@ -1416,11 +1438,6 @@
           (extfx-finish-put ds n on-conflict value))
         on-cont-unspent comp)
     #/mat process (extfx-finish-put ds n on-conflict value)
-      ; If there has already been a definition installed at this name
-      ; in this definition space, this checks that the proposed dex
-      ; matches the stored dex and that the proposed value matches the
-      ; stored value according to that dex. Otherwise, it stores the
-      ; proposed dex and value without question.
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
       #/handle-generic-finish-put ds
@@ -1431,11 +1448,6 @@
             (table-update-default db-put n (table-empty) func)))
         on-conflict value)
     #/mat process (internal:extfx-get ds n on-stall then)
-      ; If there has not yet been a definition installed at this name
-      ; in this definition space, we set this process aside and come
-      ; back to it later. If there has, we call `then` with that
-      ; defined value and set aside its result as a process to come
-      ; back to later.
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
       #/handle-generic-get ds
@@ -1449,11 +1461,69 @@
     #/mat process
       (internal:extfx-private-put
         ds putter-name getter-name on-cont-unspent comp)
-      'TODO
+      (expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/w- putter-name (authorized-name-get-name putter-name)
+      #/w- on-cont-unspent
+        (error-definer-or-message on-cont-unspent
+          "Expected an extfx-private-put continuation to be continued")
+      #/handle-generic-put ds
+        (fn db func
+          (hash-update db 'private-put #/fn db-private-put
+            (table-update-default db-private-put putter-name
+              (table-empty)
+            #/fn db-private-put-for-putter
+              (table-update-default db-private-put-for-putter
+                getter-name
+                (table-empty)
+                func))))
+        (fn on-conflict value
+          (extfx-finish-private-put
+            ds putter-name getter-name on-conflict value))
+        on-cont-unspent comp)
+    #/mat process
+      (extfx-finish-private-put
+        ds putter-name getter-name on-conflict value)
+      (expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/handle-generic-finish-put ds
+        (fn db
+          (maybe-bind
+            (table-get putter-name (hash-ref db 'private-put))
+          #/fn db-private-put-for-putter
+          #/table-get getter-name db-private-put-for-putter))
+        (fn db func
+          (hash-update db 'private-put #/fn db-private-put
+            (table-update-default db-private-put putter-name
+              (table-empty)
+            #/fn db-private-put-for-putter
+              (table-update-default db-private-put-for-putter
+                getter-name
+                (table-empty)
+                func))))
+        on-conflict value)
     #/mat process
       (internal:extfx-private-get
         ds putter-name getter-name on-stall then)
-      'TODO
+      (expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/w- getter-name (authorized-name-get-name getter-name)
+      #/handle-generic-get ds
+        (fn db
+          (maybe-bind
+            (table-get putter-name (hash-ref db 'private-put))
+          #/fn db-private-put-for-putter
+          #/table-get getter-name db-private-put-for-putter))
+        (fn db func
+          (hash-update db 'private-put #/fn db-private-put
+            (table-update-default db-private-put putter-name
+              (table-empty)
+            #/fn db-private-put-for-putter
+              (table-update-default db-private-put-for-putter
+                getter-name
+                (table-empty)
+                func))))
+        then)
     
     #/mat process
       (internal:extfx-establish-pubsub ds pubsub-name then)
