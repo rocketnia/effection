@@ -987,33 +987,36 @@
         #/reverse #/append
           (list-bind rev-next-processes
           #/dissectfn (process-entry reads process)
-            (mat process (internal:extfx-get ds n on-stall then)
-              (dissect ds (internal:dspace _ ds-name parents-list)
-              #/w-loop next places (cons ds-name parents-list)
-                (expect places (cons place places)
-                  (list #/error-definer-or-message on-stall
-                    "Read from a name that was never defined")
-                #/expect (table-get n (hash-ref ds 'put))
-                  (just ds-put-for-n)
-                  (next places)
-                #/expect (table-get place ds-put-for-n) (just entry)
-                  (next places)
-                #/mat entry
-                  (db-put-entry-not-written
-                    do-not-conflict-values
-                    continuation-ticket-symbols)
-                  (if
-                    (list-any continuation-ticket-symbols #/fn sym
-                      (hash-has-key? unspent-tickets sym))
-                    ; There's an unspent continuation ticket which
-                    ; would have unstalled this process if it were
-                    ; spent, so it can describe a more proximal cause
-                    ; of the error than this process can.
-                    (list)
-                  #/next places)
-                #/mat entry (db-put-entry-written existing-value)
-                  (error "Internal error: Expected an extfx-get not to be stalled if any of the parents had db-put-entry-written")
-                #/error "Internal error: Encountered an unknown kind of db-put entry"))
+            (w- handle-generic-get
+              (fn ds on-stall maybe-db-part
+                (dissect ds (internal:dspace _ ds-name parents-list)
+                #/w-loop next places (cons ds-name parents-list)
+                  (expect places (cons place places)
+                    (list #/error-definer-or-message on-stall
+                      "Read from a name that was never defined")
+                  #/expect maybe-db-part (just db-part)
+                    (next places)
+                  #/expect (table-get place db-part) (just entry)
+                    (next places)
+                  #/mat entry
+                    (db-put-entry-not-written
+                      do-not-conflict-values
+                      continuation-ticket-symbols)
+                    (if
+                      (list-any continuation-ticket-symbols #/fn sym
+                        (hash-has-key? unspent-tickets sym))
+                      ; There's an unspent continuation ticket which
+                      ; would have unstalled this process if it were
+                      ; spent, so it can describe a more proximal cause
+                      ; of the error than this process can.
+                      (list)
+                    #/next places)
+                  #/mat entry (db-put-entry-written existing-value)
+                    (error "Internal error: Expected an extfx-get not to be stalled if any of the parents had db-put-entry-written")
+                  #/error "Internal error: Encountered an unknown kind of db-put entry")))
+            
+            #/mat process (internal:extfx-get ds n on-stall then)
+              (handle-generic-get ds (table-get n (hash-ref db 'put)))
             #/mat process
               (internal:extfx-private-get
                 ds putter-name getter-name on-stall then)
@@ -1121,6 +1124,198 @@
           
           #t))
     
+    #/w- handle-generic-put
+      (fn ds db-update make-finish on-cont-unspent comp
+        (dissect ds (internal:dspace _ ds-name _)
+        #/w- continuation-ticket-symbol (gensym)
+        #/w- continuation-ticket
+          (internal:continuation-ticket
+            continuation-ticket-symbol on-cont-unspent root-ds
+            (dissectfn (list on-conflict value)
+              (make-finish on-conflict value)))
+        #/next-full
+          (cons (process-entry reads (comp continuation-ticket))
+            processes)
+          rev-next-processes
+          (hash-set unspent-tickets continuation-ticket
+            (unspent-ticket-entry-anonymous on-cont-unspent))
+          
+          ; NOTE: We modify `db-part` here so that we know
+          ; that this value will be written using this continuation
+          ; ticket. That way, we're able to focus the error message by
+          ; removing "couldn't read" errors if there's an unspent
+          ; ticket error involving the continuation ticket.
+          ;
+          (db-update db #/fn db-part
+            (table-update-default db-part ds-name
+              (db-put-entry-not-written (list) (list))
+            #/fn entry
+              (expect entry
+                (db-put-entry-not-written
+                  do-not-conflict-values continuation-ticket-symbols)
+                entry
+              #/db-put-entry-not-written
+                do-not-conflict-values
+                (cons continuation-ticket-symbol
+                  continuation-ticket-symbols))))
+          
+          rev-errors #t))
+    #/w- handle-generic-finish-put
+      (fn ds db-get db-update on-conflict value
+        (dissect on-conflict
+          (internal:success-or-error-definer
+            on-conflict on-no-conflict)
+        #/dissect ds (internal:dspace _ ds-name parents-list)
+        #/w- next-conflict
+          (fn message
+            (next-purging on-conflict message #/fn reads
+              (expect (db-get reads) (just reads-part) #f
+              #/list-any (cons ds-name parents-list) #/fn parent
+                (mat (table-get parent reads-part) (just _)
+                  #t
+                  #f))))
+        #/w- err-once
+          (fn
+            (next-conflict
+              "Wrote to the same name where at least one of the writes was only expecting one write overall"))
+        #/w- do-not-conflict
+          (fn existing-value then
+            (mat existing-value
+              (internal:optionally-dexable-once existing-value)
+              (err-once)
+            #/mat existing-value
+              (internal:optionally-dexable-dexable
+                existing-dex
+                existing-value
+                name-of-existing-dex
+                name-of-existing-value)
+              (mat value (internal:optionally-dexable-once value)
+                (err-once)
+              #/mat value
+                (internal:optionally-dexable-dexable
+                  dex value name-of-dex name-of-value)
+                (expect
+                  (eq-by-dex? (dex-name)
+                    name-of-existing-dex
+                    name-of-dex)
+                  #t
+                  (next-conflict
+                    "Wrote to the same name where two of the writes were dexable with different dexes")
+                #/expect
+                  (eq-by-dex? (dex-name)
+                    name-of-existing-value
+                    name-of-value)
+                  #t
+                  (next-conflict
+                    "Wrote to the same name where two of the writes were dexable with different values")
+                #/then)
+              #/error "Internal error: Encountered an unknown kind of optionally dexable value")
+            #/error "Internal error: Encountered an unknown kind of optionally dexable value"))
+        #/w- next-after-put
+          (fn ds-name-written-to db
+            (next-full
+              (cons
+                (process-entry
+                  (db-update reads #/fn reads-part
+                    (table-shadow ds-name-written-to (just #/trivial)
+                      reads-part))
+                  on-no-conflict)
+                processes)
+              rev-next-processes unspent-tickets db rev-errors #t))
+        #/w- check-ds-name
+          (fn then
+            (expect (db-get db) (just db-part) (then #/nothing)
+            #/expect (table-get ds-name db-part) (just entry)
+              (then #/nothing)
+            #/mat entry
+              (db-put-entry-not-written
+                do-not-conflict-values continuation-ticket-symbols)
+              (w-loop next
+                do-not-conflict-values do-not-conflict-values
+                
+                (expect do-not-conflict-values
+                  (cons do-not-conflict-value do-not-conflict-values)
+                  (then #/nothing)
+                #/do-not-conflict do-not-conflict-value #/fn
+                  (next do-not-conflict-values)))
+            #/mat entry (db-put-entry-written existing-value)
+              (do-not-conflict existing-value #/fn
+                (then #/just ds-name))
+            #/error "Internal error: Encountered an unknown kind of db put entry"))
+        #/check-ds-name #/fn already-written
+        #/mat already-written (just ds-name-written-to)
+          (next-after-put ds-name-written-to db)
+        #/w- check-parents
+          (fn then
+            (w-loop next parents-to-check parents-list
+              (expect parents-to-check (cons parent parents-to-check)
+                (then #/nothing)
+              #/expect (db-get db) (just db-part)
+                (next parents-to-check)
+              #/expect (table-get parent db-part) (just entry)
+                (next parents-to-check)
+              #/mat entry
+                (db-put-entry-not-written
+                  do-not-conflict-values continuation-ticket-symbols)
+                (next parents-to-check)
+              #/mat entry (db-put-entry-written existing-value)
+                
+                ; NOTE: If we find a `db-put-entry-written` entry for
+                ; even one of the parents, checking that one is enough
+                ; to check all the parents. That's why we can proceed
+                ; with `(then #/just parent)` instead of
+                ; `(next parents-to-check)` here.
+                ;
+                (do-not-conflict existing-value #/fn
+                  (then #/just parent))
+              
+              #/error "Internal error: Encountered an unknown kind of db put entry")))
+        #/check-parents #/fn already-written
+        #/mat already-written (just ds-name-written-to)
+          (next-after-put ds-name-written-to db)
+        ; We write the entry for `ds-name`.
+        #/w- db
+          (db-update db #/fn db-part
+            (table-shadow ds-name (just #/db-put-entry-written value)
+              db-part))
+        ; We write the entries for `parents-list`.
+        #/w- write-parents
+          (fn db then
+            (w-loop next parents-to-write parents-list db db
+              (expect parents-to-write (cons parent parents-to-write)
+                (then db)
+              #/next parents-to-write
+                (db-update db #/fn db-part
+                  (table-update-default db-part ds-name
+                    (db-put-entry-not-written (list) (list))
+                  #/fn entry
+                    (mat entry
+                      (db-put-entry-not-written
+                        do-not-conflict-values
+                        continuation-ticket-symbols)
+                      (db-put-entry-not-written
+                        (cons value do-not-conflict-values)
+                        continuation-ticket-symbols)
+                    #/mat entry (db-put-entry-written existing-value)
+                      (error "Internal error: Expected already-written to become true if any of the parents had db-put-entry-written")
+                    #/error "Internal error: Encountered an unknown kind of db-put entry"))))))
+        #/write-parents db #/fn db
+        #/next-after-put ds-name db))
+    #/w- handle-generic-get
+      (fn ds db-get db-update then
+        (dissect ds (internal:dspace _ ds-name parents-list)
+        #/expect (db-get db) (just db-part) (next-fruitless)
+        #/w-loop next places-to-check (cons ds-name parents-list)
+          (expect places-to-check (cons place places-to-check)
+            (next-fruitless)
+          #/expect (table-get place db-part) (just value)
+            (next places-to-check)
+          #/expect value (db-put-entry-written existing-value)
+            (next places-to-check)
+          #/next-one-fruitful #/process-entry
+            (db-update reads #/fn reads-part
+              (table-shadow place (just #/trivial) reads-part))
+            (then #/optionally-dexable-value value))))
     #/w- parse-ticket
       (fn ticket
         (mat ticket
@@ -1209,46 +1404,17 @@
     #/mat process (internal:extfx-put ds n on-cont-unspent comp)
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
-      #/dissect ds (internal:dspace _ ds-name _)
       #/w- n (authorized-name-get-name n)
-      #/w- continuation-ticket-symbol (gensym)
       #/w- on-cont-unspent
         (error-definer-or-message on-cont-unspent
           "Expected an extfx-put continuation to be continued")
-      #/w- continuation-ticket
-        (internal:continuation-ticket
-          continuation-ticket-symbol on-cont-unspent root-ds
-          (dissectfn (list on-conflict value)
-            (extfx-finish-put ds n on-conflict value)))
-      #/next-full
-        (cons (process-entry reads (comp continuation-ticket))
-          processes)
-        rev-next-processes
-        (hash-set unspent-tickets continuation-ticket
-          (unspent-ticket-entry-anonymous on-cont-unspent))
-        
-        ; NOTE: We modify `(hash-ref db 'put)` here so that we know
-        ; that this value will be written using this continuation
-        ; ticket. That way, we're able to focus the error message by
-        ; removing "couldn't read" errors if there's an unspent ticket
-        ; error involving the continuation ticket.
-        ;
-        (hash-update db 'put #/fn db-put
-          (table-update-default db-put n (table-empty)
-          #/fn db-put-for-n
-            (table-update-default db-put-for-n ds-name
-              (db-put-entry-not-written (list) (list))
-            #/fn entry
-              (expect entry
-                (db-put-entry-not-written
-                  do-not-conflict-values continuation-ticket-symbols)
-                entry
-              #/db-put-entry-not-written
-                do-not-conflict-values
-                (cons continuation-ticket-symbol
-                  continuation-ticket-symbols)))))
-        
-        rev-errors #t)
+      #/handle-generic-put ds
+        (fn db func
+          (hash-update db 'put #/fn db-put
+            (table-update-default db-put n (table-empty) func)))
+        (fn on-conflict value
+          (extfx-finish-put ds n on-conflict value))
+        on-cont-unspent comp)
     #/mat process (extfx-finish-put ds n on-conflict value)
       ; If there has already been a definition installed at this name
       ; in this definition space, this checks that the proposed dex
@@ -1257,150 +1423,13 @@
       ; proposed dex and value without question.
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
-      #/dissect on-conflict
-        (internal:success-or-error-definer on-conflict on-no-conflict)
-      #/dissect ds (internal:dspace _ ds-name parents-list)
-      #/w- next-conflict
-        (fn message
-          (next-purging on-conflict message #/fn reads
-            (w- reads-put (hash-ref reads 'put)
-            #/list-any (cons ds-name parents-list) #/fn parent
-              (expect (table-get n reads-put) (just reads-put-for-n)
-                #f
-              #/expect (table-get parent reads-put-for-n) (just _)
-                #f
-                #t))))
-      #/w- err-once
-        (fn
-          (next-conflict
-            "Wrote to the same name where at least one of the writes was only expecting one write overall"))
-      #/w- do-not-conflict
-        (fn existing-value then
-          (mat existing-value
-            (internal:optionally-dexable-once existing-value)
-            (err-once)
-          #/mat existing-value
-            (internal:optionally-dexable-dexable
-              existing-dex
-              existing-value
-              name-of-existing-dex
-              name-of-existing-value)
-            (mat value (internal:optionally-dexable-once value)
-              (err-once)
-            #/mat value
-              (internal:optionally-dexable-dexable
-                dex value name-of-dex name-of-value)
-              (expect
-                (eq-by-dex? (dex-name)
-                  name-of-existing-dex
-                  name-of-dex)
-                #t
-                (next-conflict
-                  "Wrote to the same name where two of the writes were dexable with different dexes")
-              #/expect
-                (eq-by-dex? (dex-name)
-                  name-of-existing-value
-                  name-of-value)
-                #t
-                (next-conflict
-                  "Wrote to the same name where two of the writes were dexable with different values")
-              #/then)
-            #/error "Internal error: Encountered an unknown kind of optionally dexable value")
-          #/error "Internal error: Encountered an unknown kind of optionally dexable value"))
-      #/w- db-put (hash-ref db 'put)
-      #/w- next-after-put
-        (fn ds-name-written-to db
-          (next-full
-            (cons
-              (process-entry
-                (hash-update reads 'put #/fn reads-put
-                  (table-update-default reads-put n (table-empty)
-                  #/fn reads-put-for-n
-                    (table-shadow ds-name-written-to (just #/trivial)
-                      reads-put-for-n)))
-                on-no-conflict)
-              processes)
-            rev-next-processes unspent-tickets db rev-errors #t))
-      #/w- check-ds-name
-        (fn then
-          (expect (table-get n db-put) (just db-put-for-n)
-            (then #/nothing)
-          #/expect (table-get ds-name db-put-for-n) (just entry)
-            (then #/nothing)
-          #/mat entry
-            (db-put-entry-not-written
-              do-not-conflict-values continuation-ticket-symbols)
-            (w-loop next do-not-conflict-values do-not-conflict-values
-              (expect do-not-conflict-values
-                (cons do-not-conflict-value do-not-conflict-values)
-                (then #/nothing)
-              #/do-not-conflict do-not-conflict-value #/fn
-                (next do-not-conflict-values)))
-          #/mat entry (db-put-entry-written existing-value)
-            (do-not-conflict existing-value #/fn
-              (then #/just ds-name))
-          #/error "Internal error: Encountered an unknown kind of db put entry"))
-      #/check-ds-name #/fn already-written
-      #/mat already-written (just ds-name-written-to)
-        (next-after-put ds-name-written-to db)
-      #/w- check-parents
-        (fn then
-          (w-loop next parents-to-check parents-list
-            (expect parents-to-check (cons parent parents-to-check)
-              (then #/nothing)
-            #/expect (table-get n db-put) (just db-put-for-n)
-              (next parents-to-check)
-            #/expect (table-get parent db-put-for-n) (just entry)
-              (next parents-to-check)
-            #/mat entry
-              (db-put-entry-not-written
-                do-not-conflict-values continuation-ticket-symbols)
-              (next parents-to-check)
-            #/mat entry (db-put-entry-written existing-value)
-              
-              ; NOTE: If we find a `db-put-entry-written` entry for
-              ; even one of the parents, checking that one is enough
-              ; to check all the parents. That's why we can proceed
-              ; with `(then #/just parent)` instead of
-              ; `(next parents-to-check)` here.
-              ;
-              (do-not-conflict existing-value #/fn
-                (then #/just parent))
-            
-            #/error "Internal error: Encountered an unknown kind of db put entry")))
-      #/check-parents #/fn already-written
-      #/mat already-written (just ds-name-written-to)
-        (next-after-put ds-name-written-to db)
-      ; We write the entry for `ds-name`.
-      #/w- db-put
-        (table-update-default db-put n (table-empty)
-        #/fn db-put-for-n
-          (table-shadow ds-name (just #/db-put-entry-written value)
-            db-put-for-n))
-      ; We write the entries for `parents-list`.
-      #/w- write-parents
-        (fn db-put then
-          (w-loop next parents-to-write parents-list db-put db-put
-            (expect parents-to-write (cons parent parents-to-write)
-              (then db-put)
-            #/next parents-to-write
-              (table-update-default db-put n (table-empty)
-              #/fn db-put-for-n
-                (table-update-default db-put-for-n ds-name
-                  (db-put-entry-not-written (list) (list))
-                #/fn entry
-                  (mat entry
-                    (db-put-entry-not-written
-                      do-not-conflict-values
-                      continuation-ticket-symbols)
-                    (db-put-entry-not-written
-                      (cons value do-not-conflict-values)
-                      continuation-ticket-symbols)
-                  #/mat entry (db-put-entry-written existing-value)
-                    (error "Internal error: Expected already-written to become true if any of the parents had db-put-entry-written")
-                  #/error "Internal error: Encountered an unknown kind of db-put entry"))))))
-      #/write-parents db-put #/fn db-put
-      #/next-after-put ds-name (hash-set db 'put db-put))
+      #/handle-generic-finish-put ds
+        (fn db
+          (table-get n (hash-ref db 'put)))
+        (fn db func
+          (hash-update db 'put #/fn db-put
+            (table-update-default db-put n (table-empty) func)))
+        on-conflict value)
     #/mat process (internal:extfx-get ds n on-stall then)
       ; If there has not yet been a definition installed at this name
       ; in this definition space, we set this process aside and come
@@ -1409,23 +1438,13 @@
       ; back to later.
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
-      #/dissect ds (internal:dspace _ ds-name parents-list)
-      #/w-loop next places-to-check (cons ds-name parents-list)
-        (expect places-to-check (cons place places-to-check)
-          (next-fruitless)
-        #/expect (table-get n (hash-ref db 'put))
-          (just db-put-for-n)
-          (next places-to-check)
-        #/expect (table-get place db-put-for-n) (just value)
-          (next places-to-check)
-        #/expect value (db-put-entry-written existing-value)
-          (next places-to-check)
-        #/next-one-fruitful #/process-entry
-          (hash-update reads 'put #/fn reads-put
-            (table-update-default reads-put n (table-empty)
-            #/fn reads-put-for-n
-              (table-shadow place (just #/trivial) reads-put-for-n)))
-          (then #/optionally-dexable-value value)))
+      #/handle-generic-get ds
+        (fn db
+          (table-get n (hash-ref db 'put)))
+        (fn db func
+          (hash-update db 'put #/fn db-put
+            (table-update-default db-put n (table-empty) func)))
+        then)
     
     #/mat process
       (internal:extfx-private-put
