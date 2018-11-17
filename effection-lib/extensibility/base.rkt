@@ -6,7 +6,7 @@
 ; documentation correctly says it is, we require it from there.
 (require #/only-in racket/contract get/build-late-neg-projection)
 (require #/only-in racket/contract/base
-  -> any any/c chaperone-contract? contract? contract-name
+  -> ->i any any/c chaperone-contract? contract? contract-name
   flat-contract? list/c listof or/c)
 (require #/only-in racket/contract/combinator
   blame-add-context coerce-contract contract-first-order-passes?
@@ -77,9 +77,13 @@
   
   pub?
   sub?
+  pub-dspace-descends?
+  sub-dspace-descends?
+  pub-ancestor/c
+  sub-ancestor/c
+  pub-restrict
+  sub-restrict
   extfx-establish-pubsub
-  extfx-pub-restrict
-  extfx-sub-restrict
   extfx-pub-write
   extfx-sub-write
   
@@ -152,10 +156,6 @@
     (extfx-private-get ds putter-name getter-name on-stall then))
   
   (provide-struct (extfx-establish-pubsub ds pubsub-name then))
-  (provide-struct
-    (extfx-pub-restrict p new-ds on-restriction-error then))
-  (provide-struct
-    (extfx-sub-restrict s new-ds on-restriction-error then))
   (provide-struct (extfx-pub-write ds p pubber-name on-conflict arg))
   (provide-struct (extfx-sub-write ds s subber-name on-conflict func))
   
@@ -245,12 +245,6 @@
     #t
   
   #/mat v (internal:extfx-establish-pubsub ds pubsub-name then) #t
-  #/mat v
-    (internal:extfx-pub-restrict p new-ds on-restriction-error then)
-    #t
-  #/mat v
-    (internal:extfx-sub-restrict s new-ds on-restriction-error then)
-    #t
   #/mat v (internal:extfx-pub-write ds p pubber-name on-conflict arg)
     #t
   #/mat v (internal:extfx-sub-write ds s subber-name on-conflict func)
@@ -689,19 +683,51 @@
   (-> any/c boolean?)
   (internal:sub? v))
 
+(define/contract (pub-dspace-descends? p ds)
+  (-> dspace? pub? boolean?)
+  (dissect p (internal:pub p-ds pubsub-name)
+  #/dspace-descends? p-ds ds))
+
+(define/contract (sub-dspace-descends? s ds)
+  (-> dspace? sub? boolean?)
+  (dissect s (internal:sub s-ds pubsub-name)
+  #/dspace-descends? s-ds ds))
+
+(define/contract (pub-ancestor/c ds)
+  (-> dspace? contract?)
+  (make-flat-contract
+    
+    #:name `(pub-ancestor/c ,ds)
+    
+    #:first-order
+    (fn v
+      (and (pub? v) (pub-dspace-descends? v ds)))))
+
+(define/contract (sub-ancestor/c ds)
+  (-> dspace? contract?)
+  (make-flat-contract
+    
+    #:name `(sub-ancestor/c ,ds)
+    
+    #:first-order
+    (fn v
+      (and (sub? v) (sub-dspace-descends? v ds)))))
+
+(define/contract (pub-restrict new-ds p)
+  (->i ([new-ds dspace?] [p (new-ds) (pub-ancestor/c new-ds)])
+    [_ pub?])
+  (dissect p (internal:pub original-ds pubsub-name)
+  #/internal:pub new-ds pubsub-name))
+
+(define/contract (sub-restrict new-ds s)
+  (->i ([new-ds dspace?] [s (new-ds) (sub-ancestor/c new-ds)])
+    [_ sub?])
+  (dissect s (internal:sub original-ds pubsub-name)
+  #/internal:sub new-ds pubsub-name))
+
 (define/contract (extfx-establish-pubsub ds pubsub-name then)
   (-> dspace? authorized-name? (-> pub? sub? extfx?) extfx?)
   (internal:extfx-establish-pubsub ds pubsub-name then))
-
-(define/contract
-  (extfx-pub-restrict p new-ds on-restriction-error then)
-  (-> pub? dspace? error-definer? (-> pub? extfx?) extfx?)
-  (internal:extfx-pub-restrict p new-ds on-restriction-error then))
-
-(define/contract
-  (extfx-sub-restrict s new-ds on-restriction-error then)
-  (-> pub? dspace? error-definer? (-> pub? extfx?) extfx?)
-  (internal:extfx-sub-restrict s new-ds on-restriction-error then))
 
 (define/contract (extfx-pub-write ds p pubber-name on-conflict arg)
   (->
@@ -1282,24 +1308,6 @@
         (then
           (internal:pub ds pubsub-name)
           (internal:sub ds pubsub-name)))
-    #/mat process
-      (internal:extfx-pub-restrict p new-ds on-restriction-error then)
-      (dissect p (internal:pub original-ds pubsub-name)
-      #/expect (dspace-descends? original-ds new-ds) #t
-        (next-with-error-definer on-restriction-error
-          "Expected new-ds to be a shadowing descendant of the dspace of the pub p")
-      #/next-one-fruitful #/process-entry
-        reads
-        (then #/internal:pub new-ds pubsub-name))
-    #/mat process
-      (internal:extfx-sub-restrict s new-ds on-restriction-error then)
-      (dissect s (internal:sub original-ds pubsub-name)
-      #/expect (dspace-descends? original-ds new-ds) #t
-        (next-with-error-definer on-restriction-error
-          "Expected new-ds to be a shadowing descendant of the dspace of the sub s")
-      #/next-one-fruitful #/process-entry
-        reads
-        (then #/internal:sub new-ds pubsub-name))
     #/mat process
       (internal:extfx-pub-write ds p pubber-name on-conflict arg)
       'TODO
