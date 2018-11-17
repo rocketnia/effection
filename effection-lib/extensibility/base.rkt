@@ -884,7 +884,9 @@
 (struct-easy
   (unspent-ticket-entry-familiarity-ticket on-unspent ds n))
 (struct-easy (unspent-ticket-entry-anonymous on-unspent))
-(struct-easy (db-put-entry-do-not-conflict existing-values))
+(struct-easy
+  (db-put-entry-not-written
+    do-not-conflict-values continuation-ticket-symbols))
 (struct-easy (db-put-entry-written existing-value))
 
 ; TODO: Clients can abuse a call to `run-extfx!` just to generate a
@@ -976,8 +978,32 @@
           (list-bind rev-next-processes
           #/dissectfn (process-entry reads process)
             (mat process (internal:extfx-get ds n on-stall then)
-              (list #/error-definer-or-message on-stall
-                "Read from a name that was never defined")
+              (dissect ds (internal:dspace _ ds-name parents-list)
+              #/w-loop next places (cons ds-name parents-list)
+                (expect places (cons place places)
+                  (list #/error-definer-or-message on-stall
+                    "Read from a name that was never defined")
+                #/expect (table-get place (hash-ref ds 'put))
+                  (just ds-put-for-ds)
+                  (next places)
+                #/expect (table-get n ds-put-for-ds) (just entry)
+                  (next places)
+                #/mat entry
+                  (db-put-entry-not-written
+                    do-not-conflict-values
+                    continuation-ticket-symbols)
+                  (if
+                    (list-any continuation-ticket-symbols #/fn sym
+                      (hash-has-key? unspent-tickets sym))
+                    ; There's an unspent continuation ticket which
+                    ; would have unstalled this process if it were
+                    ; spent, so it can describe a more proximal cause
+                    ; of the error than this process can.
+                    (list)
+                  #/next places)
+                #/mat entry (db-put-entry-written existing-value)
+                  (error "Internal error: Expected an extfx-get not to be stalled if any of the parents had db-put-entry-written")
+                #/error "Internal error: Encountered an unknown kind of db-put entry"))
             #/mat process
               (internal:extfx-private-get
                 ds putter-name getter-name on-stall then)
@@ -1148,13 +1174,10 @@
         rev-errors #t)
     
     #/mat process (internal:extfx-put ds n on-cont-unspent comp)
-      ; TODO: Modify `(hash-ref db 'put)` here so that we know that
-      ; this value will be put by this process. That way, we'll be
-      ; able to focus the error message by removing "couldn't read"
-      ; errors if the corresponding writing processes had their own
-      ; errors.
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/dissect ds (internal:dspace _ ds-name _)
+      #/w- n (authorized-name-get-name n)
       #/w- continuation-ticket-symbol (gensym)
       #/w- on-cont-unspent
         (error-definer-or-message on-cont-unspent
@@ -1170,7 +1193,29 @@
         rev-next-processes
         (hash-set unspent-tickets continuation-ticket
           (unspent-ticket-entry-anonymous on-cont-unspent))
-        db rev-errors #t)
+        
+        ; NOTE: We modify `(hash-ref db 'put)` here so that we know
+        ; that this value will be written using this continuation
+        ; ticket. That way, we're able to focus the error message by
+        ; removing "couldn't read" errors if there's an unspent ticket
+        ; error involving the continuation ticket.
+        ;
+        (hash-update db 'put #/fn db-put
+          (table-update-default db-put ds-name (table-empty)
+          #/fn db-put-for-ds
+            (table-update-default db-put-for-ds n
+              (db-put-entry-not-written (list) (list))
+            #/fn entry
+              (expect entry
+                (db-put-entry-not-written
+                  do-not-conflict-values continuation-ticket-symbols)
+                entry
+              #/db-put-entry-not-written
+                do-not-conflict-values
+                (cons continuation-ticket-symbol
+                  continuation-ticket-symbols)))))
+        
+        rev-errors #t)
     #/mat process (extfx-finish-put ds n on-conflict value)
       ; If there has already been a definition installed at this name
       ; in this definition space, this checks that the proposed dex
@@ -1182,7 +1227,6 @@
       #/dissect on-conflict
         (internal:success-or-error-definer on-conflict on-no-conflict)
       #/dissect ds (internal:dspace _ ds-name parents-list)
-      #/w- n (authorized-name-get-name n)
       #/w- next-conflict
         (fn message
           (next-purging on-conflict message #/fn reads
@@ -1252,13 +1296,15 @@
             (then #/nothing)
           #/expect (table-get n db-put-for-ds) (just entry)
             (then #/nothing)
-          #/mat entry (db-put-entry-do-not-conflict existing-values)
-            (w-loop next existing-values existing-values
-              (expect existing-values
-                (cons existing-value existing-values)
+          #/mat entry
+            (db-put-entry-not-written
+              do-not-conflict-values continuation-ticket-symbols)
+            (w-loop next do-not-conflict-values do-not-conflict-values
+              (expect do-not-conflict-values
+                (cons do-not-conflict-value do-not-conflict-values)
                 (then #/nothing)
-              #/do-not-conflict existing-value #/fn
-                (next existing-values)))
+              #/do-not-conflict do-not-conflict-value #/fn
+                (next do-not-conflict-values)))
           #/mat entry (db-put-entry-written existing-value)
             (do-not-conflict existing-value #/fn
               (then #/just ds-name))
@@ -1276,7 +1322,9 @@
               (next parents-to-check)
             #/expect (table-get n db-put-for-ds) (just entry)
               (next parents-to-check)
-            #/mat entry (db-put-entry-do-not-conflict existing-values)
+            #/mat entry
+              (db-put-entry-not-written
+                do-not-conflict-values continuation-ticket-symbols)
               (next parents-to-check)
             #/mat entry (db-put-entry-written existing-value)
               
@@ -1309,12 +1357,15 @@
               (table-update-default db-put ds-name (table-empty)
               #/fn db-put-for-ds
                 (table-update-default db-put-for-ds n
-                  (db-put-entry-do-not-conflict (list))
+                  (db-put-entry-not-written (list) (list))
                 #/fn entry
                   (mat entry
-                    (db-put-entry-do-not-conflict existing-values)
-                    (db-put-entry-do-not-conflict
-                    #/cons value existing-values)
+                    (db-put-entry-not-written
+                      do-not-conflict-values
+                      continuation-ticket-symbols)
+                    (db-put-entry-not-written
+                      (cons value do-not-conflict-values)
+                      continuation-ticket-symbols)
                   #/mat entry (db-put-entry-written existing-value)
                     (error "Internal error: Expected already-written to become true if any of the parents had db-put-entry-written")
                   #/error "Internal error: Encountered an unknown kind of db-put entry"))))))
