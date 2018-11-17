@@ -993,10 +993,10 @@
                 (expect places (cons place places)
                   (list #/error-definer-or-message on-stall
                     "Read from a name that was never defined")
-                #/expect (table-get place (hash-ref ds 'put))
-                  (just ds-put-for-ds)
+                #/expect (table-get n (hash-ref ds 'put))
+                  (just ds-put-for-n)
                   (next places)
-                #/expect (table-get n ds-put-for-ds) (just entry)
+                #/expect (table-get place ds-put-for-n) (just entry)
                   (next places)
                 #/mat entry
                   (db-put-entry-not-written
@@ -1234,9 +1234,9 @@
         ; error involving the continuation ticket.
         ;
         (hash-update db 'put #/fn db-put
-          (table-update-default db-put ds-name (table-empty)
-          #/fn db-put-for-ds
-            (table-update-default db-put-for-ds n
+          (table-update-default db-put n (table-empty)
+          #/fn db-put-for-n
+            (table-update-default db-put-for-n ds-name
               (db-put-entry-not-written (list) (list))
             #/fn entry
               (expect entry
@@ -1265,12 +1265,11 @@
           (next-purging on-conflict message #/fn reads
             (w- reads-put (hash-ref reads 'put)
             #/list-any (cons ds-name parents-list) #/fn parent
-              (expect (table-get parent reads-put)
-                (just reads-put-parent)
+              (expect (table-get n reads-put) (just reads-put-for-n)
                 #f
-              #/mat (table-get n reads-put-parent) (just _)
-                #t
-                #f))))
+              #/expect (table-get parent reads-put-for-n) (just _)
+                #f
+                #t))))
       #/w- err-once
         (fn
           (next-conflict
@@ -1315,19 +1314,18 @@
             (cons
               (process-entry
                 (hash-update reads 'put #/fn reads-put
-                  (table-update-default reads-put ds-name-written-to
-                    (table-empty)
-                  #/fn reads-put-for-ds
-                    (table-shadow n (just #/trivial)
-                      reads-put-for-ds)))
+                  (table-update-default reads-put n (table-empty)
+                  #/fn reads-put-for-n
+                    (table-shadow ds-name-written-to (just #/trivial)
+                      reads-put-for-n)))
                 on-no-conflict)
               processes)
             rev-next-processes unspent-tickets db rev-errors #t))
       #/w- check-ds-name
         (fn then
-          (expect (table-get ds-name db-put) (just db-put-for-ds)
+          (expect (table-get n db-put) (just db-put-for-n)
             (then #/nothing)
-          #/expect (table-get n db-put-for-ds) (just entry)
+          #/expect (table-get ds-name db-put-for-n) (just entry)
             (then #/nothing)
           #/mat entry
             (db-put-entry-not-written
@@ -1350,10 +1348,9 @@
           (w-loop next parents-to-check parents-list
             (expect parents-to-check (cons parent parents-to-check)
               (then #/nothing)
-            #/expect (hash-ref-maybe db-put parent)
-              (just db-put-for-ds)
+            #/expect (table-get n db-put) (just db-put-for-n)
               (next parents-to-check)
-            #/expect (table-get n db-put-for-ds) (just entry)
+            #/expect (table-get parent db-put-for-n) (just entry)
               (next parents-to-check)
             #/mat entry
               (db-put-entry-not-written
@@ -1376,10 +1373,10 @@
         (next-after-put ds-name-written-to db)
       ; We write the entry for `ds-name`.
       #/w- db-put
-        (table-update-default db-put ds-name (table-empty)
-        #/fn db-put-for-ds
-          (table-shadow n (just #/db-put-entry-written value)
-            db-put-for-ds))
+        (table-update-default db-put n (table-empty)
+        #/fn db-put-for-n
+          (table-shadow ds-name (just #/db-put-entry-written value)
+            db-put-for-n))
       ; We write the entries for `parents-list`.
       #/w- write-parents
         (fn db-put then
@@ -1387,9 +1384,9 @@
             (expect parents-to-write (cons parent parents-to-write)
               (then db-put)
             #/next parents-to-write
-              (table-update-default db-put ds-name (table-empty)
-              #/fn db-put-for-ds
-                (table-update-default db-put-for-ds n
+              (table-update-default db-put n (table-empty)
+              #/fn db-put-for-n
+                (table-update-default db-put-for-n ds-name
                   (db-put-entry-not-written (list) (list))
                 #/fn entry
                   (mat entry
@@ -1416,18 +1413,18 @@
       #/w-loop next places-to-check (cons ds-name parents-list)
         (expect places-to-check (cons place places-to-check)
           (next-fruitless)
-        #/expect (table-get place (hash-ref db 'put))
-          (just db-put-for-ds)
+        #/expect (table-get n (hash-ref db 'put))
+          (just db-put-for-n)
           (next places-to-check)
-        #/expect (table-get n db-put-for-ds) (just value)
+        #/expect (table-get place db-put-for-n) (just value)
           (next places-to-check)
         #/expect value (db-put-entry-written existing-value)
           (next places-to-check)
         #/next-one-fruitful #/process-entry
           (hash-update reads 'put #/fn reads-put
-            (table-update-default reads-put place (table-empty)
-            #/fn reads-put-for-ds
-              (table-shadow n (just #/trivial) reads-put-for-ds)))
+            (table-update-default reads-put n (table-empty)
+            #/fn reads-put-for-n
+              (table-shadow place (just #/trivial) reads-put-for-n)))
           (then #/optionally-dexable-value value)))
     
     #/mat process
