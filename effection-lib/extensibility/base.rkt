@@ -912,7 +912,8 @@
 (struct-easy
   (db-put-entry-not-written
     do-not-conflict-values continuation-ticket-symbols))
-(struct-easy (db-put-entry-written existing-value))
+(struct-easy
+  (db-put-entry-written reads-of-first-write existing-value))
 
 ; TODO: Clients can abuse a call to `run-extfx!` just to generate a
 ; fresh `name?` value for use outside that call. If there's anything
@@ -945,8 +946,7 @@
       root-ds
       (fn result
         (extfx-finish-run root-ds result)))
-  #/w- reads-merge
-    ; TODO: Use this in `handle-generic-get`.
+  #/w- reads-union
     (fn a b
       (hasheq
         
@@ -1074,7 +1074,7 @@
                       ; of the error than this process can.
                       (list)
                     #/next places)
-                  #/mat entry (db-put-entry-written existing-value)
+                  #/mat entry (db-put-entry-written _ _)
                     (error "Internal error: Expected an extfx-get not to be stalled if any of the parents had db-put-entry-written")
                   #/error "Internal error: Encountered an unknown kind of db-put entry")))
             
@@ -1323,7 +1323,7 @@
                   (then #/nothing)
                 #/do-not-conflict do-not-conflict-value #/fn
                   (next do-not-conflict-values)))
-            #/mat entry (db-put-entry-written existing-value)
+            #/mat entry (db-put-entry-written _ existing-value)
               (do-not-conflict existing-value #/fn
                 (then #/just ds-name))
             #/error "Internal error: Encountered an unknown kind of db put entry"))
@@ -1343,7 +1343,7 @@
                 (db-put-entry-not-written
                   do-not-conflict-values continuation-ticket-symbols)
                 (next parents-to-check)
-              #/mat entry (db-put-entry-written existing-value)
+              #/mat entry (db-put-entry-written _ existing-value)
                 
                 ; NOTE: If we find a `db-put-entry-written` entry for
                 ; even one of the parents, checking that one is enough
@@ -1361,7 +1361,8 @@
         ; We write the entry for `ds-name`.
         #/w- db
           (db-update db #/fn db-part
-            (table-shadow ds-name (just #/db-put-entry-written value)
+            (table-shadow ds-name
+              (just #/db-put-entry-written reads value)
               db-part))
         ; We write the entries for `parents-list`.
         #/w- write-parents
@@ -1381,7 +1382,8 @@
                       (db-put-entry-not-written
                         (cons value do-not-conflict-values)
                         continuation-ticket-symbols)
-                    #/mat entry (db-put-entry-written existing-value)
+                    #/mat entry
+                      (db-put-entry-written _ existing-value)
                       (error "Internal error: Expected already-written to become true if any of the parents had db-put-entry-written")
                     #/error "Internal error: Encountered an unknown kind of db-put entry"))))))
         #/write-parents db #/fn db
@@ -1400,10 +1402,27 @@
             (next-fruitless)
           #/expect (table-get place db-part) (just value)
             (next places-to-check)
-          #/expect value (db-put-entry-written existing-value)
+          #/expect value
+            (db-put-entry-written reads-of-first-write existing-value)
             (next places-to-check)
           #/next-one-fruitful #/process-entry
-            (db-update reads #/fn reads-part
+            
+            ; TODO: By merging `reads-of-first-write` with these other
+            ; reads, we simplify the process of purging processes when
+            ; there's a conflict; we just need to remove all the
+            ; process entries that are based on a read of the
+            ; conflicted information. However, this is likely to
+            ; impose a time cost on *every read* proportional to the
+            ; number of unique things the process has read, and
+            ; purging information after an error probably isn't
+            ; important enough to justify that cost. In fact, we could
+            ; probably accomplish the purging just by having
+            ; `next-purging` iterate over `db` and recur for each
+            ; entry that has a `reads-of-first-write` containing the
+            ; conflicted entry. See if we should do that.
+            ;
+            (reads-union reads-of-first-write
+            #/db-update reads #/fn reads-part
               (table-shadow place (just #/trivial) reads-part))
             (then #/optionally-dexable-value value))))
     #/w- parse-ticket
@@ -1518,7 +1537,7 @@
         (list-foldl reads (hash->list db-part) #/fn reads entry
           (dissect entry
             (cons k #/db-table-each-entry-complete more-reads v)
-          #/reads-merge reads more-reads))
+          #/reads-union reads more-reads))
         (then #/unsafe:table #/hash-v-map db-part #/fn v
           (dissect v (db-table-each-entry-complete reads v)
             v)))
