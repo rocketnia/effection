@@ -1424,6 +1424,7 @@
             (reads-union reads-of-first-write
             #/db-update reads #/fn reads-part
               (table-shadow place (just #/trivial) reads-part))
+            
             (then #/optionally-dexable-value value))))
     #/w- parse-ticket
       (fn ticket
