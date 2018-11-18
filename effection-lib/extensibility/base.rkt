@@ -909,9 +909,10 @@
 (struct-easy (unspent-ticket-entry-anonymous on-unspent))
 (struct-easy (db-table-each-entry-incomplete))
 (struct-easy (db-table-each-entry-complete reads v))
+(struct-easy (do-not-conflict-entry ds value))
 (struct-easy
   (db-put-entry-not-written
-    do-not-conflict-values continuation-ticket-symbols))
+    do-not-conflict-entries continuation-ticket-symbols))
 (struct-easy
   (db-put-entry-written reads-of-first-write existing-value))
 
@@ -1063,7 +1064,7 @@
                     (next places)
                   #/mat entry
                     (db-put-entry-not-written
-                      do-not-conflict-values
+                      do-not-conflict-entries
                       continuation-ticket-symbols)
                     (if
                       (list-any continuation-ticket-symbols #/fn sym
@@ -1231,10 +1232,10 @@
             #/fn entry
               (expect entry
                 (db-put-entry-not-written
-                  do-not-conflict-values continuation-ticket-symbols)
+                  do-not-conflict-entries continuation-ticket-symbols)
                 entry
               #/db-put-entry-not-written
-                do-not-conflict-values
+                do-not-conflict-entries
                 (cons continuation-ticket-symbol
                   continuation-ticket-symbols))))
           
@@ -1314,15 +1315,17 @@
               (then #/nothing)
             #/mat entry
               (db-put-entry-not-written
-                do-not-conflict-values continuation-ticket-symbols)
+                do-not-conflict-entries continuation-ticket-symbols)
               (w-loop next
-                do-not-conflict-values do-not-conflict-values
+                do-not-conflict-entries do-not-conflict-entries
                 
-                (expect do-not-conflict-values
-                  (cons do-not-conflict-value do-not-conflict-values)
+                (expect do-not-conflict-entries
+                  (cons entry do-not-conflict-entries)
                   (then #/nothing)
+                #/dissect entry
+                  (do-not-conflict-entry _ do-not-conflict-value)
                 #/do-not-conflict do-not-conflict-value #/fn
-                  (next do-not-conflict-values)))
+                  (next do-not-conflict-entries)))
             #/mat entry (db-put-entry-written _ existing-value)
               (do-not-conflict existing-value #/fn
                 (then #/just ds-name))
@@ -1341,7 +1344,7 @@
                 (next parents-to-check)
               #/mat entry
                 (db-put-entry-not-written
-                  do-not-conflict-values continuation-ticket-symbols)
+                  do-not-conflict-entries continuation-ticket-symbols)
                 (next parents-to-check)
               #/mat entry (db-put-entry-written _ existing-value)
                 
@@ -1358,12 +1361,30 @@
         #/check-parents #/fn already-written
         #/mat already-written (just ds-name-written-to)
           (next-after-put ds-name-written-to db)
-        ; We write the entry for `ds-name`.
+        
+        ; We write the entry for `ds-name`, and we erase the existing
+        ; entries for names that shadowed it since they're redundant.
+        ;
+        ; TODO: There's no point in erasing the redundant entries, but
+        ; we implemented it in case we want to iterate over them for
+        ; `extfx-{pub,sub}-write` and don't want to see duplicates.
+        ; See if we'll need it for that. If not, se if we should
+        ; remove it to simplify. If we remove it, we also won't need
+        ; the `ds` slot of `do-not-conflict-entry` struct any more.
+        ;
         #/w- db
           (db-update db #/fn db-part
             (table-shadow ds-name
               (just #/db-put-entry-written reads value)
-              db-part))
+            #/expect (table-get ds-name db-part) (just entry) db-part
+            #/dissect entry
+              (db-put-entry-not-written
+                do-not-conflict-entries continuation-ticket-symbols)
+            #/list-foldl db do-not-conflict-entries #/fn db entry
+              (dissect entry
+                (do-not-conflict-entry ds-name-to-erase _)
+              #/table-shadow ds-name-to-erase (nothing) db)))
+        
         ; We write the entries for `parents-list`.
         #/w- write-parents
           (fn db then
@@ -1372,15 +1393,16 @@
                 (then db)
               #/next parents-to-write
                 (db-update db #/fn db-part
-                  (table-update-default db-part ds-name
+                  (table-update-default db-part parent
                     (db-put-entry-not-written (list) (list))
                   #/fn entry
                     (mat entry
                       (db-put-entry-not-written
-                        do-not-conflict-values
+                        do-not-conflict-entries
                         continuation-ticket-symbols)
                       (db-put-entry-not-written
-                        (cons value do-not-conflict-values)
+                        (cons (do-not-conflict-entry ds-name value)
+                          do-not-conflict-entries)
                         continuation-ticket-symbols)
                     #/mat entry
                       (db-put-entry-written _ existing-value)
