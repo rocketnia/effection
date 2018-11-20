@@ -28,10 +28,11 @@
 
 (require #/only-in effection/order eq-by-dex?)
 (require #/only-in effection/order/base
-  dexable dexableof dex-dex dex-name fuse? name? name-of ordering-eq
-  table? table-empty table-get tableof table-shadow valid-dexable?)
+  dex? dexable dexableof dex-dex dex-name fuse? name? name-of
+  ordering-eq table? table-empty table-get tableof table-shadow
+  valid-dexable?)
 (require #/prefix-in unsafe: #/only-in effection/order/unsafe
-  fuse gen:furge-internals name table)
+  dex fuse gen:dex-internals gen:furge-internals name table)
 
 
 ; TODO: Finish implementing each of these exports, and document them.
@@ -41,6 +42,7 @@
   dspace?
   dspace-shadower
   dspace-eq?
+  dex-dspace
   dspace-descends?
   
   error-definer?
@@ -58,12 +60,14 @@
   extfx-noop
   fuse-extfx
   extfx-later
+  extfx-spawn-dexable
   extfx-table-each
   
   authorized-name?
   authorized-name-dspace-descends?
   authorized-name-ancestor/c
   authorized-name-get-name
+  dex-authorized-name
   name-subname
   authorized-name-subname
   extfx-claim-unique
@@ -147,6 +151,7 @@
   (provide-struct (extfx-noop))
   (provide-struct (extfx-fused a b))
   (provide-struct (extfx-later then))
+  (provide-struct (extfx-spawn-dexable then))
   (provide-struct (extfx-table-each t on-element then))
   
   (provide-struct
@@ -248,6 +253,7 @@
   (mat v (internal:extfx-noop) #t
   #/mat v (internal:extfx-fused a b) #t
   #/mat v (internal:extfx-later then) #t
+  #/mat v (internal:extfx-spawn-dexable then) #t
   #/mat v (internal:extfx-table-each t on-element then) #t
   #/mat v
     (extfx-finish-table-each-element ds table-each-symbol k result)
@@ -318,13 +324,46 @@
     (name-subname key-name name)
     (cons name parents-list)))
 
-; TODO: See if we should offer a `dex-dspace`.
 (define/contract (dspace-eq? a b)
   (-> dspace? dspace? boolean?)
   (dissect a (internal:dspace a-runtime-symbol a-name _)
   #/dissect a (internal:dspace b-runtime-symbol b-name _)
   #/and (eq? a-runtime-symbol b-runtime-symbol)
   #/eq-by-dex? (dex-name) a-name b-name))
+
+(struct-easy (dex-internals-dspace)
+  #:other
+  
+  #:methods unsafe:gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'tag:dex-dspace)
+    
+    (define (dex-internals-autoname this)
+      'tag:dex-dspace)
+    
+    (define (dex-internals-autodex this other)
+      (just #/ordering-eq))
+    
+    (define (dex-internals-in? this x)
+      (dspace? x))
+    
+    (define (dex-internals-name-of this x)
+      (expect x (internal:dspace runtime-symbol name parents-list)
+        (nothing)
+      #/dissect name (unsafe:name name)
+      #/just #/unsafe:name #/list 'name:dspace name))
+    
+    (define (dex-internals-compare this a b)
+      (if (and (dspace? a) (dspace? b))
+        (just #/dspace-eq? a b)
+        (nothing)))
+  ])
+
+(define/contract (dex-dspace)
+  (-> dex?)
+  (unsafe:dex #/dex-internals-dspace))
 
 (define/contract (dspace-descends? ancestor descendant)
   (-> dspace? dspace? boolean?)
@@ -521,6 +560,10 @@
   (-> (-> extfx?) extfx?)
   (internal:extfx-later then))
 
+(define/contract (extfx-spawn-dexable then)
+  (-> (dexableof #/-> extfx?) extfx?)
+  (internal:extfx-spawn-dexable then))
+
 (define/contract (extfx-table-each t on-element then)
   (-> table?
     (-> any/c
@@ -578,6 +621,42 @@
   (-> authorized-name? name?)
   (dissect n (internal:authorized-name ds n parents)
     n))
+
+(struct-easy (dex-internals-authorized-name)
+  #:other
+  
+  #:methods unsafe:gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'tag:dex-authorized-name)
+    
+    (define (dex-internals-autoname this)
+      'tag:dex-authorized-name)
+    
+    (define (dex-internals-autodex this other)
+      (just #/ordering-eq))
+    
+    (define (dex-internals-in? this x)
+      (authorized-name? x))
+    
+    (define (dex-internals-name-of this x)
+      (expect x (internal:authorized-name ds n parents) (nothing)
+      #/dissect ds (internal:dspace _ (unsafe:name ds-name) _)
+      #/dissect n (unsafe:name n)
+      #/just #/unsafe:name #/list 'name:authorized-name ds-name n))
+    
+    (define (dex-internals-compare this a b)
+      (expect a (internal:authorized-name a-ds a-n a-parents)
+        (nothing)
+      #/expect b (internal:authorized-name b-ds b-n b-parents)
+        (nothing)
+      #/just #/and (dspace-eq? a b) (eq-by-dex? (dex-name) a-n b-n)))
+  ])
+
+(define/contract (dex-authorized-name)
+  (-> dex?)
+  (unsafe:dex #/dex-internals-authorized-name))
 
 (define/contract (name-subname key-name original-name)
   (-> name? name? name?)
@@ -809,7 +888,8 @@
 ; So instead of pursuing those other approaches directly, what if we
 ; simply implemented a state resource that allowed
 ; `(dexableof #/-> extfn?)` values to be written as a way to spawn
-; processes?
+; processes? (TODO: Update this comment to reflect that we've now
+; implemented this as `extfx-spawn-dexable`.)
 ;
 ; Well, then we run across the same design problem as before: What
 ; happens when two cousin shadowing definition spaces write to the
@@ -825,6 +905,8 @@
 ;
 ; Hmm, this means we should make `dspace?` and `authorized-name?`
 ; values dexable so they can be used from those dexable processes.
+; (TODO: Update this comment to reflect that we've now implemented
+; `dex-dspace` and `dex-authorized-name`.)
 ;
 ; It seems like with this infrastructure in place, we'll be able to
 ; emulate the other approaches above like so: Represent definition
@@ -1113,6 +1195,7 @@
     db
     (hasheq
       'claim-unique (table-empty)
+      'spawn-dexable (table-empty)
       'table-each (hasheq)
       'put (table-empty)
       'private-put (table-empty)
@@ -1666,6 +1749,21 @@
         processes)
     #/mat process (internal:extfx-later then)
       (next-one-fruitful #/process-entry reads (then))
+    #/mat process (internal:extfx-spawn-dexable then)
+      (dissect then (dexable dex then)
+      #/dissect (name-of dex then) (just name)
+      #/mat (table-get name (hash-ref db 'spawn-dexable)) (just _)
+        ; TODO: In this case, where we discover the process has
+        ; already been spawned, see if we should somehow store the
+        ; current value of `reads` into the `db`. Is there any way we
+        ; would use this information even if we had it stored?
+        (next-zero)
+      #/next-full
+        (cons (process-entry reads (then)) processes)
+        rev-next-processes unspent-tickets
+        (hash-update db 'spawn-dexable #/fn db-spawn-dexable
+          (table-shadow name (just #/trivial) db-spawn-dexable))
+        rev-errors #t)
     #/mat process (internal:extfx-table-each t on-element then)
       (dissect t (unsafe:table t)
       #/w- table-each-symbol (gensym)
