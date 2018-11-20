@@ -69,7 +69,10 @@
   extfx-claim-unique
   
   optionally-dexable?
-  optionally-dexable-of
+  ; TODO: See if we'll use `optionally-dexable-of`. We were once using
+  ; it in the signature of `extfx-sub-write`, but its `unique-name`
+  ; parameter now makes that unnecessary.
+;  optionally-dexable-of
   optionally-dexable-once
   optionally-dexable-dexable
   
@@ -160,8 +163,8 @@
     (extfx-private-get ds putter-name getter-name on-stall then))
   
   (provide-struct (extfx-establish-pubsub ds pubsub-name then))
-  (provide-struct (extfx-pub-write ds p pubber-name on-conflict arg))
-  (provide-struct (extfx-sub-write ds s subber-name on-conflict func))
+  (provide-struct (extfx-pub-write ds p unique-name on-conflict arg))
+  (provide-struct (extfx-sub-write ds s unique-name on-conflict func))
   
   (provide-struct (extfx-freshen ticket on-conflict then))
   (provide-struct (extfx-split-list ticket times on-conflict then))
@@ -270,9 +273,9 @@
     #t
   
   #/mat v (internal:extfx-establish-pubsub ds pubsub-name then) #t
-  #/mat v (internal:extfx-pub-write ds p pubber-name on-conflict arg)
+  #/mat v (internal:extfx-pub-write ds p unique-name on-conflict arg)
     #t
-  #/mat v (internal:extfx-sub-write ds s subber-name on-conflict func)
+  #/mat v (internal:extfx-sub-write ds s unique-name on-conflict func)
     #t
   
   #/mat v (internal:extfx-freshen ticket on-conflict then) #t
@@ -734,6 +737,109 @@
     ds putter-name getter-name on-stall then))
 
 
+; An Effection pubsub is a monotonic state resource that can be used
+; for extensibility purposes where the open-world assumption (OWA) is
+; held. Each function written to a sub will be called exactly once for
+; each argument written to a pub, much like event listeners being
+; invoked with event values.
+;
+; When `dspace-shadower` is in use, pub or sub writes to a shadowing
+; definition space will only interact with sub or pub writes to the
+; same definition space or any of its ancestors. If two definition
+; spaces are cousins or completely unrelated, their pub and sub writes
+; will not interact.
+;
+; TODO:
+;
+; It may be possible to come up with a design for `extfx-pub-write`
+; and `extfx-sub-write` where their `unique-name` parameter is
+; replaced with a name that doesn't have to be unique. For instance,
+; the `arg` and `func` parameters could be `optionally-dexable?`
+; values such that two writes of the same dexable value to the same
+; pub or sub under the same "pubber name" or "subber name" would
+; combine together to act like a single write.
+;
+; However, it seems to be difficult to account for shadowing
+; definition spaces this way. If writes of two different values are
+; made to the same pubber name on two cousin definition spaces, that's
+; fine and should lead to processes being spawned for each of them.
+; However, if writes of the same value are made to those places, and
+; then a write of the same value is made to a common ancestor
+; definition space, then once all is said and done, there should only
+; have been processes spawned for one of these writes.
+;
+; There are a few ways we could approach that:
+;
+;   - We could spawn processes only once if the same value is written
+;     to two cousins, even if that value is never written to one of
+;     their shared ancestors. Unfortunately, this essentially means
+;     *all* values we might like to write to two different cousins
+;     must be dexable (as opposed to optionally dexable).
+;
+;   - We could consider the identity of the definition space we're
+;     writing to to be part of the name we're writing to. That way,
+;     only writes to the exact same definition space can combine or
+;     conflict with each other; writes to two different definition
+;     spaces are always considered to be writes to two different
+;     names.
+;
+;   - We could consider the identity of the definition space we're
+;     writing to to be part of the *value* we're writing. That way,
+;     writes to a definition space will always conflict with writes to
+;     an ancestor or descendant thereof, since this extra part of the
+;     value will differ.
+;
+; The latter two approaches seem the most likely to pay off well. The
+; last one especially seems likely to be the most expressive in the
+; right ways.
+;
+; The approach we're taking now, where the "name we're writing to" is
+; claimed as a unique name, is sort of an inexpressive baseline while
+; we figure out which of these others (or which combination of them!)
+; would be best.
+;
+; Hmm, the reason our unique-name-based approach is inexpressive is
+; that two processes can't use it to coordinate to spawn a single
+; process. That is, if two processes perform writes, they're always
+; under two names, and hence if they spawn any processes, they spawn a
+; different process for each of those two writes. In the other
+; approaches, two processes can write the same dexable value to the
+; same name, spawning a single process as a result.
+;
+; So instead of pursuing those other approaches directly, what if we
+; simply implemented a state resource that allowed
+; `(dexableof #/-> extfn?)` values to be written as a way to spawn
+; processes?
+;
+; Well, then we run across the same design problem as before: What
+; happens when two cousin shadowing definition spaces write to the
+; same name and then one of their shared ancestors does too?
+;
+; Fortunately, in this case, the answer is much clearer: The value
+; written is always dexable, so we don't need to store it under "name"
+; apart from the name obtained from the value itself; and since
+; Effection-safe functions and `extfn?` effects are deterministic and
+; `extfn?` effects are idempotent, we never need to run the same
+; process more than once, even if it's written to different definition
+; spaces.
+;
+; Hmm, this means we should make `dspace?` and `authorized-name?`
+; values dexable so they can be used from those dexable processes.
+;
+; It seems like with this infrastructure in place, we'll be able to
+; emulate the other approaches above like so: Represent definition
+; spaces (as far as those approaches are concerned) as pairs of a
+; definition space and an unclaimed unique authorized name. Perform
+; pub writes and sub writes by performing pub writes of certain
+; compound data structures which include unique names derived from
+; the one used. These are each processed by a single sub write at a
+; definition space that all the others descend from. This sub write
+; acts by spawning certain dexable processes, thereby achieving the
+; spawn-only-once behavior we expect of dexable pub and sub writes.
+; Differences between the three approaches can be accomplished using
+; differences in this implementation. (Will this actually work? I'm
+; not sure of the details here.)
+
 (define/contract (pub? v)
   (-> any/c boolean?)
   (internal:pub? v))
@@ -793,27 +899,27 @@
     [_ extfx?])
   (internal:extfx-establish-pubsub ds pubsub-name then))
 
-(define/contract (extfx-pub-write ds p pubber-name on-conflict arg)
+(define/contract (extfx-pub-write ds p unique-name on-conflict arg)
   (->i
     (
       [ds dspace?]
       [p (ds) (pub-ancestor/c ds)]
-      [pubber-name (ds) (authorized-name-ancestor/c ds)]
+      [unique-name (ds) (authorized-name-ancestor/c ds)]
       [on-conflict success-or-error-definer?]
-      [arg optionally-dexable?])
+      [arg any/c])
     [_ extfx?])
-  (internal:extfx-pub-write ds p pubber-name on-conflict arg))
+  (internal:extfx-pub-write ds p unique-name on-conflict arg))
 
-(define/contract (extfx-sub-write ds s subber-name on-conflict func)
+(define/contract (extfx-sub-write ds s unique-name on-conflict func)
   (->i
     (
       [ds dspace?]
       [s (ds) (sub-ancestor/c ds)]
-      [pubber-name (ds) (authorized-name-ancestor/c ds)]
+      [unique-name (ds) (authorized-name-ancestor/c ds)]
       [on-conflict success-or-error-definer?]
-      [func (optionally-dexable-of #/-> any/c extfx?)])
+      [func (-> any/c extfx?)])
     [_ extfx?])
-  (internal:extfx-sub-write ds s subber-name on-conflict func))
+  (internal:extfx-sub-write ds s unique-name on-conflict func))
 
 
 (define/contract (extfx-freshen ticket on-conflict then)
@@ -915,6 +1021,8 @@
     do-not-conflict-entries continuation-ticket-symbols))
 (struct-easy
   (db-put-entry-written reads-of-first-write existing-value))
+(struct-easy (pubsub-write-entry reads value))
+(struct-easy (db-pubsub-entry descendants pub-writes sub-writes))
 
 ; TODO: Clients can abuse a call to `run-extfx!` just to generate a
 ; fresh `name?` value for use outside that call. If there's anything
@@ -1008,6 +1116,7 @@
       'table-each (hasheq)
       'put (table-empty)
       'private-put (table-empty)
+      'pubsub (table-empty)
       'finish-run (nothing))
     
     rev-errors (list)
@@ -1204,6 +1313,23 @@
           
           #t))
     
+    #/w- claim-unique
+      (fn n reads db on-error default-message then
+        (w- n (authorized-name-get-name n)
+        #/expect (table-get n (hash-ref db 'claim-unique)) (nothing)
+          (next-purging on-error default-message
+            (fn reads
+              (mat (table-get n #/hash-ref reads 'claim-unique)
+                (just _)
+                #t
+                #f)))
+        #/w- reads
+          (hash-update reads 'claim-unique #/fn reads-claim-unique
+            (table-shadow n (just #/trivial) reads-claim-unique))
+        #/w- db
+          (hash-update db 'claim-unique #/fn db-claim-unique
+            (table-shadow n (just #/trivial) db-claim-unique))
+        #/then reads db))
     #/w- handle-generic-put
       (fn ds db-update make-finish on-cont-unspent comp
         (dissect ds (internal:dspace _ ds-name _)
@@ -1448,6 +1574,65 @@
               (table-shadow place (just #/trivial) reads-part))
             
             (then #/optionally-dexable-value value))))
+    #/w- handle-generic-pubsub-write
+      (fn ds pubsub-name write-entry get-other-writes spawn
+        (dissect ds (internal:dspace _ ds-name parents-list)
+        #/w- db
+          (hash-update db 'pubsub #/fn db-pubsub
+            (table-update-default db-pubsub pubsub-name (table-empty)
+            #/fn db-pubsub-for-name
+              (table-update-default db-pubsub-for-name ds-name
+                (db-pubsub-entry (table-empty) (list) (list))
+                write-entry)))
+        #/w- add-descendants
+          (fn db then
+            (w-loop next parents parents-list db db
+              (expect parents (cons parent parents)
+                (then db)
+              #/next parents
+                (hash-update db 'pubsub #/fn db-pubsub
+                  (table-update-default db-pubsub pubsub-name
+                    (table-empty)
+                  #/fn db-pubsub-for-name
+                    (table-update-default db-pubsub-for-name parent
+                      (db-pubsub-entry (table-empty) (list) (list))
+                    #/dissectfn
+                      (db-pubsub-entry
+                        descendants pub-writes sub-writes)
+                      (db-pubsub-entry
+                        (table-shadow ds-name (just #/trivial)
+                          descendants)
+                        pub-writes
+                        sub-writes)))))))
+        #/add-descendants db #/fn db
+        #/w- other-writes
+          (expect (table-get (hash-ref db 'pubsub) pubsub-name)
+            (just db-pubsub-for-name)
+            (list)
+          #/append
+            (list-bind (cons ds-name parents-list) #/fn parent
+              (expect (table-get db-pubsub-for-name parent) (just entry)
+                (list)
+              #/get-other-writes entry))
+            (dissect (table-get db-pubsub-for-name ds-name)
+              (just #/db-pubsub-entry (unsafe:table descendants) _ _)
+            #/list-bind (hash->list descendants) #/dissectfn (cons k v)
+              (dissect (table-get db-pubsub-for-name (unsafe:name k))
+                (just entry)
+              #/get-other-writes entry)))
+        #/w-loop next processes processes other-writes other-writes
+          (expect other-writes (cons other-write-entry other-writes)
+            (next-full
+              processes rev-next-processes unspent-tickets db rev-errors
+              #t)
+          #/dissect other-write-entry
+            (pubsub-write-entry write-reads other-value)
+          #/next
+            (cons
+              (process-entry (reads-union reads write-reads)
+                (spawn other-value))
+              processes)
+            other-writes)))
     #/w- parse-ticket
       (fn ticket
         (mat ticket
@@ -1570,14 +1755,9 @@
         n on-conflict on-familiarity-ticket-unspent then)
       (expect (authorized-name-dspace-descends? n root-ds) #t
         (next-with-error "Expected n to be a name authorized for the extfx runner's root definition space")
-      #/w- n (authorized-name-get-name n)
-      #/expect (table-get n (hash-ref db 'claim-unique)) (nothing)
-        (next-purging on-conflict
-          "Tried to claim a name unique twice"
-          (fn reads
-            (mat (table-get n #/hash-ref reads 'claim-unique) (just _)
-              #t
-              #f)))
+      #/claim-unique n reads db on-conflict
+        "Tried to claim a name unique twice"
+      #/fn reads db
       #/w- fresh-ticket-symbol (gensym)
       #/w- fresh-name
         (unsafe:name #/list 'name:claim-unique-result (gensym))
@@ -1602,17 +1782,14 @@
       #/next-full
         (cons
           (process-entry
-            (hash-update reads 'claim-unique #/fn reads-claim-unique
-              (table-shadow n (just #/trivial) reads-claim-unique))
+            reads
             (then fresh-authorized-name familiarity-ticket))
           processes)
         rev-next-processes
         (hash-set unspent-tickets familiarity-ticket-symbol
           (unspent-ticket-entry-familiarity-ticket
             on-familiarity-ticket-unspent root-ds fresh-name))
-        (hash-update db 'claim-unique #/fn db-claim-unique
-          (table-shadow n (just #/trivial) db-claim-unique))
-        rev-errors #t)
+        db rev-errors #t)
     
     #/mat process (internal:extfx-put ds n on-cont-unspent comp)
       (expect (dspace-descends? root-ds ds) #t
@@ -1728,11 +1905,41 @@
           (internal:pub ds pubsub-name)
           (internal:sub ds pubsub-name)))
     #/mat process
-      (internal:extfx-pub-write ds p pubber-name on-conflict arg)
-      'TODO
+      (internal:extfx-pub-write ds p unique-name on-conflict arg)
+      (expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/dissect p (internal:pub _ pubsub-name)
+      #/claim-unique unique-name reads db on-conflict
+        "Tried to claim a name unique twice"
+      #/fn reads db
+      #/handle-generic-pubsub-write ds pubsub-name
+        (dissectfn (db-pubsub-entry descendants pub-writes sub-writes)
+          (db-pubsub-entry
+            descendants
+            (cons (pubsub-write-entry reads arg) pub-writes)
+            sub-writes))
+        (dissectfn (db-pubsub-entry descendants pub-writes sub-writes)
+          sub-writes)
+        (fn func
+          (func arg)))
     #/mat process
-      (internal:extfx-sub-write ds s subber-name on-conflict func)
-      'TODO
+      (internal:extfx-sub-write ds s unique-name on-conflict func)
+      (expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/dissect s (internal:sub _ pubsub-name)
+      #/claim-unique unique-name reads db on-conflict
+        "Tried to claim a name unique twice"
+      #/fn reads db
+      #/handle-generic-pubsub-write ds pubsub-name
+        (dissectfn (db-pubsub-entry descendants pub-writes sub-writes)
+          (db-pubsub-entry
+            descendants
+            pub-writes
+            (cons (pubsub-write-entry reads func) sub-writes)))
+        (dissectfn (db-pubsub-entry descendants pub-writes sub-writes)
+          pub-writes)
+        (fn arg
+          (func arg)))
     
     #/mat process (internal:extfx-freshen ticket on-conflict then)
       (dissect (parse-ticket ticket)
