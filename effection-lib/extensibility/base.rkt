@@ -22,7 +22,8 @@
   hash-ref-maybe hash-v-all hash-v-any hash-v-map)
 (require #/only-in lathe-comforts/list
   list-any list-bind list-foldl list-map list-zip-map nat->maybe)
-(require #/only-in lathe-comforts/maybe just maybe-bind nothing)
+(require #/only-in lathe-comforts/maybe
+  just maybe? maybe-bind nothing)
 (require #/only-in lathe-comforts/struct istruct/c struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
 
@@ -147,7 +148,8 @@
   
   (provide-struct
     (continuation-ticket ticket-symbol on-unspent ds then))
-  (provide-struct (familiarity-ticket ticket-symbol on-unspent ds n))
+  (provide-struct
+    (familiarity-ticket ticket-symbol on-unspent ds n disbursements))
   
   
   (provide-struct (extfx-noop))
@@ -237,6 +239,44 @@
 (define/contract (trivial-union a b)
   (-> trivial? trivial? trivial?)
   (trivial))
+
+; TODO: Consider putting this into `effection/order`.
+;
+; TODO: See if some of the other places we use `unsafe:table` can use
+; this or `table-v-map-maybe` instead.
+;
+(define/contract (table-kv-map-maybe t func)
+  (-> table? (-> name? any/c maybe?) table?)
+  (dissect t (unsafe:table t)
+  #/unsafe:table #/list-bind (hash->list t) #/dissectfn (cons k v)
+    (expect (func (unsafe:name k) v) (just v)
+      (list)
+    #/list #/cons k v)))
+
+; TODO: Consider putting this into `effection/order`.
+(define/contract (table-v-map-maybe t func)
+  (-> table? (-> any/c maybe?) table?)
+  (table-kv-map-maybe t #/fn k v #/func v))
+
+; TODO: Consider putting this into `effection/order/unsafe`.
+(define/contract (unsafe-table-kv-any-short-circuiting t body)
+  (-> table? (-> name? any/c boolean?) boolean?)
+  (dissect t (unsafe:table t)
+  #/list-any (hash->list t) #/dissectfn (cons k v)
+    (body (unsafe:name k) v)))
+
+; TODO: Consider putting this into `effection/order/unsafe`.
+(define/contract (unsafe-table-v-any-short-circuiting t body)
+  (-> table? (-> any/c boolean?) boolean?)
+  (unsafe-table-kv-any-short-circuiting t #/fn k v #/body v))
+
+; TODO: Consider putting this into `effection/order`.
+(define/contract (table-empty? t)
+  (-> table? boolean?)
+  (dissect t (unsafe:table t)
+  #/mat t (list)
+    #t
+    #f))
 
 
 
@@ -488,13 +528,17 @@
   (mat v
     (internal:continuation-ticket ticket-symbol on-unspent ds then)
     #t
-  #/mat v (internal:familiarity-ticket ticket-symbol on-unspent ds n)
+  #/mat v
+    (internal:familiarity-ticket
+      ticket-symbol on-unspent ds n disbursements)
     #t
     #f))
 
 (define/contract (intuitionistic-ticket? v)
   (-> any/c boolean?)
-  (mat v (internal:familiarity-ticket ticket-symbol on-unspent ds n)
+  (mat v
+    (internal:familiarity-ticket
+      ticket-symbol on-unspent ds n disbursements)
     #t
     #f))
 
@@ -540,7 +584,8 @@
 (define/contract (familiarity-ticket-dspace-descends? ticket ds)
   (-> familiarity-ticket? dspace? boolean?)
   (dissect ticket
-    (internal:familiarity-ticket ticket-symbol on-unspent ticket-ds n)
+    (internal:familiarity-ticket
+      ticket-symbol on-unspent ticket-ds n disbursements)
   #/dspace-descends? ticket-ds ds))
 
 (define/contract (familiarity-ticket-dspace-ancestor/c ds)
@@ -608,9 +653,9 @@
 
 (define/contract (authorized-name-subname-descends? a b)
   (-> authorized-name? authorized-name? boolean?)
-  (dissect a (internal:authorized-name a-ds a-name a-parents)
-  #/dissect b (internal:authorized-name b-ds b-name b-parents)
-  #/mat (table-get a-name b-parents) (just _)
+  (dissect a (internal:authorized-name a-ds a-n a-parents)
+  #/dissect b (internal:authorized-name b-ds b-n b-parents)
+  #/mat (table-get a-n b-parents) (just _)
     #t
     #f))
 
@@ -924,7 +969,7 @@
 ;
 ; So instead of pursuing those other approaches directly, what if we
 ; simply implemented a state resource that allowed
-; `(dexableof #/-> extfn?)` values to be written as a way to spawn
+; `(dexableof #/-> extfs?)` values to be written as a way to spawn
 ; processes? (TODO: Update this comment to reflect that we've now
 ; implemented this as `extfx-spawn-dexable`.)
 ;
@@ -935,8 +980,8 @@
 ; Fortunately, in this case, the answer is much clearer: The value
 ; written is always dexable, so we don't need to store it under "name"
 ; apart from the name obtained from the value itself; and since
-; Effection-safe functions and `extfn?` effects are deterministic and
-; `extfn?` effects are idempotent, we never need to run the same
+; Effection-safe functions and `extfx?` effects are deterministic and
+; `extfx?` effects are idempotent, we never need to run the same
 ; process more than once, even if it's written to different definition
 ; spaces.
 ;
@@ -1140,7 +1185,10 @@
 
 (struct-easy (process-entry reads process))
 (struct-easy
-  (unspent-ticket-entry-familiarity-ticket on-unspent ds n))
+  (disbursement-entry source-ds source-name target-ds target-name))
+(struct-easy
+  (unspent-ticket-entry-familiarity-ticket
+    on-unspent ds n disbursements))
 (struct-easy (unspent-ticket-entry-anonymous on-unspent))
 (struct-easy (db-table-each-entry-incomplete))
 (struct-easy (db-table-each-entry-complete reads v))
@@ -1275,7 +1323,7 @@
           #/dissectfn (cons ticket-symbol entry)
             (mat entry
               (unspent-ticket-entry-familiarity-ticket
-                on-unspent ds n)
+                on-unspent ds n disbursements)
               on-unspent
             #/mat entry (unspent-ticket-entry-anonymous on-unspent)
               on-unspent
@@ -1795,14 +1843,16 @@
               (internal:continuation-ticket
                 new-ticket-symbol on-unspent ds then)))
         #/mat ticket
-          (internal:familiarity-ticket ticket-symbol on-unspent ds n)
+          (internal:familiarity-ticket
+            ticket-symbol on-unspent ds n disbursements)
           (list
             ticket-symbol
             ds
-            (unspent-ticket-entry-familiarity-ticket on-unspent ds n)
+            (unspent-ticket-entry-familiarity-ticket
+              on-unspent ds n disbursements)
             (fn new-ticket-symbol
               (internal:familiarity-ticket
-                new-ticket-symbol on-unspent ds n)))
+                new-ticket-symbol on-unspent ds n disbursements)))
         #/error "Internal error: Encountered an unrecognized ticket value"))
     
     
@@ -1931,6 +1981,7 @@
       #/w- on-familiarity-ticket-unspent
         (error-definer-or-message on-familiarity-ticket-unspent
           "Expected an extfx-claim-unique continuation to be continued")
+      #/w- disbursements (table-empty)
       #/w- familiarity-ticket
         (internal:familiarity-ticket
           familiarity-ticket-symbol on-familiarity-ticket-unspent
@@ -1942,7 +1993,7 @@
           ;
           root-ds
           
-          fresh-name)
+          fresh-authorized-name disbursements)
       #/next-full
         (cons
           (process-entry
@@ -1952,7 +2003,8 @@
         rev-next-processes
         (hash-set unspent-tickets familiarity-ticket-symbol
           (unspent-ticket-entry-familiarity-ticket
-            on-familiarity-ticket-unspent root-ds fresh-name))
+            on-familiarity-ticket-unspent root-ds
+            fresh-authorized-name disbursements))
         db rev-errors #t)
     
     #/mat process (internal:extfx-put ds n on-cont-unspent comp)
@@ -2181,31 +2233,47 @@
     #/mat process
       (internal:extfx-ft-subname ticket key on-conflict then)
       (dissect ticket
-        (internal:familiarity-ticket ticket-symbol on-unspent ds n)
+        (internal:familiarity-ticket
+          ticket-symbol on-unspent ds n disbursements)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/spend-ticket ticket-symbol reads unspent-tickets on-conflict
         "Tried to spend a ticket twice"
       #/fn reads unspent-tickets
       #/w- fresh-ticket-symbol (gensym)
-      #/w- n (name-subname key n)
+      #/w- n (authorized-name-subname key n)
+      #/w- disbursements
+        (table-v-map-maybe disbursements #/fn disb-for-ds
+          (w- disb-for-ds
+            (table-kv-map-maybe disb-for-ds #/fn entry
+              (dissect entry
+                (disbursement-entry
+                  source-ds source-name target-ds target-name)
+              #/if (authorized-name-subname-descends? n source-name)
+                (just entry)
+                (nothing)))
+          #/if (table-empty? disb-for-ds)
+            (nothing)
+            (just disb-for-ds)))
       #/next-full
         (cons
           (process-entry
             reads
             (then
             #/internal:familiarity-ticket
-              fresh-ticket-symbol on-unspent ds n))
+              fresh-ticket-symbol on-unspent ds n disbursements))
           processes)
         rev-next-processes
         (hash-set unspent-tickets fresh-ticket-symbol
-          (unspent-ticket-entry-familiarity-ticket on-unspent ds n))
+          (unspent-ticket-entry-familiarity-ticket
+            on-unspent ds n disbursements))
         db rev-errors #t)
     #/mat process
       (internal:extfx-ft-restrict
         ticket new-ds on-conflict on-restriction-error then)
       (dissect ticket
-        (internal:familiarity-ticket ticket-symbol on-unspent ds n)
+        (internal:familiarity-ticket
+          ticket-symbol on-unspent ds n disbursements)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/expect (dspace-descends? ds new-ds) #t
@@ -2215,18 +2283,31 @@
         "Tried to spend a ticket twice"
       #/fn reads unspent-tickets
       #/w- fresh-ticket-symbol (gensym)
+      #/w- disbursements
+        (table-v-map-maybe disbursements #/fn disb-for-ds
+          (w- disb-for-ds
+            (table-kv-map-maybe disb-for-ds #/fn entry
+              (dissect entry
+                (disbursement-entry
+                  source-ds source-name target-ds target-name)
+              #/if (dspace-descends? new-ds source-ds)
+                (just entry)
+                (nothing)))
+          #/if (table-empty? disb-for-ds)
+            (nothing)
+            (just disb-for-ds)))
       #/next-full
         (cons
           (process-entry
             reads
             (then
             #/internal:familiarity-ticket
-              fresh-ticket-symbol on-unspent new-ds n))
+              fresh-ticket-symbol on-unspent new-ds n disbursements))
           processes)
         rev-next-processes
         (hash-set unspent-tickets fresh-ticket-symbol
           (unspent-ticket-entry-familiarity-ticket
-            on-unspent new-ds n))
+            on-unspent new-ds n disbursements))
         db rev-errors #t)
     
     #/mat process
@@ -2236,7 +2317,9 @@
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
       #/dissect collector-familiarity-ticket
-        (internal:familiarity-ticket ticket-symbol _ _ collector-name)
+        (internal:familiarity-ticket
+          ticket-symbol _ _ collector-name _)
+      #/w- collector-name (authorized-name-get-name collector-name)
       #/spend-ticket
         ticket-symbol reads unspent-tickets
         on-familiarity-double-spend
@@ -2286,22 +2369,39 @@
     #/mat process (internal:extfx-collect ds collector-name then)
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
-      ; TODO: Once we support `extfx-disburse` and `extfx-imburse`,
-      ; update this check so that it also checks for unspent
-      ; familiarity tickets for names which could imburse a
-      ; familiarity ticket for an ancestor of `collector-name`.
+      #/dissect ds (internal:dspace _ ds-name ds-parents-list)
+      #/w- ds-improper-parents (cons ds-name ds-parents-list)
+      #/dissect collector-name
+        (internal:authorized-name _ collector-name collector-parents)
+      #/w- collector-improper-parents
+        (cons collector-name collector-parents)
+      
+      ; We check if there are any outstanding familiarity tickets for
+      ; ancestors of `collector-name`, or which can access
+      ; disbursements of ancestors of `collector-name`. If there are,
+      ; this process is currently stalled.
       #/if
         (hash-v-any unspent-tickets
         #/expectfn
           (unspent-ticket-entry-familiarity-ticket
-            on-unspent ticket-ds ticket-n)
+            on-unspent ticket-ds ticket-n disbursements)
           #f
-          (and
-            (dspace-descends? ticket-ds ds)
-            (authorized-name-subname-descends?
-              ticket-n collector-name)))
+          (w- is-this-one
+            (fn ticket-ds ticket-n
+              (and
+                (dspace-descends? ticket-ds ds)
+                (authorized-name-subname-descends?
+                  ticket-n collector-name)))
+          #/or (is-this-one ticket-ds ticket-n)
+          #/unsafe-table-v-any-short-circuiting disbursements
+          #/fn disb-for-ds
+          #/unsafe-table-v-any-short-circuiting disb-for-ds
+          #/dissectfn
+            (disbursement-entry
+              source-ds source-name target-ds target-name)
+            (is-this-one target-ds target-name)))
         (next-fruitless)
-      #/dissect ds (internal:dspace _ ds-name parents-list)
+      
       #/w- collector-name (authorized-name-get-name collector-name)
       #/expect (table-get collector-name (hash-ref db 'contribute))
         (just db-contribute-for-collector)
@@ -2311,11 +2411,10 @@
       #/w- db-contribute-for-collector
         (hash->list db-contribute-for-collector)
       #/w- contributions
-        (list-bind (cons ds-name parents-list) #/fn parent
-        #/list-bind db-contribute-for-collector
+        (list-bind db-contribute-for-collector
         #/dissectfn
           (cons contributor-name-rep db-contribute-for-contributor)
-          (w-loop next parents-to-check (cons ds-name parents-list)
+          (w-loop next parents-to-check ds-improper-parents
             (expect parents-to-check (cons parent parents-to-check)
               (list)
             #/expect (table-get parent db-contribute-for-contributor)
