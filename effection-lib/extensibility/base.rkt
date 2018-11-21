@@ -1736,13 +1736,8 @@
                     #/error "Internal error: Encountered an unknown kind of db-put entry"))))))
         #/write-parents db #/fn db
         #/next-after-put ds-name db))
-    #/w- handle-generic-get
-      (fn ds db-get db-update then
-        ; If there has not yet been a definition installed for this
-        ; purpose in this definition space, we set this process aside
-        ; and come back to it later. If there has, we call `then` with
-        ; that defined value and set up its result process to be
-        ; handled next.
+    #/w- handle-generic-get-next
+      (fn reads ds db-get db-update next-then
         (dissect ds (internal:dspace _ ds-name parents-list)
         #/expect (db-get db) (just db-part) (next-fruitless)
         #/w-loop next places-to-check (cons ds-name parents-list)
@@ -1753,7 +1748,7 @@
           #/expect value
             (db-put-entry-written reads-of-first-write existing-value)
             (next places-to-check)
-          #/next-one-fruitful #/process-entry
+          #/next-then
             
             ; TODO: By merging `reads-of-first-write` with these other
             ; reads, we simplify the process of purging processes when
@@ -1773,7 +1768,17 @@
             #/db-update reads #/fn reads-part
               (table-shadow place (just #/trivial) reads-part))
             
-            (then #/optionally-dexable-value value))))
+            (optionally-dexable-value value))))
+    #/w- handle-generic-get
+      (fn ds db-get db-update then
+        ; If there has not yet been a definition installed for this
+        ; purpose in this definition space, we set this process aside
+        ; and come back to it later. If there has, we call `then` with
+        ; that defined value and set up its result process to be
+        ; handled next.
+        (handle-generic-get-next reads ds db-get db-update
+        #/fn reads value
+          (next-one-fruitful #/process-entry reads (then value))))
     #/w- handle-generic-pubsub-write
       (fn ds pubsub-name write-entry get-other-writes spawn
         (dissect ds (internal:dspace _ ds-name parents-list)
@@ -2237,13 +2242,13 @@
           (expect unspent-ticket
             (unspent-ticket-entry-familiarity-ticket
               on-unspent unspent-ds unspent-n disbursements)
-            ticket
+            unspent-ticket
           #/expect
             (and
               (dspace-descends? unspent-ds ds)
               (authorized-name-subname-descends? unspent-n hub-name))
             #t
-            ticket
+            unspent-ticket
           #/unspent-ticket-entry-familiarity-ticket
             on-unspent unspent-ds unspent-n
             (dissect ds (internal:dspace _ ds-name _)
@@ -2266,7 +2271,36 @@
     #/mat process
       (internal:extfx-imburse
         ds hub-familiarity-ticket on-conflict then)
-      'TODO
+      (expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/dissect hub-familiarity-ticket
+        (internal:familiarity-ticket hub-ticket-symbol _)
+      #/spend-ticket
+        hub-ticket-symbol reads unspent-tickets on-conflict
+        "Tried to spend a ticket twice"
+      #/fn reads unspent-tickets hub-entry
+      #/dissect hub-entry
+        (unspent-ticket-entry-familiarity-ticket _ _ hub-name _)
+      #/w- hub-unauthorized-name (authorized-name-get-name hub-name)
+      #/handle-generic-get-next reads ds
+        (fn db
+          (table-get hub-unauthorized-name (hash-ref db 'disburse)))
+        (fn db func
+          (hash-update db 'disburse #/fn db-disburse
+            (table-update-default db-disburse hub-unauthorized-name
+              (table-empty)
+              func)))
+      #/fn reads value
+      #/dissect value (list disbursed-spent-ticket entry)
+      #/dissect (parse-ticket disbursed-spent-ticket)
+        (list _ _ wrap-fresh)
+      #/w- fresh-ticket-symbol (gensym)
+      #/w- fresh-ticket (wrap-fresh fresh-ticket-symbol)
+      #/next-full
+        (cons (process-entry reads (then fresh-ticket)) processes)
+        rev-next-processes
+        (hash-set unspent-tickets fresh-ticket-symbol entry)
+        db rev-errors #t)
     #/mat process
       (internal:extfx-ct-continue ticket on-conflict value)
       (dissect ticket
