@@ -17,9 +17,9 @@
 (require #/only-in racket/math natural?)
 
 (require #/only-in lathe-comforts
-  dissect dissectfn expect fn mat w- w-loop)
+  dissect dissectfn expect expectfn fn mat w- w-loop)
 (require #/only-in lathe-comforts/hash
-  hash-ref-maybe hash-v-all hash-v-map)
+  hash-ref-maybe hash-v-all hash-v-any hash-v-map)
 (require #/only-in lathe-comforts/list
   list-any list-bind list-foldl list-map list-zip-map nat->maybe)
 (require #/only-in lathe-comforts/maybe just maybe-bind nothing)
@@ -56,6 +56,8 @@
   continuation-ticket?
   continuation-ticket-of
   familiarity-ticket?
+  familiarity-ticket-dspace-descends?
+  familiarity-ticket-dspace-ancestor/c
   
   extfx-noop
   fuse-extfx
@@ -65,7 +67,7 @@
   
   authorized-name?
   authorized-name-dspace-descends?
-  authorized-name-ancestor/c
+  authorized-name-dspace-ancestor/c
   authorized-name-get-name
   dex-authorized-name
   name-subname
@@ -187,7 +189,8 @@
   
   (provide-struct
     (extfx-contribute
-      ds collector-familiarity-ticket on-cont-unspent comp))
+      ds collector-familiarity-ticket contributor-name
+      on-familiarity-double-spend on-cont-unspent comp))
   (provide-struct (extfx-collect ds collector-name then))
   
   
@@ -244,6 +247,9 @@
 (struct-easy
   (extfx-finish-private-put
     ds putter-name getter-name on-conflict value))
+(struct-easy
+  (extfx-finish-contribute
+    ds collector-name contributor-name on-value-conflict value))
 
 (struct-easy (extfx-finish-run ds value))
 
@@ -304,7 +310,12 @@
   
   #/mat v
     (internal:extfx-contribute
-      ds collector-familiarity-ticket on-cont-unspent comp)
+      ds collector-familiarity-ticket contributor-name
+      on-familiarity-double-spend on-cont-unspent comp)
+    #t
+  #/mat v
+    (extfx-finish-contribute
+      ds collector-name contributor-name on-value-conflict value)
     #t
   #/mat v (internal:extfx-collect ds collector-name then) #t
   
@@ -526,6 +537,24 @@
   (-> any/c boolean?)
   (internal:familiarity-ticket? v))
 
+(define/contract (familiarity-ticket-dspace-descends? ticket ds)
+  (-> familiarity-ticket? dspace? boolean?)
+  (dissect ticket
+    (internal:familiarity-ticket ticket-symbol on-unspent ticket-ds n)
+  #/dspace-descends? ticket-ds ds))
+
+(define/contract (familiarity-ticket-dspace-ancestor/c ds)
+  (-> dspace? contract?)
+  (make-flat-contract
+    
+    #:name `(familiarity-ticket-dspace-ancestor/c ,ds)
+    
+    #:first-order
+    (fn v
+      (and
+        (familiarity-ticket? v)
+        (familiarity-ticket-dspace-descends? v ds)))))
+
 
 (define/contract (extfx-noop)
   (-> extfx?)
@@ -577,6 +606,14 @@
   (-> any/c boolean?)
   (internal:authorized-name? v))
 
+(define/contract (authorized-name-subname-descends? a b)
+  (-> authorized-name? authorized-name? boolean?)
+  (dissect a (internal:authorized-name a-ds a-name a-parents)
+  #/dissect b (internal:authorized-name b-ds b-name b-parents)
+  #/mat (table-get a-name b-parents) (just _)
+    #t
+    #f))
+
 ; NOTE:
 ;
 ; We always associate authorized names with root definition spaces,
@@ -605,11 +642,11 @@
   (dissect name (internal:authorized-name name-ds _ _)
   #/dspace-descends? name-ds ds))
 
-(define/contract (authorized-name-ancestor/c ds)
+(define/contract (authorized-name-dspace-ancestor/c ds)
   (-> dspace? contract?)
   (make-flat-contract
     
-    #:name `(authorized-name-ancestor/c ,ds)
+    #:name `(authorized-name-dspace-ancestor/c ,ds)
     
     #:first-order
     (fn v
@@ -770,7 +807,7 @@
   (->i
     (
       [ds dspace?]
-      [n (ds) (authorized-name-ancestor/c ds)]
+      [n (ds) (authorized-name-dspace-ancestor/c ds)]
       [on-cont-unspent error-definer?]
       [comp
         (->
@@ -790,7 +827,7 @@
   (->i
     (
       [ds dspace?]
-      [putter-name (ds) (authorized-name-ancestor/c ds)]
+      [putter-name (ds) (authorized-name-dspace-ancestor/c ds)]
       [getter-name name?]
       [on-cont-unspent error-definer?]
       [comp
@@ -808,7 +845,7 @@
     (
       [ds dspace?]
       [putter-name name?]
-      [getter-name (ds) (authorized-name-ancestor/c ds)]
+      [getter-name (ds) (authorized-name-dspace-ancestor/c ds)]
       [on-stall error-definer?]
       [then (-> any/c extfx?)])
     [_ extfx?])
@@ -976,7 +1013,7 @@
   (->i
     (
       [ds dspace?]
-      [pubsub-name (ds) (authorized-name-ancestor/c ds)]
+      [pubsub-name (ds) (authorized-name-dspace-ancestor/c ds)]
       [then (ds) (-> (pub-ancestor/c ds) (sub-ancestor/c ds) extfx?)])
     [_ extfx?])
   (internal:extfx-establish-pubsub ds pubsub-name then))
@@ -986,7 +1023,7 @@
     (
       [ds dspace?]
       [p (ds) (pub-ancestor/c ds)]
-      [unique-name (ds) (authorized-name-ancestor/c ds)]
+      [unique-name (ds) (authorized-name-dspace-ancestor/c ds)]
       [on-conflict success-or-error-definer?]
       [arg any/c])
     [_ extfx?])
@@ -997,7 +1034,7 @@
     (
       [ds dspace?]
       [s (ds) (sub-ancestor/c ds)]
-      [unique-name (ds) (authorized-name-ancestor/c ds)]
+      [unique-name (ds) (authorized-name-dspace-ancestor/c ds)]
       [on-conflict success-or-error-definer?]
       [func (-> any/c extfx?)])
     [_ extfx?])
@@ -1025,7 +1062,7 @@
   (->i
     (
       [ds dspace?]
-      [hub-name (ds) (authorized-name-ancestor/c ds)]
+      [hub-name (ds) (authorized-name-dspace-ancestor/c ds)]
       [on-cont-unspent error-definer?]
       [comp-ticket
         (->
@@ -1063,21 +1100,31 @@
 
 (define/contract
   (extfx-contribute
-    ds collector-familiarity-ticket on-cont-unspent comp)
-  (-> dspace? familiarity-ticket? error-definer?
-    (->
-      (continuation-ticket-of
-      #/list/c success-or-error-definer? optionally-dexable?)
-      extfx?)
-    extfx?)
+    ds collector-familiarity-ticket contributor-name
+    on-familiarity-double-spend on-cont-unspent comp)
+  (->i
+    (
+      [ds dspace?]
+      [collector-familiarity-ticket (ds)
+        (familiarity-ticket-dspace-ancestor/c ds)]
+      [contributor-name (ds) (authorized-name-dspace-ancestor/c ds)]
+      [on-familiarity-double-spend error-definer?]
+      [on-cont-unspent error-definer?]
+      [comp
+        (->
+          (continuation-ticket-of
+          #/list/c success-or-error-definer? optionally-dexable?)
+          extfx?)])
+    [_ extfx?])
   (internal:extfx-contribute
-    ds collector-familiarity-ticket on-cont-unspent comp))
+    ds collector-familiarity-ticket contributor-name
+    on-familiarity-double-spend on-cont-unspent comp))
 
 (define/contract (extfx-collect ds collector-name then)
   (->i
     (
       [ds dspace?]
-      [collector-name (ds) (authorized-name-ancestor/c ds)]
+      [collector-name (ds) (authorized-name-dspace-ancestor/c ds)]
       [then (-> table? extfx?)])
     [_ extfx?])
   (internal:extfx-collect ds collector-name then))
@@ -1114,7 +1161,7 @@
     (->i
       (
         [ds dspace?]
-        [unique-name (ds) (authorized-name-ancestor/c ds)]
+        [unique-name (ds) (authorized-name-dspace-ancestor/c ds)]
         [then continuation-ticket?])
       [_ extfx?])
     (or/c
@@ -1413,8 +1460,27 @@
           (hash-update db 'claim-unique #/fn db-claim-unique
             (table-shadow n (just #/trivial) db-claim-unique))
         #/then reads db))
+    #/w- spend-ticket
+      (fn
+        ticket-symbol reads unspent-tickets on-error default-message
+        then
+        
+        (expect (hash-has-key? unspent-tickets ticket-symbol) #t
+          (next-purging on-error default-message
+            (fn reads
+              (hash-has-key? ticket-symbol
+              #/hash-ref reads 'spend-ticket)))
+        #/w- reads
+          (hash-update reads 'spend-ticket #/fn reads-spend-ticket
+            (hash-set reads-spend-ticket ticket-symbol (trivial)))
+        #/w- unspent-tickets
+          (hash-remove unspent-tickets ticket-symbol)
+        #/then reads unspent-tickets))
     #/w- handle-generic-put
-      (fn ds db-update make-finish on-cont-unspent comp
+      (fn
+        unspent-tickets reads ds db-update make-finish on-cont-unspent
+        comp
+        
         (dissect ds (internal:dspace _ ds-name _)
         #/w- continuation-ticket-symbol (gensym)
         #/w- continuation-ticket
@@ -1896,7 +1962,7 @@
       #/w- on-cont-unspent
         (error-definer-or-message on-cont-unspent
           "Expected an extfx-put continuation to be continued")
-      #/handle-generic-put ds
+      #/handle-generic-put unspent-tickets reads ds
         (fn db func
           (hash-update db 'put #/fn db-put
             (table-update-default db-put n (table-empty) func)))
@@ -1933,7 +1999,7 @@
       #/w- on-cont-unspent
         (error-definer-or-message on-cont-unspent
           "Expected an extfx-private-put continuation to be continued")
-      #/handle-generic-put ds
+      #/handle-generic-put unspent-tickets reads ds
         (fn db func
           (hash-update db 'private-put #/fn db-private-put
             (table-update-default db-private-put putter-name
@@ -2044,25 +2110,18 @@
         (list ticket-symbol ds entry wrap-fresh)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a ticket descending from the extfx runner's root definition space")
-      #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
-        (next-purging on-conflict
-          "Tried to spend a ticket twice"
-          (fn reads
-            (hash-has-key? ticket-symbol
-            #/hash-ref reads 'spend-ticket)))
+      #/spend-ticket ticket-symbol reads unspent-tickets on-conflict
+        "Tried to spend a ticket twice"
+      #/fn reads unspent-tickets
       #/w- fresh-ticket-symbol (gensym)
       #/next-full
         (cons
           (process-entry
-            (hash-update reads 'spend-ticket #/fn reads-spend-ticket
-              (hash-set reads-spend-ticket ticket-symbol (trivial)))
+            reads
             (then #/wrap-fresh fresh-ticket-symbol))
           processes)
         rev-next-processes
-        (hash-set
-          (hash-remove unspent-tickets ticket-symbol)
-          fresh-ticket-symbol
-          entry)
+        (hash-set unspent-tickets fresh-ticket-symbol entry)
         db rev-errors #t)
     #/mat process
       (internal:extfx-split-list ticket times on-conflict then)
@@ -2070,26 +2129,13 @@
         (list ticket-symbol ds entry wrap-fresh)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a ticket descending from the extfx runner's root definition space")
-      #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
-        (next-purging on-conflict
-          "Tried to spend a ticket twice"
-          (fn reads
-            (hash-has-key? ticket-symbol
-            #/hash-ref reads 'spend-ticket)))
-      #/w-loop next
-        unspent-tickets (hash-remove unspent-tickets ticket-symbol)
-        result (list)
-        
+      #/spend-ticket ticket-symbol reads unspent-tickets on-conflict
+        "Tried to spend a ticket twice"
+      #/fn reads unspent-tickets
+      #/w-loop next unspent-tickets unspent-tickets result (list)
         (expect (nat->maybe times) (just times)
           (next-full
-            (cons
-              (process-entry
-                (hash-update reads 'spend-ticket
-                #/fn reads-spend-ticket
-                  (hash-set reads-spend-ticket ticket-symbol
-                    (trivial)))
-                (then result))
-              processes)
+            (cons (process-entry reads (then result)) processes)
             rev-next-processes unspent-tickets db rev-errors #t)
         #/w- fresh-ticket-symbol (gensym)
         #/next
@@ -2126,49 +2172,33 @@
           ticket-symbol on-unspent ds then)
       #/expect (dspace-eq? root-ds ds) #t
         (next-with-error "Expected ticket to be a continuation ticket associated with the extfx runner's root definition space")
-      #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
-        (next-purging on-conflict
-          "Tried to spend a ticket twice"
-          (fn reads
-            (hash-has-key? ticket-symbol
-            #/hash-ref reads 'spend-ticket)))
+      #/spend-ticket ticket-symbol reads unspent-tickets on-conflict
+        "Tried to spend a ticket twice"
+      #/fn reads unspent-tickets
       #/next-full
-        (cons
-          (process-entry
-            (hash-update reads 'spend-ticket #/fn reads-spend-ticket
-              (hash-set reads-spend-ticket ticket-symbol (trivial)))
-            (then value))
-          processes)
-        rev-next-processes
-        (hash-remove unspent-tickets ticket-symbol)
-        db rev-errors #t)
+        (cons (process-entry reads (then value)) processes)
+        rev-next-processes unspent-tickets db rev-errors #t)
     #/mat process
       (internal:extfx-ft-subname ticket key on-conflict then)
       (dissect ticket
         (internal:familiarity-ticket ticket-symbol on-unspent ds n)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
-      #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
-        (next-purging on-conflict
-          "Tried to spend a ticket twice"
-          (fn reads
-            (hash-has-key? ticket-symbol
-            #/hash-ref reads 'spend-ticket)))
+      #/spend-ticket ticket-symbol reads unspent-tickets on-conflict
+        "Tried to spend a ticket twice"
+      #/fn reads unspent-tickets
       #/w- fresh-ticket-symbol (gensym)
       #/w- n (name-subname key n)
       #/next-full
         (cons
           (process-entry
-            (hash-update reads 'spend-ticket #/fn reads-spend-ticket
-              (hash-set reads-spend-ticket ticket-symbol (trivial)))
+            reads
             (then
             #/internal:familiarity-ticket
               fresh-ticket-symbol on-unspent ds n))
           processes)
         rev-next-processes
-        (hash-set
-          (hash-remove unspent-tickets ticket-symbol)
-          fresh-ticket-symbol
+        (hash-set unspent-tickets fresh-ticket-symbol
           (unspent-ticket-entry-familiarity-ticket on-unspent ds n))
         db rev-errors #t)
     #/mat process
@@ -2181,36 +2211,131 @@
       #/expect (dspace-descends? ds new-ds) #t
         (next-with-error-definer on-restriction-error
           "Expected ds to be a definition space descending from ticket's definition space")
-      #/expect (hash-has-key? unspent-tickets ticket-symbol) #t
-        (next-purging on-conflict
-          "Tried to spend a ticket twice"
-          (fn reads
-            (hash-has-key? ticket-symbol
-            #/hash-ref reads 'spend-ticket)))
+      #/spend-ticket ticket-symbol reads unspent-tickets on-conflict
+        "Tried to spend a ticket twice"
+      #/fn reads unspent-tickets
       #/w- fresh-ticket-symbol (gensym)
       #/next-full
         (cons
           (process-entry
-            (hash-update reads 'spend-ticket #/fn reads-spend-ticket
-              (hash-set reads-spend-ticket ticket-symbol (trivial)))
+            reads
             (then
             #/internal:familiarity-ticket
               fresh-ticket-symbol on-unspent new-ds n))
           processes)
         rev-next-processes
-        (hash-set
-          (hash-remove unspent-tickets ticket-symbol)
-          fresh-ticket-symbol
+        (hash-set unspent-tickets fresh-ticket-symbol
           (unspent-ticket-entry-familiarity-ticket
             on-unspent new-ds n))
         db rev-errors #t)
     
     #/mat process
       (internal:extfx-contribute
-        ds collector-familiarity-ticket on-cont-unspent comp)
-      'TODO
+        ds collector-familiarity-ticket contributor-name
+        on-familiarity-double-spend on-cont-unspent comp)
+      (expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/dissect collector-familiarity-ticket
+        (internal:familiarity-ticket ticket-symbol _ _ collector-name)
+      #/spend-ticket
+        ticket-symbol reads unspent-tickets
+        on-familiarity-double-spend
+        "Tried to spend a ticket twice"
+      #/fn reads unspent-tickets
+      #/w- contributor-name
+        (authorized-name-get-name contributor-name)
+      #/w- on-cont-unspent
+        (error-definer-or-message on-cont-unspent
+          "Expected an extfx-contribute continuation to be continued")
+      #/handle-generic-put unspent-tickets reads ds
+        (fn db func
+          (hash-update db 'contribute #/fn db-contribute
+            (table-update-default db-contribute collector-name
+              (table-empty)
+            #/fn db-contribute-for-collector
+              (table-update-default db-contribute-for-collector
+                contributor-name
+                (table-empty)
+                func))))
+        (fn on-value-conflict value
+          (extfx-finish-contribute
+            ds collector-name contributor-name on-value-conflict
+            value))
+        on-cont-unspent comp)
+    #/mat process
+      (extfx-finish-contribute
+        ds collector-name contributor-name on-value-conflict value)
+      (expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      #/handle-generic-finish-put ds
+        (fn db
+          (maybe-bind
+            (table-get collector-name (hash-ref db 'contribute))
+          #/fn db-contribute-for-collector
+          #/table-get contributor-name db-contribute-for-collector))
+        (fn db func
+          (hash-update db 'contribute #/fn db-contribute
+            (table-update-default db-contribute collector-name
+              (table-empty)
+            #/fn db-contribute-for-collector
+              (table-update-default db-contribute-for-collector
+                contributor-name
+                (table-empty)
+                func))))
+        on-value-conflict value)
     #/mat process (internal:extfx-collect ds collector-name then)
-      'TODO
+      (expect (dspace-descends? root-ds ds) #t
+        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
+      ; TODO: Once we support `extfx-disburse` and `extfx-imburse`,
+      ; update this check so that it also checks for unspent
+      ; familiarity tickets for names which could imburse a
+      ; familiarity ticket for an ancestor of `collector-name`.
+      #/if
+        (hash-v-any unspent-tickets
+        #/expectfn
+          (unspent-ticket-entry-familiarity-ticket
+            on-unspent ticket-ds ticket-n)
+          #f
+          (and
+            (dspace-descends? ticket-ds ds)
+            (authorized-name-subname-descends?
+              ticket-n collector-name)))
+        (next-fruitless)
+      #/dissect ds (internal:dspace _ ds-name parents-list)
+      #/w- collector-name (authorized-name-get-name collector-name)
+      #/expect (table-get collector-name (hash-ref db 'contribute))
+        (just db-contribute-for-collector)
+        (next-fruitless)
+      #/dissect db-contribute-for-collector
+        (unsafe:table db-contribute-for-collector)
+      #/w- db-contribute-for-collector
+        (hash->list db-contribute-for-collector)
+      #/w- contributions
+        (list-bind (cons ds-name parents-list) #/fn parent
+        #/list-bind db-contribute-for-collector
+        #/dissectfn
+          (cons contributor-name-rep db-contribute-for-contributor)
+          (w-loop next parents-to-check (cons ds-name parents-list)
+            (expect parents-to-check (cons parent parents-to-check)
+              (list)
+            #/expect (table-get parent db-contribute-for-contributor)
+              (just entry)
+              (next parents-to-check)
+            #/expect entry (db-put-entry-written write-reads value)
+              (next parents-to-check)
+              (list #/cons contributor-name-rep entry))))
+      #/next-one-fruitful #/process-entry
+        (list-foldl reads contributions #/fn reads entry
+          (dissect entry
+            (cons contributor-name-rep
+            #/db-put-entry-written write-reads value)
+          #/reads-union reads write-reads))
+        (then #/unsafe:table #/list-map contributions #/fn entry
+          (dissect entry
+            (cons contributor-name-rep
+            #/db-put-entry-written write-reads value)
+          #/cons contributor-name-rep
+          #/optionally-dexable-value value)))
     
     #/mat process (extfx-finish-run ds value)
       (expect (dspace-eq? root-ds ds) #t
