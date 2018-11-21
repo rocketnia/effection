@@ -147,8 +147,7 @@
   (provide-struct (sub ds pubsub-name))
   
   (provide-struct (continuation-ticket ticket-symbol ds then))
-  (provide-struct
-    (familiarity-ticket ticket-symbol on-unspent ds n disbursements))
+  (provide-struct (familiarity-ticket ticket-symbol ds))
   
   
   (provide-struct (extfx-noop))
@@ -525,18 +524,12 @@
 (define/contract (ticket? v)
   (-> any/c boolean?)
   (mat v (internal:continuation-ticket ticket-symbol ds then) #t
-  #/mat v
-    (internal:familiarity-ticket
-      ticket-symbol on-unspent ds n disbursements)
-    #t
+  #/mat v (internal:familiarity-ticket ticket-symbol ds) #t
     #f))
 
 (define/contract (intuitionistic-ticket? v)
   (-> any/c boolean?)
-  (mat v
-    (internal:familiarity-ticket
-      ticket-symbol on-unspent ds n disbursements)
-    #t
+  (mat v (internal:familiarity-ticket ticket-symbol ds) #t
     #f))
 
 (define/contract (continuation-ticket? v)
@@ -580,8 +573,7 @@
 (define/contract (familiarity-ticket-dspace-descends? ticket ds)
   (-> familiarity-ticket? dspace? boolean?)
   (dissect ticket
-    (internal:familiarity-ticket
-      ticket-symbol on-unspent ticket-ds n disbursements)
+    (internal:familiarity-ticket ticket-symbol ticket-ds)
   #/dspace-descends? ticket-ds ds))
 
 (define/contract (familiarity-ticket-dspace-ancestor/c ds)
@@ -1835,15 +1827,12 @@
             (fn new-ticket-symbol
               (internal:continuation-ticket
                 new-ticket-symbol ds then)))
-        #/mat ticket
-          (internal:familiarity-ticket
-            ticket-symbol on-unspent ds n disbursements)
+        #/mat ticket (internal:familiarity-ticket ticket-symbol ds)
           (list
             ticket-symbol
             ds
             (fn new-ticket-symbol
-              (internal:familiarity-ticket
-                new-ticket-symbol on-unspent ds n disbursements)))
+              (internal:familiarity-ticket new-ticket-symbol ds)))
         #/error "Internal error: Encountered an unrecognized ticket value"))
     
     
@@ -1973,16 +1962,14 @@
       #/w- disbursements (table-empty)
       #/w- familiarity-ticket
         (internal:familiarity-ticket
-          familiarity-ticket-symbol on-familiarity-ticket-unspent
+          familiarity-ticket-symbol
           
           ; NOTE: This creates a familiarity ticket for `root-ds`,
           ; even if the part of the program that performs an
           ; `extfx-claim-unique` effect is otherwise localized to a
           ; descendant shadowing definition space.
           ;
-          root-ds
-          
-          fresh-authorized-name disbursements)
+          root-ds)
       #/next-full
         (cons
           (process-entry
@@ -2220,14 +2207,15 @@
         rev-next-processes unspent-tickets db rev-errors #t)
     #/mat process
       (internal:extfx-ft-subname ticket key on-conflict then)
-      (dissect ticket
-        (internal:familiarity-ticket
-          ticket-symbol on-unspent ds n disbursements)
+      (dissect ticket (internal:familiarity-ticket ticket-symbol ds)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/spend-ticket ticket-symbol reads unspent-tickets on-conflict
         "Tried to spend a ticket twice"
       #/fn reads unspent-tickets entry
+      #/dissect entry
+        (unspent-ticket-entry-familiarity-ticket
+          on-unspent ds n disbursements)
       #/w- fresh-ticket-symbol (gensym)
       #/w- n (authorized-name-subname key n)
       #/w- disbursements
@@ -2248,8 +2236,7 @@
           (process-entry
             reads
             (then
-            #/internal:familiarity-ticket
-              fresh-ticket-symbol on-unspent ds n disbursements))
+            #/internal:familiarity-ticket fresh-ticket-symbol ds))
           processes)
         rev-next-processes
         (hash-set unspent-tickets fresh-ticket-symbol
@@ -2259,9 +2246,7 @@
     #/mat process
       (internal:extfx-ft-restrict
         ticket new-ds on-conflict on-restriction-error then)
-      (dissect ticket
-        (internal:familiarity-ticket
-          ticket-symbol on-unspent ds n disbursements)
+      (dissect ticket (internal:familiarity-ticket ticket-symbol ds)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/expect (dspace-descends? ds new-ds) #t
@@ -2270,6 +2255,9 @@
       #/spend-ticket ticket-symbol reads unspent-tickets on-conflict
         "Tried to spend a ticket twice"
       #/fn reads unspent-tickets entry
+      #/dissect entry
+        (unspent-ticket-entry-familiarity-ticket
+          on-unspent ds n disbursements)
       #/w- fresh-ticket-symbol (gensym)
       #/w- disbursements
         (table-v-map-maybe disbursements #/fn disb-for-ds
@@ -2289,8 +2277,7 @@
           (process-entry
             reads
             (then
-            #/internal:familiarity-ticket
-              fresh-ticket-symbol on-unspent new-ds n disbursements))
+            #/internal:familiarity-ticket fresh-ticket-symbol new-ds))
           processes)
         rev-next-processes
         (hash-set unspent-tickets fresh-ticket-symbol
@@ -2305,14 +2292,15 @@
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
       #/dissect collector-familiarity-ticket
-        (internal:familiarity-ticket
-          ticket-symbol _ _ collector-name _)
-      #/w- collector-name (authorized-name-get-name collector-name)
+        (internal:familiarity-ticket ticket-symbol _)
       #/spend-ticket
         ticket-symbol reads unspent-tickets
         on-familiarity-double-spend
         "Tried to spend a ticket twice"
       #/fn reads unspent-tickets entry
+      #/dissect entry
+        (unspent-ticket-entry-familiarity-ticket _ _ collector-name _)
+      #/w- collector-name (authorized-name-get-name collector-name)
       #/w- contributor-name
         (authorized-name-get-name contributor-name)
       #/w- on-cont-unspent
