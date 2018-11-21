@@ -146,8 +146,7 @@
   (provide-struct (pub ds pubsub-name))
   (provide-struct (sub ds pubsub-name))
   
-  (provide-struct
-    (continuation-ticket ticket-symbol on-unspent ds then))
+  (provide-struct (continuation-ticket ticket-symbol ds then))
   (provide-struct
     (familiarity-ticket ticket-symbol on-unspent ds n disbursements))
   
@@ -525,9 +524,7 @@
 
 (define/contract (ticket? v)
   (-> any/c boolean?)
-  (mat v
-    (internal:continuation-ticket ticket-symbol on-unspent ds then)
-    #t
+  (mat v (internal:continuation-ticket ticket-symbol ds then) #t
   #/mat v
     (internal:familiarity-ticket
       ticket-symbol on-unspent ds n disbursements)
@@ -556,7 +553,7 @@
     #:first-order
     (fn v
       (contract-first-order-passes?
-        (istruct/c internal:continuation-ticket any/c any/c any/c
+        (istruct/c internal:continuation-ticket any/c any/c
           (-> c any))
         v))
     
@@ -568,12 +565,11 @@
             "the anticipated value of"))
       #/fn v missing-party
         (expect v
-          (internal:continuation-ticket
-            ticket-symbol on-unspent ds then)
+          (internal:continuation-ticket ticket-symbol ds then)
           (raise-blame-error blame #:missing-party missing-party v
             '(expected: "a continuation ticket" given: "~e")
             v)
-        #/internal:continuation-ticket ticket-symbol on-unspent ds
+        #/internal:continuation-ticket ticket-symbol ds
           (fn result
             (c-late-neg-projection result missing-party)))))))
 
@@ -1227,9 +1223,7 @@
   #/w- root-continuation-ticket-symbol (gensym)
   #/w- root-continuation-ticket
     (internal:continuation-ticket
-      root-continuation-ticket-symbol
-      on-continuation-ticket-unspent
-      root-ds
+      root-continuation-ticket-symbol root-ds
       (fn result
         (extfx-finish-run root-ds result)))
   #/w- reads-union
@@ -1513,7 +1507,8 @@
         ticket-symbol reads unspent-tickets on-error default-message
         then
         
-        (expect (hash-has-key? unspent-tickets ticket-symbol) #t
+        (expect (hash-ref-maybe unspent-tickets ticket-symbol)
+          (just entry)
           (next-purging on-error default-message
             (fn reads
               (hash-has-key? ticket-symbol
@@ -1523,7 +1518,7 @@
             (hash-set reads-spend-ticket ticket-symbol (trivial)))
         #/w- unspent-tickets
           (hash-remove unspent-tickets ticket-symbol)
-        #/then reads unspent-tickets))
+        #/then reads unspent-tickets entry))
     #/w- handle-generic-put
       (fn
         unspent-tickets reads ds db-update make-finish on-cont-unspent
@@ -1533,7 +1528,7 @@
         #/w- continuation-ticket-symbol (gensym)
         #/w- continuation-ticket
           (internal:continuation-ticket
-            continuation-ticket-symbol on-cont-unspent root-ds
+            continuation-ticket-symbol root-ds
             (dissectfn (list on-conflict value)
               (make-finish on-conflict value)))
         #/next-full
@@ -1833,23 +1828,19 @@
     #/w- parse-ticket
       (fn ticket
         (mat ticket
-          (internal:continuation-ticket
-            ticket-symbol on-unspent ds then)
+          (internal:continuation-ticket ticket-symbol ds then)
           (list
             ticket-symbol
             ds
-            (unspent-ticket-entry-anonymous on-unspent)
             (fn new-ticket-symbol
               (internal:continuation-ticket
-                new-ticket-symbol on-unspent ds then)))
+                new-ticket-symbol ds then)))
         #/mat ticket
           (internal:familiarity-ticket
             ticket-symbol on-unspent ds n disbursements)
           (list
             ticket-symbol
             ds
-            (unspent-ticket-entry-familiarity-ticket
-              on-unspent ds n disbursements)
             (fn new-ticket-symbol
               (internal:familiarity-ticket
                 new-ticket-symbol on-unspent ds n disbursements)))
@@ -1914,9 +1905,7 @@
         #/w- element-continuation-ticket-symbol (gensym)
         #/w- element-continuation-ticket
           (internal:continuation-ticket
-            element-continuation-ticket-symbol
-            on-cont-unspent
-            root-ds
+            element-continuation-ticket-symbol root-ds
             (fn result
               (extfx-finish-table-each-element
                 root-ds table-each-symbol k result)))
@@ -2159,12 +2148,12 @@
     
     #/mat process (internal:extfx-freshen ticket on-conflict then)
       (dissect (parse-ticket ticket)
-        (list ticket-symbol ds entry wrap-fresh)
+        (list ticket-symbol ds wrap-fresh)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a ticket descending from the extfx runner's root definition space")
       #/spend-ticket ticket-symbol reads unspent-tickets on-conflict
         "Tried to spend a ticket twice"
-      #/fn reads unspent-tickets
+      #/fn reads unspent-tickets entry
       #/w- fresh-ticket-symbol (gensym)
       #/next-full
         (cons
@@ -2178,12 +2167,12 @@
     #/mat process
       (internal:extfx-split-list ticket times on-conflict then)
       (dissect (parse-ticket ticket)
-        (list ticket-symbol ds entry wrap-fresh)
+        (list ticket-symbol ds wrap-fresh)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a ticket descending from the extfx runner's root definition space")
       #/spend-ticket ticket-symbol reads unspent-tickets on-conflict
         "Tried to spend a ticket twice"
-      #/fn reads unspent-tickets
+      #/fn reads unspent-tickets entry
       #/w-loop next unspent-tickets unspent-tickets result (list)
         (expect (nat->maybe times) (just times)
           (next-full
@@ -2196,7 +2185,7 @@
     #/mat process
       (internal:extfx-split-table ticket times on-conflict then)
       (dissect (parse-ticket ticket)
-        (list ticket-symbol ds entry wrap-fresh)
+        (list ticket-symbol ds wrap-fresh)
       #/expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/dissect times (unsafe:table times)
@@ -2220,13 +2209,12 @@
     #/mat process
       (internal:extfx-ct-continue ticket on-conflict value)
       (dissect ticket
-        (internal:continuation-ticket
-          ticket-symbol on-unspent ds then)
+        (internal:continuation-ticket ticket-symbol ds then)
       #/expect (dspace-eq? root-ds ds) #t
         (next-with-error "Expected ticket to be a continuation ticket associated with the extfx runner's root definition space")
       #/spend-ticket ticket-symbol reads unspent-tickets on-conflict
         "Tried to spend a ticket twice"
-      #/fn reads unspent-tickets
+      #/fn reads unspent-tickets entry
       #/next-full
         (cons (process-entry reads (then value)) processes)
         rev-next-processes unspent-tickets db rev-errors #t)
@@ -2239,7 +2227,7 @@
         (next-with-error "Expected ticket to be a familiarity ticket descending from the extfx runner's root definition space")
       #/spend-ticket ticket-symbol reads unspent-tickets on-conflict
         "Tried to spend a ticket twice"
-      #/fn reads unspent-tickets
+      #/fn reads unspent-tickets entry
       #/w- fresh-ticket-symbol (gensym)
       #/w- n (authorized-name-subname key n)
       #/w- disbursements
@@ -2281,7 +2269,7 @@
           "Expected ds to be a definition space descending from ticket's definition space")
       #/spend-ticket ticket-symbol reads unspent-tickets on-conflict
         "Tried to spend a ticket twice"
-      #/fn reads unspent-tickets
+      #/fn reads unspent-tickets entry
       #/w- fresh-ticket-symbol (gensym)
       #/w- disbursements
         (table-v-map-maybe disbursements #/fn disb-for-ds
@@ -2324,7 +2312,7 @@
         ticket-symbol reads unspent-tickets
         on-familiarity-double-spend
         "Tried to spend a ticket twice"
-      #/fn reads unspent-tickets
+      #/fn reads unspent-tickets entry
       #/w- contributor-name
         (authorized-name-get-name contributor-name)
       #/w- on-cont-unspent
