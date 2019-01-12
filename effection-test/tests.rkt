@@ -7,7 +7,7 @@
 (require rackunit)
 
 (require #/only-in lathe-comforts expect fn w-)
-(require #/only-in lathe-comforts/maybe just just-value nothing)
+(require #/only-in lathe-comforts/maybe just just-value)
 (require #/only-in lathe-comforts/struct struct-easy)
 
 (require effection/order)
@@ -71,13 +71,20 @@
   "Calling a `cline-by-own-method` on two values with different methods raises an error")
 
 
+; TODO: We can no longer test with actual `nothing` and `just` values
+; from Lathe Comforts because those identifiers don't carry struct
+; information anymore. We should make a `dex-match` to test those
+; with, and until we do, we test using these actual structs instead.
+(struct-easy (s-nothing) #:equal)
+(struct-easy (s-just value) #:equal)
+
 (define (dex-maybe dex-elem)
-  (dex-default (dex-struct nothing) (dex-struct just dex-elem)))
+  (dex-default (dex-struct s-nothing) (dex-struct s-just dex-elem)))
 
 (check-equal?
   (compare-by-dex (dex-name)
-    (just-value #/name-of (dex-struct nothing) (nothing))
-    (just-value #/name-of (dex-maybe dex-give-up) (nothing)))
+    (just-value #/name-of (dex-struct s-nothing) (s-nothing))
+    (just-value #/name-of (dex-maybe dex-give-up) (s-nothing)))
   (just #/ordering-eq)
   "Using `name-of` with different dexes gives the same name")
 
