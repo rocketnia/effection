@@ -918,6 +918,60 @@
                #`(list #,getter #,position #,dex))))))
 
 
+; TODO: See if we should have `dex-match` functionality like this. If
+; so, we'll need to finish this off with an implementation of
+; `dex-internals-match` and do similar work to make
+; `{cline,fuse,merge}-match`. However, there's still a design question
+; in the way: How will these dexes be compared to each other? With
+; `dex-struct`, they can be compared by the structure type
+; descriptor's object identity. but a match expander doesn't give us
+; an identity like that, does it?
+;
+#|
+(define-syntax (dex-match-by-argument-position stx)
+  (syntax-parse stx #/ (_ op:id [arg-position:nat arg-dex:expr] ...)
+    #:with (local ...) (generate-temporarites #'(arg-dex ...))
+  #/w- args (desyntax-list #'#/[arg-position arg-dex] ...)
+  #/w- n (length args)
+  #/w- seen (make-hasheq)
+  #/syntax-protect
+    #`(internal:dex #/dex-internals-match
+        (fn local ... #/op local ...)
+        (fn v
+          (expect v (op local ...) #f
+          #/list local ...))
+      #/list
+        #,@(list-map args #/fn arg
+             (dissect (desyntax-list arg) (list position-stx dex)
+             #/w- position (syntax-e position-stx)
+             #/expect (< position n) #t
+               (raise-syntax-error #f
+                 (format
+                   "expected an argument position less than ~s, got ~s"
+                   n
+                   position)
+                 stx position-stx)
+             #/expect (hash-has-key? seen position) #f
+               (raise-syntax-error #f
+                 "duplicate argument position"
+                 stx position-stx)
+             #/begin (hash-set! seen position #t)
+               #`(list #,position-stx #,dex))))))
+
+(define-syntax (dex-match stx)
+  (syntax-parse stx #/ (_ op:id arg-dex:expr ...)
+    #:with (local ...) (generate-temporarites #'(arg-dex ...))
+    #:with (position ...) (range (length #'(arg-dex ...)))
+  #/syntax-protect
+    #'(internal:dex #/dex-internals-match
+        (fn local ... #/op local ...)
+        (fn v
+          (expect v (op local ...) #f
+          #/list local ...))
+      #/list (list position arg-dex) ...))))
+|#
+
+
 
 ; ===== Clines =======================================================
 
