@@ -4,7 +4,7 @@
 (require #/only-in racket/contract/base
   -> ->* ->i =/c >=/c and/c any any/c contract? flat-contract? listof
   or/c struct/c struct/dc unconstrained-domain->)
-(require #/only-in racket/contract/combinator make-chaperone-contract)
+(require #/only-in racket/contract/combinator make-contract)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/list split-at take)
 
@@ -755,7 +755,7 @@
 (define/contract (pure/c!h! c)
   (-> contract? contract?)
   (and/c c
-  #/make-chaperone-contract
+  #/make-contract
     #:name 'pure/c!h!
     #:first-order procedure?
     #:projection

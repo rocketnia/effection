@@ -21,12 +21,11 @@
 ; documentation correctly says it is, we require it from there.
 (require #/only-in racket/contract get/build-late-neg-projection)
 (require #/only-in racket/contract/base
-  -> and/c any any/c case-> chaperone-contract? cons/c contract?
-  contract-name flat-contract? hash/c list/c listof none/c)
+  -> and/c any any/c case-> cons/c contract? contract-name
+  flat-contract? hash/c list/c listof none/c)
 (require #/only-in racket/contract/combinator
   blame-add-context coerce-contract contract-first-order-passes?
-  make-chaperone-contract make-contract make-flat-contract
-  raise-blame-error)
+  make-contract make-flat-contract raise-blame-error)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/hash hash-union)
 (require #/only-in syntax/parse/define define-simple-macro)
@@ -220,11 +219,9 @@
 
 ; ===== Miscellaneous utilities ======================================
 
-(define (make-appropriate-contract c)
+(define (make-appropriate-non-chaperone-contract c)
   (if (flat-contract? c)
     make-flat-contract
-  #/if (chaperone-contract? c)
-    make-chaperone-contract
     make-contract))
 
 (begin-for-syntax
@@ -339,7 +336,7 @@
 (define/contract (dexableof-unchecked c)
   (-> contract? contract?)
   (w- c (coerce-contract 'dexableof-unchecked c)
-  #/ (make-appropriate-contract c)
+  #/ (make-appropriate-non-chaperone-contract c)
     
     #:name `(dexableof-unchecked ,(contract-name c))
     
@@ -362,7 +359,7 @@
 (define/contract (dexableof c)
   (-> contract? contract?)
   (w- c (coerce-contract 'dexableof c)
-  #/ (make-appropriate-contract c)
+  #/ (make-appropriate-non-chaperone-contract c)
     
     #:name `(dexableof ,(contract-name c))
     
@@ -2091,7 +2088,7 @@
 (define/contract (tableof c)
   (-> contract? contract?)
   (w- c (coerce-contract 'tableof c)
-  #/ (make-appropriate-contract c)
+  #/ (make-appropriate-non-chaperone-contract c)
     
     #:name `(tableof ,(contract-name c))
     

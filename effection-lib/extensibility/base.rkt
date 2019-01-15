@@ -6,12 +6,11 @@
 ; documentation correctly says it is, we require it from there.
 (require #/only-in racket/contract get/build-late-neg-projection)
 (require #/only-in racket/contract/base
-  -> ->i any any/c chaperone-contract? contract? contract-name
-  flat-contract? list/c listof or/c)
+  -> ->i any any/c contract? contract-name flat-contract? list/c
+  listof or/c)
 (require #/only-in racket/contract/combinator
   blame-add-context coerce-contract contract-first-order-passes?
-  make-chaperone-contract make-contract make-flat-contract
-  raise-blame-error)
+  make-contract make-flat-contract raise-blame-error)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/hash hash-union)
 (require #/only-in racket/math natural?)
@@ -209,17 +208,12 @@
   (-> list? (-> any/c boolean?) list?)
   (filter check lst))
 
-(define (make-appropriate-chaperone-contract c)
-  (if (chaperone-contract? c)
-    make-chaperone-contract
-    make-contract))
-
 ; TODO: This is also defined privately in `effection/order/base`. See
 ; if we can extract it into a library or something.
-(define (make-appropriate-contract c)
+(define (make-appropriate-non-chaperone-contract c)
   (if (flat-contract? c)
     make-flat-contract
-  #/make-appropriate-chaperone-contract c))
+    make-contract))
 
 ; TODO: Consider putting this into `effection/order`.
 (define/contract (table-update-default t k default-v func)
@@ -560,7 +554,7 @@
 (define/contract (continuation-ticket-of c)
   (-> contract? contract?)
   (w- c (coerce-contract 'continuation-ticket-of c)
-  #/ (make-appropriate-chaperone-contract c)
+  #/ (make-appropriate-non-chaperone-contract c)
     
     #:name `(continuation-ticket-of ,(contract-name c))
     
@@ -794,7 +788,7 @@
 (define/contract (optionally-dexable-of c)
   (-> contract? contract?)
   (w- c (coerce-contract 'optionally-dexable-of c)
-  #/ (make-appropriate-contract c)
+  #/ (make-appropriate-non-chaperone-contract c)
     
     #:name `(optionally-dexable-of ,(contract-name c))
     
