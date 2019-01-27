@@ -135,8 +135,18 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 }
 
 
-@defstruct*[dexable ([dex any/c] [value any/c])]{
-  A struct that pairs a value with a dex that it purportedly belongs to. If @racket[dex] actually is a dex and @racket[value] actually does belong to its domain, this is considered well-formed.
+@deftogether[(
+  @defidform[dexable]
+  @defform[#:link-target? #f (dexable dex-expr value-expr)]
+  @defform[
+    #:kind "match expander" #:link-target? #f
+    (dexable dex-pat value-pat)
+  ]
+  @defproc[(dexable? [v any/c]) boolean?]
+  @defproc[(dexable-dex [v dexable?]) any/c]
+  @defproc[(dexable-value [v dexable?]) any/c]
+)]{
+  Struct-like operations which construct and deconstruct a value that pairs a value with a dex that it purportedly belongs to. If @racket[dex-expr] actually is a dex and @racket[value-expr] actually does belong to its domain, this is considered well-formed.
 }
 
 @defproc[(valid-dexable? [x any/c]) boolean?]{

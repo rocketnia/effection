@@ -36,9 +36,11 @@
   hash-ref-maybe hash-set-maybe hash-v-all hash-v-any hash-v-map)
 (require #/only-in lathe-comforts/list
   list-all list-any list-bind list-map)
+(require #/only-in lathe-comforts/match match/c)
 (require #/only-in lathe-comforts/maybe
   just maybe? maybe-bind maybe/c nothing nothing?)
-(require #/only-in lathe-comforts/struct istruct/c struct-easy)
+(require #/only-in lathe-comforts/struct
+  auto-write define-imitation-simple-struct struct-easy)
 
 (require #/only-in effection/order/private
   dex-result? lt-autodex names-autodex make-ordering-private-gt
@@ -86,7 +88,11 @@
   autoname-dex)
 (provide in-dex? name-of compare-by-dex)
 
-(provide #/struct-out dexable)
+(provide dexable)
+(provide #/contract-out
+  [dexable? (-> any/c boolean?)]
+  [dexable-dex (-> dexable? any/c)]
+  [dexable-value (-> dexable? any/c)])
 (provide valid-dexable? dexableof)
 (provide compare-dexables name-of-dexable)
 (provide dex-name dex-dex)
@@ -328,7 +334,11 @@
   #/internal:dex-internals-compare internals a b))
 
 
-(struct-easy (dexable dex value))
+(define-imitation-simple-struct dexable dexable?
+  (dexable-dex dexable-value)
+  (current-inspector)
+  'dexable
+  (auto-write))
 
 (define/contract (valid-dexable? x)
   (-> any/c boolean?)
@@ -344,7 +354,7 @@
     
     #:first-order
     (fn v
-      (contract-first-order-passes? (istruct/c dexable dex? c) v))
+      (contract-first-order-passes? (match/c dexable dex? c) v))
     
     #:late-neg-projection
     (fn blame
@@ -368,7 +378,7 @@
     #:first-order
     (fn v
       (contract-first-order-passes?
-        (and/c valid-dexable? #/istruct/c dexable dex? c)
+        (and/c valid-dexable? #/match/c dexable dex? c)
         v))
     
     #:late-neg-projection
@@ -615,11 +625,11 @@
       contract?
       (case->
         (->
-          (istruct/c cmp-by-own-method::raise-different-methods-error
+          (match/c cmp-by-own-method::raise-different-methods-error
             any/c any/c cmp? cmp?)
           none/c)
         (->
-          (istruct/c cmp-by-own-method::get-method any/c)
+          (match/c cmp-by-own-method::get-method any/c)
           (maybe/c cmp?))))
     
     ; NOTE: If we weren't using this macro, we'd write the
@@ -1725,22 +1735,22 @@
       contract?
       (case->
         (->
-          (istruct/c
+          (match/c
             furge-by-own-method::raise-different-input-methods-error
             any/c any/c furge? furge?)
           none/c)
         (->
-          (istruct/c
+          (match/c
             furge-by-own-method::raise-cannot-get-output-method-error
             any/c any/c any/c furge?)
           none/c)
         (->
-          (istruct/c
+          (match/c
             furge-by-own-method::raise-different-output-method-error
             any/c any/c any/c furge? furge?)
           none/c)
         (->
-          (istruct/c furge-by-own-method::get-method any/c)
+          (match/c furge-by-own-method::get-method any/c)
           (maybe/c furge?))))
     
     (struct-easy (furge-internals-by-own-method dexable-delegate)
@@ -2097,7 +2107,7 @@
     #:first-order
     (fn v
       (contract-first-order-passes?
-        (istruct/c internal:table #/hash/c #:immutable #t any/c c)
+        (match/c internal:table #/hash/c #:immutable #t any/c c)
         v))
     
     #:late-neg-projection
@@ -2391,12 +2401,12 @@
   contract?
   (case->
     (->
-      (istruct/c
+      (match/c
         fuse-fusable-function::raise-cannot-combine-results-error
         fuse? any/c any/c any/c any/c)
       none/c)
     (->
-      (istruct/c fuse-fusable-function::arg-to-method any/c)
+      (match/c fuse-fusable-function::arg-to-method any/c)
       (maybe/c fuse?))))
 
 (struct-easy (furge-internals-fusable-function dexable-delegate)
