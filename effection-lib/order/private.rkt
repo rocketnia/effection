@@ -10,7 +10,8 @@
 (require #/only-in syntax/parse/define define-simple-macro)
 
 (require #/only-in lathe-comforts expect dissect fn mat w- w-loop)
-(require #/only-in lathe-comforts/struct struct-easy)
+(require #/only-in lathe-comforts/struct
+  auto-equal auto-write define-imitation-simple-struct)
 
 (require #/prefix-in internal: #/only-in
   effection/order/private/unsafe
@@ -24,9 +25,21 @@
 
 ; ===== Orderings ====================================================
 
-(struct-easy (ordering-lt) #:equal)
-(struct-easy (ordering-eq) #:equal)
-(struct-easy (ordering-gt) #:equal)
+(define-imitation-simple-struct ordering-lt ordering-lt? ()
+  (current-inspector)
+  'ordering-lt
+  (auto-write)
+  (auto-equal))
+(define-imitation-simple-struct ordering-eq ordering-eq? ()
+  (current-inspector)
+  'ordering-eq
+  (auto-write)
+  (auto-equal))
+(define-imitation-simple-struct ordering-gt ordering-gt? ()
+  (current-inspector)
+  'ordering-gt
+  (auto-write)
+  (auto-equal))
 
 (define/contract (ordering-private? x)
   (-> any/c boolean?)

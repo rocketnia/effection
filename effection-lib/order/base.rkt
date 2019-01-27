@@ -22,7 +22,7 @@
 (require #/only-in racket/contract get/build-late-neg-projection)
 (require #/only-in racket/contract/base
   -> and/c any any/c case-> cons/c contract? contract-name
-  flat-contract? hash/c list/c listof none/c)
+  contract-out flat-contract? hash/c list/c listof none/c)
 (require #/only-in racket/contract/combinator
   blame-add-context coerce-contract contract-first-order-passes?
   make-contract make-flat-contract raise-blame-error)
@@ -45,11 +45,11 @@
   make-ordering-private-lt name? object-identities-autodex
   ordering-private?
   
-  struct:ordering-eq ordering-eq ordering-eq?
+  ordering-eq ordering-eq?
   
-  struct:ordering-gt ordering-gt ordering-gt?
+  ordering-gt ordering-gt?
   
-  struct:ordering-lt ordering-lt ordering-lt?
+  ordering-lt ordering-lt?
   )
 (require #/prefix-in internal: #/only-in
   effection/order/private/unsafe
@@ -67,9 +67,11 @@
 
 ; ==== Orderings ====
 
-(provide #/struct-out ordering-lt)
-(provide #/struct-out ordering-eq)
-(provide #/struct-out ordering-gt)
+(provide ordering-lt ordering-eq ordering-gt)
+(provide #/contract-out
+  [ordering-lt? (-> any/c boolean?)]
+  [ordering-eq? (-> any/c boolean?)]
+  [ordering-gt? (-> any/c boolean?)])
 (provide ordering-private?)
 (provide dex-result? cline-result?)
 (provide make-ordering-private-lt make-ordering-private-gt)

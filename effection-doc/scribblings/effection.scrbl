@@ -54,20 +54,35 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 
 @subsection[#:tag "orderings"]{Orderings}
 
-@defstruct*[ordering-lt ()]{
-  A struct that represents the result of a comparison where the first value turned out to be candidly strictly less than the second value.
+@deftogether[(
+  @defidform[ordering-lt]
+  @defform[#:link-target? #f (ordering-lt)]
+  @defform[#:kind "match expander" #:link-target? #f (ordering-lt)]
+  @defproc[(ordering-lt? [v any/c]) boolean?]
+)]{
+  Struct-like operations which construct and deconstruct a value that represents the result of a comparison where the first value turned out to be candidly strictly less than the second value.
   
   For the purposes of Effection-unsafe Racket code, every two @tt{ordering-lt} values are @racket[equal?].
 }
 
-@defstruct*[ordering-eq ()]{
-  A struct that represents the result of a comparison where the first value turned out to be equal to the second value.
+@deftogether[(
+  @defidform[ordering-eq]
+  @defform[#:link-target? #f (ordering-eq)]
+  @defform[#:kind "match expander" #:link-target? #f (ordering-eq)]
+  @defproc[(ordering-eq? [v any/c]) boolean?]
+)]{
+  Struct-like operations which construct and deconstruct a value that represents the result of a comparison where the first value turned out to be equal to the second value.
   
   For the purposes of Effection-unsafe Racket code, every two @tt{ordering-eq} values are @racket[equal?].
 }
 
-@defstruct*[ordering-gt ()]{
-  A struct that represents the result of a comparison where the first value turned out to be candidly strictly greater than the second value.
+@deftogether[(
+  @defidform[ordering-gt]
+  @defform[#:link-target? #f (ordering-gt)]
+  @defform[#:kind "match expander" #:link-target? #f (ordering-gt)]
+  @defproc[(ordering-gt? [v any/c]) boolean?]
+)]{
+  Struct-like operations which construct and deconstruct a value that represents the result of a comparison where the first value turned out to be candidly strictly greater than the second value.
   
   For the purposes of Effection-unsafe Racket code, every two @tt{ordering-gt} values are @racket[equal?].
 }
