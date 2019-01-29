@@ -2,17 +2,21 @@
 
 
 (require #/only-in racket/contract/base
-  -> ->* ->i =/c >=/c and/c any any/c contract? flat-contract? listof
-  or/c struct/c struct/dc unconstrained-domain->)
+  -> ->* ->i =/c >=/c and/c any any/c contract? contract-name
+  contract-out flat-contract? listof or/c rename-contract struct/c
+  unconstrained-domain->)
 (require #/only-in racket/contract/combinator make-contract)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/list split-at take)
 
 (require #/only-in lathe-comforts dissect expect mat w- w-loop)
+(require #/only-in lathe-comforts/contract by-own-method/c)
 (require #/only-in lathe-comforts/list
   list-any list-kv-map list-zip-map)
+(require #/only-in lathe-comforts/match match/c)
 (require #/only-in lathe-comforts/maybe just maybe/c nothing)
-(require #/only-in lathe-comforts/struct struct-easy)
+(require #/only-in lathe-comforts/struct
+  auto-equal auto-write define-imitation-simple-struct struct-easy)
 
 (require #/only-in effection/order/base fuse? name?)
 
@@ -280,12 +284,17 @@
 ;(provide first-observable-usage-degree-for-sensitivity)
 ;(provide sd-and sd-lte sd1-and)
 
-;(provide #/struct-out holes-h-and-value)
-;(provide #/rename-out
-;  [-computation-h? computation-h?]
-;  [-computation-h-sensitivity-degree
-;    computation-h-sensitivity-degree]
-;  [-computation-h-usage-degree computation-h-usage-degree])
+;(provide holes-h-and-value)
+;(provide #/contract-out
+;  [holes-h-and-value? (-> any/c boolean?)]
+;  [holes-h-and-value? (-> any/c boolean?)]
+;  [holes-h-and-value-holes (-> holes-h-and-value? any/c)]
+;  [holes-h-and-value-value (-> holes-h-and-value? any/c)])
+;  [computation-h? (-> any/c boolean?)]
+;  [computation-h-sensitivity-degree
+;    (-> computation-h? sensitivity-degree?)]
+;  [computation-h-usage-degree
+;    (-> computation-h? exact-nonnegative-integer?)])
 ;(provide chaperone-procedure*-run1!h! chaperone-procedure-run1!h!)
 ;(provide pure/c!h!)
 ;(provide holes-h/c computation-h/c)
@@ -590,29 +599,22 @@
   (-> exact-nonnegative-integer? sensitivity-degree?)
   (sd-and (sd1) #/sensitivity-from-usage usage-degree))
 
-(struct-easy (holes-h-and-value holes value) #:equal)
+(define-imitation-simple-struct holes-h-and-value holes-h-and-value?
+  (holes-h-and-value-holes holes-h-and-value-value)
+  (current-inspector)
+  'holes-h-and-value
+  (auto-write)
+  (auto-equal))
 
-(struct-easy
-  (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
-  #:equal)
-
-; A version of `computation-h?` that does not satisfy
-; `struct-predicate-procedure?`.
-(define/contract (-computation-h? x)
-  (-> any/c boolean?)
-  (computation-h? x))
-
-; A version of `computation-h-sensitivity-degree` that does not
-; satisfy `struct-accessor-procedure?`.
-(define/contract (-computation-h-sensitivity-degree computation)
-  (-> -computation-h? sensitivity-degree?)
-  (computation-h-sensitivity-degree computation))
-
-; A version of `computation-h-usage-degree` that does not satisfy
-; `struct-accessor-procedure?`.
-(define/contract (-computation-h-usage-degree computation)
-  (-> -computation-h? exact-nonnegative-integer?)
-  (computation-h-usage-degree computation))
+(define-imitation-simple-struct computation-h computation-h?
+  (
+    computation-h-sensitivity-degree
+    computation-h-usage-degree
+    computation-h-unsafe-run0!h!)
+  (current-inspector)
+  'computation-h
+  (auto-write)
+  (auto-equal))
 
 (define (assert-current-sensitivity-allows degree)
   (dissect
@@ -652,16 +654,28 @@
 (define/contract
   (computation-h/c sensitivity-degree/c usage-degree/c value/c-maybe)
   (-> contract? contract? (maybe/c contract?) contract?)
-  (struct/dc computation-h
-    [sensitivity-degree
-      (and/c sensitivity-degree? sensitivity-degree/c)]
-    [usage-degree (and/c exact-nonnegative-integer? usage-degree/c)]
-    [unsafe-run0!h! (sensitivity-degree usage-degree)
-      (mat value/c-maybe (just value/c)
-        (-> #/struct/c holes-h-and-value
-          (holes-h/c sensitivity-degree 0 usage-degree)
-          value/c)
-        (-> any))]))
+  (rename-contract
+    (expect value/c-maybe (just value/c)
+      (match/c computation-h
+        (and/c sensitivity-degree? sensitivity-degree/c)
+        (and/c exact-nonnegative-integer? usage-degree/c)
+        (-> any))
+    #/and/c
+      (match/c computation-h
+        (and/c sensitivity-degree? sensitivity-degree/c)
+        (and/c exact-nonnegative-integer? usage-degree/c)
+        any/c)
+      (by-own-method/c
+        (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
+        (match/c computation-h any/c any/c
+          (-> #/match/c holes-h-and-value
+            (holes-h/c sensitivity-degree 0 usage-degree)
+            value/c))))
+    `(computation-h/c
+       ,(contract-name sensitivity-degree/c)
+       ,(contract-name usage-degree/c)
+       (expect value/c-maybe (just value/c) `(nothing)
+         `(just ,(contract-name value/c))))))
 
 (define/contract
   (chaperone-procedure*-run1!h! proc wrapper-proc . props)
@@ -870,7 +884,7 @@
     [_ (computation)
       (w- ds (computation-h-sensitivity-degree computation)
       #/w- du (computation-h-usage-degree computation)
-      #/struct/c holes-h-and-value (holes-h/c ds 0 du) any/c)])
+      #/match/c holes-h-and-value (holes-h/c ds 0 du) any/c)])
   (dissect computation
     (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
   #/call-with-semaphore hyperstack-semaphore* #/lambda ()
