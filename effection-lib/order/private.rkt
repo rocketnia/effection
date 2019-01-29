@@ -25,21 +25,12 @@
 
 ; ===== Orderings ====================================================
 
-(define-imitation-simple-struct ordering-lt ordering-lt? ()
-  (current-inspector)
-  'ordering-lt
-  (auto-write)
-  (auto-equal))
-(define-imitation-simple-struct ordering-eq ordering-eq? ()
-  (current-inspector)
-  'ordering-eq
-  (auto-write)
-  (auto-equal))
-(define-imitation-simple-struct ordering-gt ordering-gt? ()
-  (current-inspector)
-  'ordering-gt
-  (auto-write)
-  (auto-equal))
+(define-imitation-simple-struct (ordering-lt?) ordering-lt
+  'ordering-lt (current-inspector) (auto-write) (auto-equal))
+(define-imitation-simple-struct (ordering-eq?) ordering-eq
+  'ordering-eq (current-inspector) (auto-write) (auto-equal))
+(define-imitation-simple-struct (ordering-gt?) ordering-gt
+  'ordering-gt (current-inspector) (auto-write) (auto-equal))
 
 (define/contract (ordering-private? x)
   (-> any/c boolean?)

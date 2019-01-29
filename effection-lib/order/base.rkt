@@ -334,11 +334,8 @@
   #/internal:dex-internals-compare internals a b))
 
 
-(define-imitation-simple-struct dexable dexable?
-  (dexable-dex dexable-value)
-  (current-inspector)
-  'dexable
-  (auto-write))
+(define-imitation-simple-struct (dexable? dexable-dex dexable-value)
+  dexable 'dexable (current-inspector) (auto-write))
 
 (define/contract (valid-dexable? x)
   (-> any/c boolean?)

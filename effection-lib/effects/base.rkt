@@ -599,20 +599,18 @@
   (-> exact-nonnegative-integer? sensitivity-degree?)
   (sd-and (sd1) #/sensitivity-from-usage usage-degree))
 
-(define-imitation-simple-struct holes-h-and-value holes-h-and-value?
-  (holes-h-and-value-holes holes-h-and-value-value)
-  (current-inspector)
-  'holes-h-and-value
+(define-imitation-simple-struct
+  (holes-h-and-value? holes-h-and-value-holes holes-h-and-value-value)
+  holes-h-and-value 'holes-h-and-value (current-inspector)
   (auto-write)
   (auto-equal))
 
-(define-imitation-simple-struct computation-h computation-h?
-  (
+(define-imitation-simple-struct
+  (computation-h?
     computation-h-sensitivity-degree
     computation-h-usage-degree
     computation-h-unsafe-run0!h!)
-  (current-inspector)
-  'computation-h
+  computation-h 'computation-h (current-inspector)
   (auto-write)
   (auto-equal))
 
