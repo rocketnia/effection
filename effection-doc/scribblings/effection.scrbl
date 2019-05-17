@@ -384,7 +384,7 @@ Merges represent operations that are commutative, associative, and idempotent, o
 
 Fuses represent operations that are commutative and associative (and not necessarily idempotent). A fuse is ideal for operating on a (nonempty and finite) unordered @emph{multiset} of inputs.
 
-The idempotence of a merge operation is such enough that if the two inputs to the merge are @racket[order-eq] by any dex, the result will be @racket[order-eq] to them both by the same dex.
+The idempotence of a merge operation is such enough that if the two inputs to the merge are @racket[ordering-eq] by any dex, the result will be @racket[ordering-eq] to them both by the same dex.
 
 
 @deftogether[(
