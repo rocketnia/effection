@@ -6,11 +6,11 @@
 ; documentation correctly says it is, we require it from there.
 (require #/only-in racket/contract get/build-late-neg-projection)
 (require #/only-in racket/contract/base
-  -> ->i any any/c contract? contract-name contract-out flat-contract?
-  list/c listof or/c)
+  -> ->i any any/c contract? contract-name contract-out list/c listof
+  or/c)
 (require #/only-in racket/contract/combinator
   blame-add-context coerce-contract contract-first-order-passes?
-  make-contract make-flat-contract raise-blame-error)
+  make-flat-contract raise-blame-error)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/hash hash-union)
 (require #/only-in racket/math natural?)
@@ -26,11 +26,15 @@
 (require #/only-in lathe-comforts/struct istruct/c struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
 
-(require #/only-in effection/order eq-by-dex? table-v-of)
+(require #/only-in effection/order
+  dex-trivial eq-by-dex? table-kv-all? table-v-map table-v-of)
 (require #/only-in effection/order/base
-  dex? dexable dexableof dex-dex dex-name fuse? name? name-of
-  ordering-eq table? table-empty table-get table-shadow
+  dex? dexable dexableof dex-dex dex-name dex-table fuse? name?
+  name-of ordering-eq table? table-empty table-get table-shadow
   valid-dexable?)
+(require #/only-in effection/order/private
+  make-appropriate-non-chaperone-contract)
+
 (require #/prefix-in unsafe: #/only-in effection/order/unsafe
   dex fuse gen:dex-internals gen:furge-internals name table)
 
@@ -80,9 +84,14 @@
   [authorized-name-dspace-ancestor/c (-> dspace? contract?)]
   [authorized-name-get-name (-> authorized-name? name?)]
   [dex-authorized-name (-> dex?)]
+  [table-of-matching-authorized-names? (-> any/c boolean?)]
   [name-subname (-> name? name? name?)]
   [authorized-name-subname
     (-> name? authorized-name? authorized-name?)]
+  [name-table-subname (-> (table-v-of trivial?) name? name?)]
+  [authorized-name-table-subname
+    (-> table-of-matching-authorized-names? authorized-name?
+      authorized-name?)]
   [extfx-claim-unique
     (-> authorized-name? error-definer? error-definer?
       (-> authorized-name? familiarity-ticket? extfx?)
@@ -346,13 +355,6 @@
 (define/contract (list-keep lst check)
   (-> list? (-> any/c boolean?) list?)
   (filter check lst))
-
-; TODO: This is also defined privately in `effection/order/base`. See
-; if we can extract it into a library or something.
-(define (make-appropriate-non-chaperone-contract c)
-  (if (flat-contract? c)
-    make-flat-contract
-    make-contract))
 
 ; TODO: Consider putting this into `effection/order`.
 (define/contract (table-update-default t k default-v func)
@@ -846,6 +848,12 @@
 (define (dex-authorized-name)
   (unsafe:dex #/dex-internals-authorized-name))
 
+(define (table-of-matching-authorized-names? x)
+  (and (table? x)
+  #/table-kv-all? x #/fn k v
+    (and (authorized-name? v)
+    #/eq-by-dex? (dex-name) k (authorized-name-get-name v))))
+
 (define (name-subname key-name original-name)
   (dissect key-name (unsafe:name key-name)
   #/dissect original-name (unsafe:name original-name)
@@ -865,6 +873,32 @@
   #/internal:authorized-name
     ds
     (name-subname key-name original-name)
+    (table-shadow original-name (just #/trivial) parents)))
+
+; TODO: The design of `{authorized-,}name-table-subname` is based on
+; the needs of Cene for Racket's
+; `sink-{authorized-,}name-for-function-implementation`, but it's not
+; very clear that it's the right design. Do the individual table
+; entries really need to be authorized? If they do, then don't they
+; need to be counted among the `parents` of the resulting authorized
+; name (which we're not currently doing)? If we do decide to count
+; them among those parents, then we have a tree of parents rather than
+; a sequential path, so checking for whether a name is accessible by
+; an outstanding familiarity ticket might be tricker to do correctly.
+
+(define (name-table-subname key-names original-name)
+  (dissect (name-of (dex-table #/dex-trivial) key-names)
+    (just #/unsafe:name key-names)
+  #/dissect original-name (unsafe:name original-name)
+  #/unsafe:name #/list 'name:table-subname key-names original-name))
+
+(define (authorized-name-table-subname key-names original-name)
+  (dissect original-name
+    (internal:authorized-name ds original-name parents)
+  #/internal:authorized-name
+    ds
+    (name-table-subname (table-v-map key-names #/fn v #/trivial)
+      original-name)
     (table-shadow original-name (just #/trivial) parents)))
 
 ; NOTE: The `authorized-name?` and the `familiarity-ticket?` passed

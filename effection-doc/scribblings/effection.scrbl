@@ -721,6 +721,17 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
 }
 
 @defproc[
+  (table-kv-all?
+    [table table?]
+    [kv-accepted? (-> name? any/c boolean?)])
+  boolean?
+]{
+  Iterates over the given hash table's entries in an unspecified order and calls the given function on each entry's key and value. If the function ever returns @racket[#f], then the overall result is @racket[#f]; otherwise, it's @racket[#t].
+  
+  There is no short-circuiting. Every entry is always visited, a policy which ensures that Effection-safe code can't use nontermination or run time errors to make assertions about the iteration order of the table. (Nevertheless, Effection-unsafe code can use Racket side effects to observe the iteration order.)
+}
+
+@defproc[
   (table-kv-any?
     [table table?]
     [kv-accepted? (-> name? any/c boolean?)])
@@ -736,6 +747,15 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
   maybe?
 ]{
   Returns a table with the same keys as the given one. The result is constructed by iterating over the given hash table's entries in an unspecified order and calling the given function with each entry's mapped value to determine the corresponding result entry's mapped value.
+}
+
+@defproc[
+  (table-v-all? [table table?] [v-accepted? (-> any/c boolean?)])
+  boolean?
+]{
+  Iterates over the given hash table's entries in an unspecified order and calls the given function on each entry's mapped value. If the function ever returns @racket[#f], then the overall result is @racket[#f]; otherwise, it's @racket[#t].
+  
+  There is no short-circuiting. Every entry is always visited, a policy which ensures that Effection-safe code can't use nontermination or run time errors to make assertions about the iteration order of the table. (Nevertheless, Effection-unsafe code can use Racket side effects to observe the iteration order.)
 }
 
 @defproc[

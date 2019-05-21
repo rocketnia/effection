@@ -47,8 +47,10 @@
   
   eq-by-dex?
   table-kv-map
+  table-kv-all?
   table-kv-any?
   table-v-map
+  table-v-all?
   table-v-any?
   table-v-of
   
@@ -257,15 +259,25 @@
   #/fn k v
     (table-shadow k (just #/kv-to-v k v) #/table-empty)))
 
-(define/contract (table-v-map table v-to-v)
-  (-> table? (-> any/c any/c) table?)
-  (table-kv-map table #/fn k v #/v-to-v v))
+(define/contract (table-kv-all? table kv-accepted?)
+  (-> table? (-> name? any/c boolean?) table?)
+  (table-kv-map-fuse-default table #t
+    (fuse-by-merge #/merge-boolean-by-and)
+    kv-accepted?))
 
 (define/contract (table-kv-any? table kv-accepted?)
   (-> table? (-> name? any/c boolean?) table?)
   (table-kv-map-fuse-default table #f
     (fuse-by-merge #/merge-boolean-by-or)
     kv-accepted?))
+
+(define/contract (table-v-map table v-to-v)
+  (-> table? (-> any/c any/c) table?)
+  (table-kv-map table #/fn k v #/v-to-v v))
+
+(define/contract (table-v-all? table v-accepted?)
+  (-> table? (-> any/c boolean?) table?)
+  (table-kv-all? table #/fn k v #/v-accepted? v))
 
 (define/contract (table-v-any? table v-accepted?)
   (-> table? (-> any/c boolean?) table?)
