@@ -6,7 +6,9 @@
 
 @(require #/for-label #/only-in lathe-comforts/maybe
   just maybe? maybe/c nothing)
+@(require #/for-label #/only-in lathe-comforts/trivial trivial?)
 
+@(require #/for-label effection/order)
 @(require #/for-label effection/order/base)
 
 
@@ -608,6 +610,10 @@ There is currently no way to make a fusable function that performs a tail call. 
 @defmodule[effection/order]
 
 The @tt{effection/order} module exports all the definitions of @racketmodname[effection/order/base] plus the definitions below.
+
+@defproc[(dex-trivial) dex?]{
+  Returns a dex that compares @racket[trivial?] values from Lathe Comforts. Every two @racket[trivial?] values are @racket[ordering-eq].
+}
 
 @defproc[(dex-immutable-string) dex?]{
   Returns a dex that compares immutable strings.
