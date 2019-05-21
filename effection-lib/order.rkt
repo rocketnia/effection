@@ -3,7 +3,7 @@
 (require #/only-in racket/contract/base -> any/c)
 (require #/only-in racket/contract/region define/contract)
 
-(require #/only-in lathe-comforts expect fn)
+(require #/only-in lathe-comforts dissect expect fn mat)
 (require #/only-in lathe-comforts/maybe just nothing)
 (require #/only-in lathe-comforts/string immutable-string?)
 (require #/only-in lathe-comforts/struct struct-easy)
@@ -199,3 +199,19 @@
       "a" a
       "b" b)
   #/ordering-eq? comparison))
+
+(define/contract (table-kv-map table kv-to-v)
+  (-> table? (-> name? any/c any/c) table?)
+  (mat
+    (table-map-fuse table
+      (fuse-by-merge #/merge-table #/merge-by-dex #/dex-give-up)
+    #/fn k
+      (dissect (table-get k table) (just v)
+      #/table-shadow k (just #/kv-to-v k v) #/table-empty))
+    (just result)
+    result
+  #/table-empty))
+
+(define/contract (table-v-map table v-to-v)
+  (-> table? (-> any/c any/c) table?)
+  (table-kv-map table #/fn k v #/v-to-v v))

@@ -658,3 +658,17 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
 @defproc[(eq-by-dex? [dex dex?] [a any/c] [b any/c]) boolean?]{
   Given a dex and two values which must be in the dex's domain, computes whether those values are @racket[ordering-eq] according to the dex.
 }
+
+@defproc[
+  (table-kv-map [table table?] [kv-to-v (-> name? any/c any/c)])
+  maybe?
+]{
+  Returns a table with the same keys as the given one. The result is constructed by iterating over the given hash table's entries in an unspecified order and calling the given function with each entry's key and value to determine the corresponding result entry's mapped value.
+}
+
+@defproc[
+  (table-v-map [table table?] [v-to-v (-> any/c any/c)])
+  maybe?
+]{
+  Returns a table with the same keys as the given one. The result is constructed by iterating over the given hash table's entries in an unspecified order and calling the given function with each entry's mapped value to determine the corresponding result entry's mapped value.
+}
