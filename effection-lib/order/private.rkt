@@ -4,8 +4,11 @@
 (require #/for-syntax #/only-in syntax/parse expr)
 
 
-(require #/only-in racket/contract/base -> any/c list/c listof)
+(require #/only-in racket/contract/base
+  -> any/c flat-contract? list/c listof)
 (require #/only-in racket/contract/region define/contract)
+(require #/only-in racket/contract/combinator
+  make-contract make-flat-contract)
 (require #/only-in racket/math natural?)
 (require #/only-in syntax/parse/define define-simple-macro)
 
@@ -21,6 +24,14 @@
 
 (provide #/all-defined-out)
 
+
+
+; ===== Miscellaneous utilities ======================================
+
+(define (make-appropriate-non-chaperone-contract c)
+  (if (flat-contract? c)
+    make-flat-contract
+    make-contract))
 
 
 ; ===== Orderings ====================================================

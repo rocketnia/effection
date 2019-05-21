@@ -26,10 +26,10 @@
 (require #/only-in lathe-comforts/struct istruct/c struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
 
-(require #/only-in effection/order eq-by-dex?)
+(require #/only-in effection/order eq-by-dex? table-v-of)
 (require #/only-in effection/order/base
   dex? dexable dexableof dex-dex dex-name fuse? name? name-of
-  ordering-eq table? table-empty table-get tableof table-shadow
+  ordering-eq table? table-empty table-get table-shadow
   valid-dexable?)
 (require #/prefix-in unsafe: #/only-in effection/order/unsafe
   dex fuse gen:dex-internals gen:furge-internals name table)
@@ -180,8 +180,8 @@
       (-> (listof intuitionistic-ticket?) extfx?)
       extfx?)]
   [extfx-split-table
-    (-> intuitionistic-ticket? (tableof trivial?) error-definer?
-      (-> (tableof intuitionistic-ticket?) extfx?)
+    (-> intuitionistic-ticket? (table-v-of trivial?) error-definer?
+      (-> (table-v-of intuitionistic-ticket?) extfx?)
       extfx?)]
   [extfx-disburse
     (->i

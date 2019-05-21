@@ -2,7 +2,7 @@
 
 @(require #/for-label racket/base)
 @(require #/for-label #/only-in racket/contract/base
-  -> any/c chaperone-contract? cons/c contract? listof)
+  -> any/c cons/c contract? listof)
 
 @(require #/for-label #/only-in lathe-comforts/maybe
   just maybe? maybe/c nothing)
@@ -377,6 +377,17 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to the similarly constructed @racket[dex-struct].
 }
 
+@; TODO: Add this to Cene for Racket.
+@defproc[(cline-flip [cline cline?]) cline?]{
+  Returns a cline that compares values by calling the given dex but reverses the "candidly precedes" and "candidly follows" results (@racket[ordering-lt] and @racket[ordering-gt]). It dosn't reverse the "secretly precedes" and "secretly follows" results.
+  
+  When compared by @racket[(dex-cline)], @tt{cline-flip} values are usually @racket[ordering-eq] if their given clines are. The one exception is that calling @tt{cline-flip} twice in a row has no effect; the result of the second call is @racket[ordering-eq] to the original cline. This behavior is experimental; future revisions to this library may remove this exception or add more exceptions (such as having @racket[(@#,tt{cline-flip} (cline-default _a _b))] be @racket[ordering-eq] to @racket[(cline-default (@#,tt{cline-flip} _b) (@#,tt{cline-flip} _a))]).
+  
+  @; TODO: Stabilize that behavior.
+  
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to the dex obtained the same way from the original cline.
+}
+
 
 @subsection[#:tag "merges-and-fuses"]{Merges and Fuses}
 
@@ -417,6 +428,20 @@ The idempotence of a merge operation is such enough that if the two inputs to th
   Returns a merge that merges any values that are already @racket[ordering-eq] according the given dex. The result of the merge is @racket[ordering-eq] to both of the inputs.
   
   When compared by @racket[(dex-merge)], all @tt{merge-by-dex} values are @racket[ordering-eq] if their dexes are.
+}
+
+@; TODO: Add this to Cene for Racket.
+@defproc[(merge-by-cline-min [cline cline?]) merge?]{
+  Returns a merge that finds the minimum of any set of values in the given cline's domain. The result of the merge is @racket[ordering-eq] to at least one of the inputs, and it's @racket[ordering-lt] to the rest.
+  
+  When compared by @racket[(dex-merge)], all @tt{merge-by-cline-min} values are @racket[ordering-eq] if their clines are. They're also @racket[ordering-eq] to @racket[(merge-by-cline-max (cline-flip cline))].
+}
+
+@; TODO: Add this to Cene for Racket.
+@defproc[(merge-by-cline-max [cline cline?]) merge?]{
+  Returns a merge that finds the maximum of any set of values in the given cline's domain. The result of the merge is @racket[ordering-eq] to at least one of the inputs, and it's @racket[ordering-gt] to the rest.
+  
+  When compared by @racket[(dex-merge)], all @tt{merge-by-cline-max} values are @racket[ordering-eq] if their clines are. They're also @racket[ordering-eq] to @racket[(merge-by-cline-min (cline-flip cline))].
 }
 
 @defproc[(fuse-by-merge [merge merge?]) fuse?]{
@@ -615,6 +640,35 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
   Returns a dex that compares @racket[trivial?] values from Lathe Comforts. Every two @racket[trivial?] values are @racket[ordering-eq].
 }
 
+@; TODO: Add this to Cene for Racket.
+@defproc[(dex-boolean) dex?]{
+  Returns a dex that compares @racket[boolean?] values.
+}
+
+@; TODO: Add this to Cene for Racket.
+@defproc[(cline-boolean-by-truer) cline?]{
+  Returns a cline that compares booleans by an ordering where @racket[#f] is @racket[ordering-lt] to @racket[#t].
+  
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to @racket[(dex-boolean)].
+}
+
+@; TODO: Add this to Cene for Racket.
+@defproc[(cline-boolean-by-falser) cline?]{
+  Returns a cline that compares booleans by an ordering where @racket[#t] is @racket[ordering-lt] to @racket[#f].
+  
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to @racket[(dex-boolean)].
+}
+
+@; TODO: Add this to Cene for Racket.
+@defproc[(merge-boolean-by-and) merge?]{
+  Returns a merge that merges booleans using @racket[and].
+}
+
+@; TODO: Add this to Cene for Racket.
+@defproc[(merge-boolean-by-or) merge?]{
+  Returns a merge that merges booleans using @racket[or].
+}
+
 @defproc[(dex-immutable-string) dex?]{
   Returns a dex that compares immutable strings.
 }
@@ -667,8 +721,32 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
 }
 
 @defproc[
+  (table-kv-any?
+    [table table?]
+    [kv-accepted? (-> name? any/c boolean?)])
+  boolean?
+]{
+  Iterates over the given hash table's entries in an unspecified order and calls the given function on each entry's key and value. If the function ever returns @racket[#t], then the overall result is @racket[#t]; otherwise, it's @racket[#f].
+  
+  There is no short-circuiting. Every entry is always visited, a policy which ensures that Effection-safe code can't use nontermination or run time errors to make assertions about the iteration order of the table. (Nevertheless, Effection-unsafe code can use Racket side effects to observe the iteration order.)
+}
+
+@defproc[
   (table-v-map [table table?] [v-to-v (-> any/c any/c)])
   maybe?
 ]{
   Returns a table with the same keys as the given one. The result is constructed by iterating over the given hash table's entries in an unspecified order and calling the given function with each entry's mapped value to determine the corresponding result entry's mapped value.
+}
+
+@defproc[
+  (table-v-any? [table table?] [v-accepted? (-> any/c boolean?)])
+  boolean?
+]{
+  Iterates over the given hash table's entries in an unspecified order and calls the given function on each entry's mapped value. If the function ever returns @racket[#t], then the overall result is @racket[#t]; otherwise, it's @racket[#f].
+  
+  There is no short-circuiting. Every entry is always visited, a policy which ensures that Effection-safe code can't use nontermination or run time errors to make assertions about the iteration order of the table. (Nevertheless, Effection-unsafe code can use Racket side effects to observe the iteration order.)
+}
+
+@defproc[(table-v-of [c contract?]) contract?]{
+  Returns a contract that recognizes a @racket[table?] where the mapped values obey the given contract.
 }

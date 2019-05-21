@@ -22,10 +22,10 @@
 (require #/only-in racket/contract get/build-late-neg-projection)
 (require #/only-in racket/contract/base
   -> and/c any any/c case-> cons/c contract? contract-name
-  contract-out flat-contract? hash/c list/c listof none/c)
+  contract-out hash/c list/c listof none/c)
 (require #/only-in racket/contract/combinator
   blame-add-context coerce-contract contract-first-order-passes?
-  make-contract make-flat-contract raise-blame-error)
+  raise-blame-error)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/hash hash-union)
 (require #/only-in syntax/parse/define define-simple-macro)
@@ -43,7 +43,8 @@
   auto-write define-imitation-simple-struct struct-easy)
 
 (require #/only-in effection/order/private
-  dex-result? lt-autodex names-autodex make-ordering-private-gt
+  dex-result? lt-autodex names-autodex
+  make-appropriate-non-chaperone-contract make-ordering-private-gt
   make-ordering-private-lt name? object-identities-autodex
   ordering-private?
   
@@ -134,7 +135,8 @@
   cline-by-own-method
   cline-fix
   cline-struct-by-field-position
-  cline-struct)
+  cline-struct
+  cline-flip)
 
 (module+ private/unsafe #/provide
   (struct-out cline-by-own-method::raise-different-methods-error)
@@ -161,9 +163,13 @@
   dex-merge
   dex-fuse)
 
-(provide fuse-by-merge)
+(provide
+  fuse-by-merge)
 
-(provide merge-by-dex)
+(provide
+  merge-by-dex
+  merge-by-cline-min
+  merge-by-cline-max)
 
 (provide
   merge-opaque
@@ -202,8 +208,7 @@
 ; ==== Tables ====
 
 (provide
-  table? tableof table-get table-empty table-shadow table-map-fuse
-  table-sort)
+  table? table-get table-empty table-shadow table-map-fuse table-sort)
 (module+ private/order #/provide
   assocs->table-if-mutually-unique)
 (module+ private/unsafe #/provide
@@ -226,11 +231,6 @@
 
 
 ; ===== Miscellaneous utilities ======================================
-
-(define (make-appropriate-non-chaperone-contract c)
-  (if (flat-contract? c)
-    make-flat-contract
-    make-contract))
 
 (begin-for-syntax
   
@@ -1468,6 +1468,46 @@
                #`(list #,getter #,position #,cline))))))
 
 
+(struct-easy (cline-internals-flip cline)
+  #:other
+  
+  #:methods internal:gen:cline-internals
+  [
+    
+    (define (cline-internals-tag this)
+      'tag:cline-flip)
+    
+    (define (cline-internals-autoname this)
+      (dissect this (cline-internals-flip cline)
+      #/list 'tag:cline-flip #/autoname-cline cline))
+    
+    (define (cline-internals-autodex this other)
+      (dissect this (cline-internals-flip a)
+      #/dissect other (cline-internals-flip b)
+      #/compare-by-dex (dex-cline) a b))
+    
+    (define (cline-internals-dex this)
+      (dissect this (cline-internals-flip cline)
+      #/get-dex-from-cline cline))
+    
+    (define (cline-internals-in? this x)
+      (dissect this (cline-internals-flip cline)
+      #/in-cline? cline x))
+    
+    (define (cline-internals-compare this a b)
+      (dissect this (cline-internals-flip cline)
+      #/w- unflipped-result (compare-by-cline cline a b)
+      #/mat unflipped-result (ordering-lt) (ordering-gt)
+      #/mat unflipped-result (ordering-gt) (ordering-lt)
+        unflipped-result))
+  ])
+
+(define/contract (cline-flip cline)
+  (-> cline? cline?)
+  (mat cline (internal:cline #/cline-internals-flip cline) cline
+  #/internal:cline #/cline-internals-flip cline))
+
+
 
 ; ===== Merges and fuses =============================================
 
@@ -1627,10 +1667,40 @@
   (-> dex? merge?)
   (internal:merge #/furge-internals-by-dex dex))
 
-; TODO: See if we want to export this.
-(define/contract (fuse-by-dex dex)
-  (-> dex? fuse?)
-  (internal:fuse #/furge-internals-by-dex dex))
+(struct-easy (furge-internals-by-cline-min cline)
+  #:other
+  
+  #:methods internal:gen:furge-internals
+  [
+    
+    (define (furge-internals-tag this)
+      'tag:furge-by-cline-min)
+    
+    (define (furge-internals-autoname this)
+      (dissect this (furge-internals-by-cline-min cline)
+      #/list 'tag:furge-by-cline-min #/autoname-cline cline))
+    
+    (define (furge-internals-autodex this other)
+      (dissect this (furge-internals-by-cline-min a)
+      #/dissect other (furge-internals-by-cline-min b)
+      #/compare-by-dex (dex-cline) a b))
+    
+    (define (furge-internals-call this a b)
+      (dissect this (furge-internals-by-cline-min cline)
+      #/expect (compare-by-cline cline a b) (just cline-result)
+        (nothing)
+      #/just
+      #/mat cline-result (ordering-gt) b
+        a))
+  ])
+
+(define/contract (merge-by-cline-min cline)
+  (-> cline? merge?)
+  (internal:merge #/furge-internals-by-cline-min cline))
+
+(define/contract (merge-by-cline-max cline)
+  (-> cline? merge?)
+  (internal:merge #/furge-internals-by-cline-min #/cline-flip cline))
 
 
 (define-syntax-rule
@@ -2093,32 +2163,6 @@
 (define/contract (table? x)
   (-> any/c boolean?)
   (internal:table? x))
-
-(define/contract (tableof c)
-  (-> contract? contract?)
-  (w- c (coerce-contract 'tableof c)
-  #/ (make-appropriate-non-chaperone-contract c)
-    
-    #:name `(tableof ,(contract-name c))
-    
-    #:first-order
-    (fn v
-      (contract-first-order-passes?
-        (match/c internal:table #/hash/c #:immutable #t any/c c)
-        v))
-    
-    #:late-neg-projection
-    (fn blame
-      (w- c-late-neg-projection
-        ( (get/build-late-neg-projection c)
-          (blame-add-context blame "a value of"))
-      #/fn v missing-party
-        (expect v (internal:table v)
-          (raise-blame-error blame #:missing-party missing-party v
-            '(expected: "a table" given: "~e")
-            v)
-        #/internal:table #/hash-v-map v #/fn v
-          (c-late-neg-projection v missing-party))))))
 
 (define/contract (table-get key table)
   (-> name? table? maybe?)
