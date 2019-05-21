@@ -64,6 +64,7 @@
   
   [extfx-noop (-> extfx?)]
   [fuse-extfx (-> fuse?)]
+  [extfx-err (-> error-definer? extfx?)]
   [extfx-later (-> (-> extfx?) extfx?)]
   [extfx-spawn-dexable (-> (dexableof #/-> extfx?) extfx?)]
   [extfx-table-each
@@ -289,6 +290,7 @@
   
   (provide-struct (extfx-noop))
   (provide-struct (extfx-fused a b))
+  (provide-struct (extfx-err on-execute))
   (provide-struct (extfx-later then))
   (provide-struct (extfx-spawn-dexable then))
   (provide-struct (extfx-table-each t on-element then))
@@ -427,6 +429,7 @@
 (define (extfx? v)
   (mat v (internal:extfx-noop) #t
   #/mat v (internal:extfx-fused a b) #t
+  #/mat v (internal:extfx-err on-execute) #t
   #/mat v (internal:extfx-later then) #t
   #/mat v (internal:extfx-spawn-dexable then) #t
   #/mat v (internal:extfx-table-each t on-element then) #t
@@ -741,6 +744,9 @@
 
 (define (fuse-extfx)
   (unsafe:fuse #/fuse-internals-extfx))
+
+(define (extfx-err on-execute)
+  (internal:extfx-err on-execute))
 
 (define (extfx-later then)
   (internal:extfx-later then))
@@ -1826,6 +1832,9 @@
         (process-entry reads b)
         (process-entry reads a)
         processes)
+    #/mat process (internal:extfx-err on-execute)
+      (next-with-error-definer on-execute
+        "Executed an unexpected part of the program")
     #/mat process (internal:extfx-later then)
       (next-one-fruitful #/process-entry reads (then))
     #/mat process (internal:extfx-spawn-dexable then)
