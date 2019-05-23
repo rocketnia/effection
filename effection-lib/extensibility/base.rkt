@@ -29,8 +29,7 @@
   struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
 
-(require #/only-in effection/order
-  dex-trivial eq-by-dex? table-kv-all? table-v-map table-v-of)
+(require #/only-in effection/order dex-trivial eq-by-dex? table-v-of)
 (require #/only-in effection/order/base
   dex? dexable dexableof dex-dex dex-name dex-table fuse? name?
   name-of ordering-eq table? table-empty table-get table-shadow
@@ -87,14 +86,9 @@
   [authorized-name-dspace-ancestor/c (-> dspace? contract?)]
   [authorized-name-get-name (-> authorized-name? name?)]
   [dex-authorized-name (-> dex?)]
-  [table-of-matching-authorized-names? (-> any/c boolean?)]
   [name-subname (-> name? name? name?)]
   [authorized-name-subname
     (-> name? authorized-name? authorized-name?)]
-  [name-table-subname (-> (table-v-of trivial?) name? name?)]
-  [authorized-name-table-subname
-    (-> table-of-matching-authorized-names? authorized-name?
-      authorized-name?)]
   [extfx-claim-unique
     (-> authorized-name? error-definer? error-definer?
       (-> authorized-name? familiarity-ticket? extfx?)
@@ -863,12 +857,6 @@
 (define (dex-authorized-name)
   (unsafe:dex #/dex-internals-authorized-name))
 
-(define (table-of-matching-authorized-names? x)
-  (and (table? x)
-  #/table-kv-all? x #/fn k v
-    (and (authorized-name? v)
-    #/eq-by-dex? (dex-name) k (authorized-name-get-name v))))
-
 (define (name-subname key-name original-name)
   (dissect key-name (unsafe:name key-name)
   #/dissect original-name (unsafe:name original-name)
@@ -888,32 +876,6 @@
   #/internal:authorized-name
     ds
     (name-subname key-name original-name)
-    (table-shadow original-name (just #/trivial) parents)))
-
-; TODO: The design of `{authorized-,}name-table-subname` is based on
-; the needs of Cene for Racket's
-; `sink-{authorized-,}name-for-function-implementation`, but it's not
-; very clear that it's the right design. Do the individual table
-; entries really need to be authorized? If they do, then don't they
-; need to be counted among the `parents` of the resulting authorized
-; name (which we're not currently doing)? If we do decide to count
-; them among those parents, then we have a tree of parents rather than
-; a sequential path, so checking for whether a name is accessible by
-; an outstanding familiarity ticket might be tricker to do correctly.
-
-(define (name-table-subname key-names original-name)
-  (dissect (name-of (dex-table #/dex-trivial) key-names)
-    (just #/unsafe:name key-names)
-  #/dissect original-name (unsafe:name original-name)
-  #/unsafe:name #/list 'name:table-subname key-names original-name))
-
-(define (authorized-name-table-subname key-names original-name)
-  (dissect original-name
-    (internal:authorized-name ds original-name parents)
-  #/internal:authorized-name
-    ds
-    (name-table-subname (table-v-map key-names #/fn v #/trivial)
-      original-name)
     (table-shadow original-name (just #/trivial) parents)))
 
 ; NOTE: The `authorized-name?` and the `familiarity-ticket?` passed
