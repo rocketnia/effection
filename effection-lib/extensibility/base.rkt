@@ -21,9 +21,12 @@
   hash-ref-maybe hash-v-all hash-v-any hash-v-map)
 (require #/only-in lathe-comforts/list
   list-any list-bind list-foldl list-map list-zip-map nat->maybe)
+(require #/only-in lathe-comforts/match match/c)
 (require #/only-in lathe-comforts/maybe
   just maybe? maybe-bind nothing)
-(require #/only-in lathe-comforts/struct istruct/c struct-easy)
+(require #/only-in lathe-comforts/struct
+  auto-equal auto-write define-imitation-simple-struct istruct/c
+  struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
 
 (require #/only-in effection/order
@@ -245,8 +248,20 @@
   
   )
 
-; TODO: Document this export, which winds up exported from
+; TODO: Document these exports, which wind up exported from
 ; `effection/extensibility/unsafe`.
+(module+ private/unsafe #/provide #/contract-out
+  [run-extfx-result-success? (-> any/c boolean?)]
+  [run-extfx-result-success-value
+    (-> run-extfx-result-success? any/c)])
+(module+ private/unsafe #/provide
+  run-extfx-result-success)
+(module+ private/unsafe #/provide #/contract-out
+  [run-extfx-result-failure? (-> any/c boolean?)]
+  [run-extfx-result-failure-errors
+    (-> run-extfx-result-failure? any/c)])
+(module+ private/unsafe #/provide
+  run-extfx-result-failure)
 (module+ private/unsafe #/provide #/contract-out
   [run-extfx!
     (-> error-definer?
@@ -257,8 +272,8 @@
           [then continuation-ticket?])
         [_ extfx?])
       (or/c
-        (istruct/c run-extfx-result-failure run-extfx-errors?)
-        (istruct/c run-extfx-result-success any/c)))])
+        (match/c run-extfx-result-failure run-extfx-errors?)
+        (match/c run-extfx-result-success any/c)))])
 
 
 ; TODO: There are still some uses of `define/contract` in this module.
@@ -1191,8 +1206,20 @@
   (internal:extfx-collect ds collector-name then))
 
 
-(struct-easy (run-extfx-result-success value) #:equal)
-(struct-easy (run-extfx-result-failure errors) #:equal)
+(define-imitation-simple-struct
+  (run-extfx-result-success? run-extfx-result-success-value)
+  run-extfx-result-success
+  'run-extfx-result-success
+  (current-inspector)
+  (auto-write)
+  (auto-equal))
+(define-imitation-simple-struct
+  (run-extfx-result-failure? run-extfx-result-failure-errors)
+  run-extfx-result-failure
+  'run-extfx-result-failure
+  (current-inspector)
+  (auto-write)
+  (auto-equal))
 
 (define/contract (run-extfx-errors? v)
   (-> any/c boolean?)

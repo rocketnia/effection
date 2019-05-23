@@ -11,4 +11,14 @@
   (submod effection/extensibility/base private/unsafe))
 
 (provide #/recontract-out
+  run-extfx-result-success?
+  run-extfx-result-success-value)
+(provide
+  run-extfx-result-success)
+(provide #/recontract-out
+  run-extfx-result-failure?
+  run-extfx-result-failure-errors)
+(provide
+  run-extfx-result-failure)
+(provide #/recontract-out
   run-extfx!)
