@@ -369,7 +369,7 @@
 (define/contract (table-update-default t k default-v func)
   (-> table? name? any/c (-> any/c any/c) table?)
   (table-shadow k
-    (just #/func #/mat (table-get t k) (just v) v default-v)
+    (just #/func #/mat (table-get k t) (just v) v default-v)
     t))
 
 ; TODO: Consider putting this into `effection/order`.
@@ -377,7 +377,7 @@
   (-> table? table? (-> any/c any/c any/c) table?)
   (dissect a (unsafe:table a)
   #/dissect b (unsafe:table b)
-  #/unsafe:table #/hash-union a b #:update #/fn a b #/func a b))
+  #/unsafe:table #/hash-union a b #:combine #/fn a b #/func a b))
 
 (define/contract (trivial-union a b)
   (-> trivial? trivial? trivial?)
@@ -1478,7 +1478,7 @@
           ; debugger interface, or slight, seemingly unrelated
           ; differences in the architecture of the program.
           ;
-          unspent-tickets db rev-errors
+          unspent-tickets db
           (cons (error-definer-or-message on-error default-message)
             rev-errors)
           
@@ -1510,8 +1510,8 @@
           (just entry)
           (next-purging on-error default-message
             (fn reads
-              (hash-has-key? ticket-symbol
-              #/hash-ref reads 'spend-ticket)))
+              (hash-has-key? (hash-ref reads 'spend-ticket)
+                ticket-symbol)))
         #/w- reads
           (hash-update reads 'spend-ticket #/fn reads-spend-ticket
             (hash-set reads-spend-ticket ticket-symbol (trivial)))
@@ -1534,7 +1534,7 @@
           (cons (process-entry reads (comp continuation-ticket))
             processes)
           rev-next-processes
-          (hash-set unspent-tickets continuation-ticket
+          (hash-set unspent-tickets continuation-ticket-symbol
             (unspent-ticket-entry-anonymous on-cont-unspent))
           
           ; NOTE: We modify `db-part` here so that we know
@@ -1697,10 +1697,11 @@
             #/dissect entry
               (db-put-entry-not-written
                 do-not-conflict-entries continuation-ticket-symbols)
-            #/list-foldl db do-not-conflict-entries #/fn db entry
+            #/list-foldl db-part do-not-conflict-entries
+            #/fn db-part entry
               (dissect entry
                 (do-not-conflict-entry ds-name-to-erase _)
-              #/table-shadow ds-name-to-erase (nothing) db)))
+              #/table-shadow ds-name-to-erase (nothing) db-part)))
         
         ; We write the entries for `parents-list`.
         #/w- write-parents
@@ -1759,7 +1760,7 @@
             #/db-update reads #/fn reads-part
               (table-shadow place (just #/trivial) reads-part))
             
-            (optionally-dexable-value value))))
+            (optionally-dexable-value existing-value))))
     #/w- handle-generic-get
       (fn ds db-get db-update then
         ; If there has not yet been a definition installed for this

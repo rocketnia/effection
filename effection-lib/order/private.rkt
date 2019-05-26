@@ -95,7 +95,7 @@
 (define object-identities-to-ranks* (make-weak-hasheq))
 (define object-identities-next-rank* 0)
 (define/contract (object-identity-rank object-identity)
-  (-> struct-type? natural?)
+  (-> any/c natural?)
   (call-with-semaphore object-identities-semaphore* #/fn
     (if (hash-has-key? object-identities-to-ranks* object-identity)
       (hash-ref object-identities-to-ranks* object-identity)
