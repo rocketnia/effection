@@ -769,6 +769,65 @@
   (internal:extfx-table-each t on-element then))
 
 
+; TODO: See if we'll ever want to use this representation of parent
+; sets. It avoids storing more than one entry for names of the form
+; `(list 'name:subname-n n key orig)` that differ only in `n`, but the
+; extra complexity seems to slow us down more than it helps us right
+; now.
+;
+#|
+(define-imitation-simple-struct
+  (name-parent-bag? subnames direct-names)
+  name-parent-bag
+  'name-parent-bag
+  (current-inspector)
+  (auto-write)
+  (auto-equal))
+
+(define (name-parent-bag-empty)
+  (name-parent-bag (hash) (hash)))
+
+(define (name-parent-bag-add name bag)
+  (dissect bag (name-parent-bag subnames direct-names)
+  #/dissect name (unsafe:name name)
+  #/w- go
+    (fn n key original
+      (name-parent-bag
+        (hash-update subnames original
+          (fn subnames
+            (hash-update subnames key
+              (fn existing-n #/max n existing-n)
+              (fn n)))
+          (fn #/hash))
+        direct-names))
+  #/mat name (list 'name:subname key original) (go 1 key original)
+  #/mat name (list 'name:subname-n n key original) (go n key original)
+  #/name-parent-bag subnames #/hash-set direct-names name #/trivial))
+
+(define (name-parent-bag-has? name bag)
+  (dissect bag (name-parent-bag subnames direct-names)
+  #/dissect name (unsafe:name name)
+  #/w- go
+    (fn n key original
+      (expect (hash-ref-maybe subnames original) (just subnames) #f
+      #/expect (hash-ref-maybe subnames key) (just existing-n) #f
+      #/<= n existing-n))
+  #/mat name (list 'name:subname key original) (go 1 key original)
+  #/mat name (list 'name:subname-n n key original) (go n key original)
+  #/hash-has-key? direct-names name))
+|#
+
+(define (name-parent-bag-empty)
+  (hash))
+
+(define (name-parent-bag-add name bag)
+  (dissect name (unsafe:name name)
+  #/hash-set bag name #/trivial))
+
+(define (name-parent-bag-has? name bag)
+  (dissect name (unsafe:name name)
+  #/hash-has-key? bag name))
+
 (define (authorized-name? v)
   (internal:authorized-name? v))
 
@@ -776,7 +835,7 @@
   (-> authorized-name? authorized-name? boolean?)
   (dissect a (internal:authorized-name a-ds a-n a-parents)
   #/dissect b (internal:authorized-name b-ds b-n b-parents)
-  #/mat (table-get a-n b-parents) (just _)
+  #/mat (name-parent-bag-has? a-n b-parents) (just _)
     #t
     #f))
 
@@ -857,18 +916,33 @@
 (define (dex-authorized-name)
   (unsafe:dex #/dex-internals-authorized-name))
 
+(define (nat-minus-name-size n name)
+  (maybe-bind (nat->maybe n) #/fn n
+  #/expect name (cons a b) (just n)
+  #/maybe-bind (nat-minus-name-size n a) #/fn n
+  #/maybe-bind (nat-minus-name-size n b) #/fn n
+  #/just n))
+
 (define (name-subname key-name original-name)
   (dissect key-name (unsafe:name key-name)
   #/dissect original-name (unsafe:name original-name)
+  #/unsafe:name
   
-  ; TODO: The tag `name:subname` we're using here is identical to the
-  ; one we're using for `sink-name-subname` in Cene for Racket.
-  ; Fortunately, we're using it for the exact same purpose.
-  ; Nevertheless, once we have this file working smoothly, we should
-  ; modify Cene for Racket so it uses this rather than creating its
-  ; own `name:subname` names.
+  ; NOTE: As an optimization, if we take subnames multiple times in a
+  ; row with the same key, we run-length-encode them so that we can
+  ; more quickly compare one name with another.
   ;
-  #/unsafe:name #/list 'name:subname key-name original-name))
+  #/w- default (list 'name:subname key-name original-name)
+  ; NOTE: If the key would take longer than a small constant amount of
+  ; time to compare, we don't apply the optimization.
+  #/expect (nat-minus-name-size 3 key-name) (just _) default
+  #/w- go
+    (fn n k orig
+      (expect (equal? key-name k) #t default
+      #/list 'name:subname-n (add1 n) k orig))
+  #/mat original-name (list 'name:subname k orig) (go 1 k orig)
+  #/mat original-name (list 'name:subname-n n k orig) (go n k orig)
+    default))
 
 (define (authorized-name-subname key-name original-name)
   (dissect original-name
@@ -876,7 +950,7 @@
   #/internal:authorized-name
     ds
     (name-subname key-name original-name)
-    (table-shadow original-name (just #/trivial) parents)))
+    (name-parent-bag-add original-name parents)))
 
 ; NOTE: The `authorized-name?` and the `familiarity-ticket?` passed
 ; into the body are for the same `name?`. The `authorized-name?`
@@ -1218,7 +1292,8 @@
   #/w- root-unique-name
     (unsafe:name #/list 'name:root-unique-name runtime-symbol)
   #/w- root-unique-authorized-name
-    (internal:authorized-name root-ds root-unique-name (table-empty))
+    (internal:authorized-name root-ds root-unique-name
+      (name-parent-bag-empty))
   #/w- root-continuation-ticket-symbol (gensym)
   #/w- root-continuation-ticket
     (internal:continuation-ticket
@@ -1970,7 +2045,8 @@
       #/w- fresh-name
         (unsafe:name #/list 'name:claim-unique-result (gensym))
       #/w- fresh-authorized-name
-        (internal:authorized-name root-ds fresh-name (table-empty))
+        (internal:authorized-name root-ds fresh-name
+          (name-parent-bag-empty))
       #/w- familiarity-ticket-symbol (gensym)
       #/w- on-familiarity-ticket-unspent
         (error-definer-or-message on-familiarity-ticket-unspent
@@ -2451,9 +2527,7 @@
       #/dissect ds (internal:dspace _ ds-name ds-parents-list)
       #/w- ds-improper-parents (cons ds-name ds-parents-list)
       #/dissect collector-name
-        (internal:authorized-name _ collector-name collector-parents)
-      #/w- collector-improper-parents
-        (cons collector-name collector-parents)
+        (internal:authorized-name _ collector-name _)
       
       ; We check if there are any outstanding familiarity tickets for
       ; ancestors of `collector-name`, or which can access
