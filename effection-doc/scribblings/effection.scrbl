@@ -541,12 +541,16 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
   Returns whether the given value is an Effection table.
 }
 
+@defproc[(table-empty? [x table?]) boolean?]{
+  Returns whether the given table is empty.
+}
+
 @defproc[(table-get [key name?] [table table?]) maybe?]{
   Returns the value associated with the given name in the given table, if any.
 }
 
 @defproc[(table-empty) table?]{
-  Returns an empty table. In this table, the result of @racket[table-get] for any name is @racket[(nothing)].
+  Returns an empty table.
 }
 
 @defproc[

@@ -32,8 +32,8 @@
 (require #/only-in effection/order dex-trivial eq-by-dex? table-v-of)
 (require #/only-in effection/order/base
   dex? dexable dexableof dex-dex dex-name dex-table fuse? name?
-  name-of ordering-eq table? table-empty table-get table-shadow
-  valid-dexable?)
+  name-of ordering-eq table? table-empty? table-empty table-get
+  table-shadow valid-dexable?)
 (require #/only-in effection/order/private
   make-appropriate-non-chaperone-contract)
 
@@ -412,14 +412,6 @@
 (define/contract (unsafe-table-v-any-short-circuiting t body)
   (-> table? (-> any/c boolean?) boolean?)
   (unsafe-table-kv-any-short-circuiting t #/fn k v #/body v))
-
-; TODO: Consider putting this into `effection/order`.
-(define/contract (table-empty? t)
-  (-> table? boolean?)
-  (dissect t (unsafe:table t)
-  #/mat t (list)
-    #t
-    #f))
 
 
 
@@ -1565,7 +1557,7 @@
         #/expect (table-get n (hash-ref db 'claim-unique)) (nothing)
           (next-purging on-error default-message
             (fn reads
-              (mat (table-get n #/hash-ref reads 'claim-unique)
+              (mat (table-get n (hash-ref reads 'claim-unique))
                 (just _)
                 #t
                 #f)))
@@ -1849,6 +1841,7 @@
     #/w- handle-generic-pubsub-write
       (fn ds pubsub-name write-entry get-other-writes spawn
         (dissect ds (internal:dspace _ ds-name parents-list)
+        #/w- pubsub-name (authorized-name-get-name pubsub-name)
         #/w- db
           (hash-update db 'pubsub #/fn db-pubsub
             (table-update-default db-pubsub pubsub-name (table-empty)
@@ -1878,18 +1871,19 @@
                         sub-writes)))))))
         #/add-descendants db #/fn db
         #/w- other-writes
-          (expect (table-get (hash-ref db 'pubsub) pubsub-name)
+          (expect (table-get pubsub-name (hash-ref db 'pubsub))
             (just db-pubsub-for-name)
             (list)
           #/append
             (list-bind (cons ds-name parents-list) #/fn parent
-              (expect (table-get db-pubsub-for-name parent) (just entry)
+              (expect (table-get parent db-pubsub-for-name)
+                (just entry)
                 (list)
               #/get-other-writes entry))
-            (dissect (table-get db-pubsub-for-name ds-name)
+            (dissect (table-get ds-name db-pubsub-for-name)
               (just #/db-pubsub-entry (unsafe:table descendants) _ _)
             #/list-bind (hash->list descendants) #/dissectfn (cons k v)
-              (dissect (table-get db-pubsub-for-name (unsafe:name k))
+              (dissect (table-get (unsafe:name k) db-pubsub-for-name)
                 (just entry)
               #/get-other-writes entry)))
         #/w-loop next processes processes other-writes other-writes

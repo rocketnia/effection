@@ -208,7 +208,8 @@
 ; ==== Tables ====
 
 (provide
-  table? table-get table-empty table-shadow table-map-fuse table-sort)
+  table? table-empty? table-get table-empty table-shadow
+  table-map-fuse table-sort)
 (module+ private/order #/provide
   assocs->table-if-mutually-unique)
 (module+ private/unsafe #/provide
@@ -2163,6 +2164,11 @@
 (define/contract (table? x)
   (-> any/c boolean?)
   (internal:table? x))
+
+(define/contract (table-empty? t)
+  (-> table? boolean?)
+  (dissect t (internal:table t)
+  #/hash-empty? t))
 
 (define/contract (table-get key table)
   (-> name? table? maybe?)
