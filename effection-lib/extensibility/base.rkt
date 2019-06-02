@@ -1809,22 +1809,27 @@
             (next places-to-check)
           #/next-then
             
-            ; TODO: By merging `reads-of-first-write` with these other
-            ; reads, we simplify the process of purging processes when
-            ; there's a conflict; we just need to remove all the
-            ; process entries that are based on a read of the
-            ; conflicted information. However, this is likely to
-            ; impose a time cost on *every read* proportional to the
-            ; number of unique things the process has read, and
-            ; purging information after an error probably isn't
-            ; important enough to justify that cost. In fact, we could
-            ; probably accomplish the purging just by having
-            ; `next-purging` iterate over `db` and recur for each
-            ; entry that has a `reads-of-first-write` containing the
-            ; conflicted entry. See if we should do that.
+            ; NOTE: In the past, we've called
+            ; `(reads-union reads-of-first-write ...)` on this updated
+            ; `reads` table so that it'll be easy to purge processes
+            ; when there's a write conflict. However, this
+            ; `reads-union` operation likely imposed a time cost on
+            ; *every read* proportional to the number of unique things
+            ; the process had already read. We've observed this having
+            ; a significant performance cost in the Cene for Racket
+            ; unit tests.
             ;
-            (reads-union reads-of-first-write
-            #/db-update reads #/fn reads-part
+            ; TODO: Instead, have `next-purging` iterate over `db`
+            ; and do a recursive purge for each entry that has a
+            ; `reads-of-first-write` containing the conflicted entry.
+            ; (That is to say, definitions which were based on a
+            ; purged definition should also be purged.) Purging
+            ; information after an error is probably something we
+            ; should only have to pay for when we have an error
+            ; anyway, and even then, it only serves to simplify the
+            ; error report, which may often be simple enough already.
+            ;
+            (db-update reads #/fn reads-part
               (table-shadow place (just #/trivial) reads-part))
             
             (optionally-dexable-value existing-value))))
