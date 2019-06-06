@@ -717,7 +717,7 @@
 
 (define (continuation-ticket-of c)
   (w- c (coerce-contract 'continuation-ticket-of c)
-  #/ (make-appropriate-non-chaperone-contract c)
+  #/make-contract
     
     #:name `(continuation-ticket-of ,(contract-name c))
     
@@ -742,7 +742,7 @@
             v)
         #/internal:continuation-ticket ticket-symbol ds
           (fn result
-            (c-late-neg-projection result missing-party)))))))
+            (then #/c-late-neg-projection result missing-party)))))))
 
 (define (familiarity-ticket? v)
   (internal:familiarity-ticket? v))
