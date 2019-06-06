@@ -7,10 +7,10 @@
 (require #/only-in racket/contract get/build-late-neg-projection)
 (require #/only-in racket/contract/base
   -> ->i any any/c contract? contract-name contract-out list/c listof
-  or/c)
+  none/c or/c)
 (require #/only-in racket/contract/combinator
   blame-add-context coerce-contract contract-first-order-passes?
-  make-flat-contract raise-blame-error)
+  make-contract make-flat-contract raise-blame-error)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/hash hash-union)
 (require #/only-in racket/math natural?)
@@ -44,6 +44,8 @@
 ; TODO: Finish implementing each of these exports, and document them.
 (provide #/contract-out
   
+  [getfx? (-> any/c boolean?)]
+  [getfx/c (-> contract? contract?)]
   [extfx? (-> any/c boolean?)]
   [dspace? (-> any/c boolean?)]
   [dspace-shadower (-> name? dspace? dspace?)]
@@ -68,10 +70,12 @@
   [familiarity-ticket? (-> any/c boolean?)]
   [familiarity-ticket-dspace-ancestor/c (-> dspace? contract?)]
   
+  [getfx-done (-> any/c getfx?)]
+  [getfx-bind (-> getfx? (-> any/c getfx?) getfx?)]
   [extfx-noop (-> extfx?)]
   [fuse-extfx (-> fuse?)]
-  [extfx-err (-> error-definer? extfx?)]
-  [extfx-later (-> (-> extfx?) extfx?)]
+  [extfx-run-getfx (-> getfx? (-> any/c extfx?) extfx?)]
+  [getfx-err (-> error-definer? (getfx/c none/c))]
   [extfx-spawn-dexable (-> (dexableof #/-> extfx?) extfx?)]
   [extfx-table-each
     (-> table?
@@ -114,8 +118,7 @@
               (list/c success-or-error-definer? optionally-dexable?))
             extfx?)])
       [_ extfx?])]
-  [extfx-get
-    (-> dspace? name? error-definer? (-> any/c extfx?) extfx?)]
+  [getfx-get (-> dspace? name? error-definer? getfx?)]
   
   [extfx-private-put
     (->i
@@ -130,15 +133,14 @@
             #/list/c success-or-error-definer? optionally-dexable?)
             extfx?)])
       [_ extfx?])]
-  [extfx-private-get
+  [getfx-private-get
     (->i
       (
         [ds dspace?]
         [putter-name name?]
         [getter-name (ds) (authorized-name-dspace-ancestor/c ds)]
-        [on-stall error-definer?]
-        [then (-> any/c extfx?)])
-      [_ extfx?])]
+        [on-stall error-definer?])
+      [_ getfx?])]
   
   [pub? (-> any/c boolean?)]
   [sub? (-> any/c boolean?)]
@@ -152,14 +154,13 @@
   [sub-restrict
     (->i ([new-ds dspace?] [s (new-ds) (sub-ancestor/c new-ds)])
       [_ (new-ds) (pub-ancestor/c new-ds)])]
-  [extfx-establish-pubsub
+  [getfx-establish-pubsub
     (->i
       (
         [ds dspace?]
-        [pubsub-name (ds) (authorized-name-dspace-ancestor/c ds)]
-        [then (ds)
-          (-> (pub-ancestor/c ds) (sub-ancestor/c ds) extfx?)])
-      [_ extfx?])]
+        [pubsub-name (ds) (authorized-name-dspace-ancestor/c ds)])
+      [_ (ds)
+        (getfx/c #/list/c (pub-ancestor/c ds) (sub-ancestor/c ds))])]
   [extfx-pub-write
     (->i
       (
@@ -306,10 +307,12 @@
   (provide-struct (familiarity-ticket ticket-symbol ds))
   
   
+  (provide-struct (getfx-done result))
+  (provide-struct (getfx-bind effects then))
   (provide-struct (extfx-noop))
   (provide-struct (extfx-fused a b))
-  (provide-struct (extfx-err on-execute))
-  (provide-struct (extfx-later then))
+  (provide-struct (getfx-err on-execute))
+  (provide-struct (extfx-run-getfx effects then))
   (provide-struct (extfx-spawn-dexable then))
   (provide-struct (extfx-table-each t on-element then))
   
@@ -318,15 +321,15 @@
       n on-conflict on-familiarity-ticket-unspent then))
   
   (provide-struct (extfx-put ds n on-cont-unspent comp))
-  (provide-struct (extfx-get ds n on-stall then))
+  (provide-struct (getfx-get ds n on-stall))
   
   (provide-struct
     (extfx-private-put
       ds putter-name getter-name on-cont-unspent comp))
   (provide-struct
-    (extfx-private-get ds putter-name getter-name on-stall then))
+    (getfx-private-get ds putter-name getter-name on-stall))
   
-  (provide-struct (extfx-establish-pubsub ds pubsub-name then))
+  (provide-struct (getfx-establish-pubsub ds pubsub-name))
   (provide-struct (extfx-pub-write ds p unique-name on-conflict arg))
   (provide-struct (extfx-sub-write ds s unique-name on-conflict func))
   
@@ -429,11 +432,52 @@
 
 (struct-easy (extfx-finish-run ds value))
 
+(define (getfx? v)
+  (mat v (internal:getfx-done result) #t
+  #/mat v (internal:getfx-bind effects then) #t
+  #/mat v (internal:getfx-err on-execute) #t
+  
+  #/mat v (internal:getfx-get ds n on-stall) #t
+  
+  #/mat v
+    (internal:getfx-private-get ds putter-name getter-name on-stall)
+    #t
+  
+  #/mat v (internal:getfx-establish-pubsub ds pubsub-name) #t
+  
+    #f))
+
+; TODO: See if we should export this from `effection/extensibility`.
+(define (getfx-map effects func)
+  (getfx-bind effects #/fn result
+  #/getfx-done #/func result))
+
+(define (getfx/c c)
+  (w- c (coerce-contract 'getfx/c c)
+  #/make-contract
+    
+    #:name `(getfx/c ,(contract-name c))
+    
+    #:first-order (fn v #/getfx? v)
+    
+    #:late-neg-projection
+    (fn blame
+      (w- c-late-neg-projection
+        ( (get/build-late-neg-projection c)
+          (blame-add-context blame #:swap? #t
+            "the anticipated value of"))
+      #/fn v missing-party
+        (expect (getfx? v) #t
+          (raise-blame-error blame #:missing-party missing-party v
+            '(expected: "a getfx effectful computation" given: "~e")
+            v)
+        #/getfx-map v #/fn result
+          (c-late-neg-projection result missing-party))))))
+
 (define (extfx? v)
   (mat v (internal:extfx-noop) #t
   #/mat v (internal:extfx-fused a b) #t
-  #/mat v (internal:extfx-err on-execute) #t
-  #/mat v (internal:extfx-later then) #t
+  #/mat v (internal:extfx-run-getfx effects then) #t
   #/mat v (internal:extfx-spawn-dexable then) #t
   #/mat v (internal:extfx-table-each t on-element then) #t
   #/mat v
@@ -448,18 +492,12 @@
   
   #/mat v (internal:extfx-put ds n on-cont-unspent comp) #t
   #/mat v (extfx-finish-put ds n on-conflict value) #t
-  #/mat v (internal:extfx-get ds n on-stall then) #t
   
   #/mat v
     (internal:extfx-private-put
       ds putter-name getter-name on-cont-unspent comp)
     #t
-  #/mat v
-    (internal:extfx-private-get
-      ds putter-name getter-name on-stall then)
-    #t
   
-  #/mat v (internal:extfx-establish-pubsub ds pubsub-name then) #t
   #/mat v (internal:extfx-pub-write ds p unique-name on-conflict arg)
     #t
   #/mat v (internal:extfx-sub-write ds s unique-name on-conflict func)
@@ -721,6 +759,12 @@
         (intuitionistic-ticket-dspace-descends? v ds)))))
 
 
+(define (getfx-done result)
+  (internal:getfx-done result))
+
+(define (getfx-bind effects then)
+  (internal:getfx-bind effects then))
+
 (define (extfx-noop)
   (internal:extfx-noop))
 
@@ -748,11 +792,11 @@
 (define (fuse-extfx)
   (unsafe:fuse #/fuse-internals-extfx))
 
-(define (extfx-err on-execute)
-  (internal:extfx-err on-execute))
+(define (extfx-run-getfx effects then)
+  (internal:extfx-run-getfx effects then))
 
-(define (extfx-later then)
-  (internal:extfx-later then))
+(define (getfx-err on-execute)
+  (internal:getfx-err on-execute))
 
 (define (extfx-spawn-dexable then)
   (internal:extfx-spawn-dexable then))
@@ -1025,8 +1069,8 @@
 (define (extfx-put ds n on-cont-unspent comp)
   (internal:extfx-put ds n on-cont-unspent comp))
 
-(define (extfx-get ds n on-stall then)
-  (internal:extfx-get ds n on-stall then))
+(define (getfx-get ds n on-stall)
+  (internal:getfx-get ds n on-stall))
 
 
 (define
@@ -1034,9 +1078,8 @@
   (internal:extfx-private-put
     ds putter-name getter-name on-cont-unspent comp))
 
-(define (extfx-private-get ds putter-name getter-name on-stall then)
-  (internal:extfx-private-get
-    ds putter-name getter-name on-stall then))
+(define (getfx-private-get ds putter-name getter-name on-stall)
+  (internal:getfx-private-get ds putter-name getter-name on-stall))
 
 
 ; An Effection pubsub is a monotonic state resource that can be used
@@ -1185,8 +1228,8 @@
   (dissect s (internal:sub original-ds pubsub-name)
   #/internal:sub new-ds pubsub-name))
 
-(define (extfx-establish-pubsub ds pubsub-name then)
-  (internal:extfx-establish-pubsub ds pubsub-name then))
+(define (getfx-establish-pubsub ds pubsub-name)
+  (internal:getfx-establish-pubsub ds pubsub-name))
 
 (define (extfx-pub-write ds p unique-name on-conflict arg)
   (internal:extfx-pub-write ds p unique-name on-conflict arg))
@@ -1423,7 +1466,7 @@
                       (list)
                     #/next places)
                   #/mat entry (db-put-entry-written _ _)
-                    (error "Internal error: Expected an extfx-get not to be stalled if any of the parents had db-put-entry-written")
+                    (error "Internal error: Expected an getfx-get not to be stalled if any of the parents had db-put-entry-written")
                   #/error "Internal error: Encountered an unknown kind of db-put entry")))
             
             #/mat process
@@ -1433,14 +1476,19 @@
               ; that unspent ticket can describe a more proximal cause
               ; than we can here.
               (list)
-            #/mat process (internal:extfx-get ds n on-stall then)
+            #/mat process
+              (internal:extfx-run-getfx
+                (internal:getfx-get ds n on-stall)
+                then)
               (handle-generic-get ds
                 (error-definer-or-message on-stall
                   "Read from a name that was never defined")
                 (table-get n (hash-ref db 'put)))
             #/mat process
-              (internal:extfx-private-get
-                ds putter-name getter-name on-stall then)
+              (internal:extfx-run-getfx
+                (internal:getfx-private-get
+                  ds putter-name getter-name on-stall)
+                then)
               (w- getter-name (authorized-name-get-name getter-name)
               #/handle-generic-get ds
                 (error-definer-or-message on-stall
@@ -1923,6 +1971,16 @@
         #/error "Internal error: Encountered an unrecognized ticket value"))
     
     
+    #/mat process
+      (internal:extfx-run-getfx (internal:getfx-done result) then)
+      (next-one-fruitful #/process-entry reads (then result))
+    #/mat process
+      (internal:extfx-run-getfx
+        (internal:getfx-bind effects then-1)
+        then-2)
+      (next-one-fruitful #/process-entry reads
+        (internal:extfx-run-getfx effects #/fn intermediate
+        #/internal:extfx-run-getfx (then-1 intermediate) then-2))
     #/mat process (internal:extfx-noop)
       (next-zero)
     #/mat process (internal:extfx-fused a b)
@@ -1930,11 +1988,10 @@
         (process-entry reads b)
         (process-entry reads a)
         processes)
-    #/mat process (internal:extfx-err on-execute)
+    #/mat process
+      (internal:extfx-run-getfx (internal:getfx-err on-execute) then)
       (next-with-error-definer on-execute
         "Executed an unexpected part of the program")
-    #/mat process (internal:extfx-later then)
-      (next-one-fruitful #/process-entry reads (then))
     #/mat process (internal:extfx-spawn-dexable then)
       (dissect then (dexable dex then)
       #/dissect (name-of dex then) (just name)
@@ -2098,7 +2155,9 @@
           (hash-update db 'put #/fn db-put
             (table-update-default db-put n (table-empty) func)))
         on-conflict value)
-    #/mat process (internal:extfx-get ds n on-stall then)
+    #/mat process
+      (internal:extfx-run-getfx (internal:getfx-get ds n on-stall)
+        then)
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
       #/handle-generic-get ds
@@ -2154,8 +2213,10 @@
                 func))))
         on-conflict value)
     #/mat process
-      (internal:extfx-private-get
-        ds putter-name getter-name on-stall then)
+      (internal:extfx-run-getfx
+        (internal:getfx-private-get
+          ds putter-name getter-name on-stall)
+        then)
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
       #/w- getter-name (authorized-name-get-name getter-name)
@@ -2177,14 +2238,16 @@
         then)
     
     #/mat process
-      (internal:extfx-establish-pubsub ds pubsub-name then)
+      (internal:extfx-run-getfx
+        (internal:getfx-establish-pubsub ds pubsub-name)
+        then)
       ; TODO: See if we really need to enforce that `ds` descends from
       ; `root-ds` here.
       (expect (dspace-descends? root-ds ds) #t
         (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
       #/next-one-fruitful #/process-entry
         reads
-        (then
+        (then #/list
           (internal:pub ds pubsub-name)
           (internal:sub ds pubsub-name)))
     #/mat process
