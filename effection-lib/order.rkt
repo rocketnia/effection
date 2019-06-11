@@ -52,7 +52,7 @@
   table-v-map
   table-v-all?
   table-v-any?
-  table-v-of
+  table-of
   
   )
 
@@ -283,17 +283,17 @@
   (-> table? (-> any/c boolean?) table?)
   (table-kv-any? table #/fn k v #/v-accepted? v))
 
-(define/contract (table-v-of c)
+(define/contract (table-of c)
   (-> contract? contract?)
-  (w- c (coerce-contract 'table-v-of c)
+  (w- c (coerce-contract 'table-of c)
   #/ (make-appropriate-non-chaperone-contract c)
     
-    #:name `(table-v-of ,(contract-name c))
+    #:name `(table-of ,(contract-name c))
     
     #:first-order
     (fn v
       (and (table? v)
-      #/table-v-any? v #/fn v
+      #/table-v-all? v #/fn v
         (contract-first-order-passes? c v)))
     
     #:late-neg-projection
