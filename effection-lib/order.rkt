@@ -20,7 +20,7 @@
 
 (require effection/order/base)
 (require #/submod effection/order/base private/order)
-(require #/only-in effection/order/private
+(require #/only-in effection/private/order
   exact-rational? lt-autocline lt-autodex
   make-appropriate-non-chaperone-contract)
 (require #/prefix-in internal: #/only-in effection/order/unsafe

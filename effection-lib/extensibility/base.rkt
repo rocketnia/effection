@@ -34,7 +34,7 @@
   dex? dexable dexableof dex-dex dex-name fuse? name? name-of
   ordering-eq table? table-empty? table-empty table-get table-shadow
   valid-dexable?)
-(require #/only-in effection/order/private
+(require #/only-in effection/private/order
   make-appropriate-non-chaperone-contract)
 
 (require #/prefix-in unsafe: #/only-in effection/order/unsafe

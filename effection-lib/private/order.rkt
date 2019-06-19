@@ -17,7 +17,7 @@
   auto-equal auto-write define-imitation-simple-struct)
 
 (require #/prefix-in internal: #/only-in
-  effection/order/private/unsafe
+  effection/private/order-unsafe
   
   name name? ordering-private ordering-private?)
 

@@ -42,7 +42,7 @@
 (require #/only-in lathe-comforts/struct
   auto-write define-imitation-simple-struct struct-easy)
 
-(require #/only-in effection/order/private
+(require #/only-in effection/private/order
   dex-result? lt-autodex names-autodex
   make-appropriate-non-chaperone-contract make-ordering-private-gt
   make-ordering-private-lt name? object-identities-autodex
@@ -55,7 +55,7 @@
   ordering-lt ordering-lt?
   )
 (require #/prefix-in internal: #/only-in
-  effection/order/private/unsafe
+  effection/private/order-unsafe
   
   cline cline? cline-internals-autodex cline-internals-autoname
   cline-internals-compare cline-internals-dex cline-internals-in?
