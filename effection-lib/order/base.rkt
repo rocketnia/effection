@@ -43,7 +43,7 @@
   auto-write define-imitation-simple-struct struct-easy)
 
 (require #/only-in effection/private/order
-  dex-result? lt-autodex names-autodex
+  dex-result? lt-autocline lt-autodex names-autodex
   make-appropriate-non-chaperone-contract make-ordering-private-gt
   make-ordering-private-lt name? object-identities-autodex
   ordering-private?
@@ -230,6 +230,31 @@
   fuse-fusable-function-unchecked)
 
 
+; ==== Boolean clines and contracts ====
+
+(module+ private #/provide
+  define-datum-dex
+  define-datum-cline)
+(module+ private/order #/provide
+  
+  dex-boolean
+  cline-boolean-by-truer
+  cline-boolean-by-falser
+  merge-boolean-by-and
+  merge-boolean-by-or
+  
+  table-kv-map
+  table-kv-all?
+  table-kv-any?
+  table-v-map
+  table-v-all?
+  table-v-any?
+  
+  )
+(provide
+  table-v-of)
+
+
 
 ; ===== Miscellaneous utilities ======================================
 
@@ -306,6 +331,7 @@
     (just #/ordering-eq)
   #/maybe-ordering-or (maybe-compare-elems a b)
   #/maybe-compare-aligned-lists as bs maybe-compare-elems))
+
 
 
 ; ===== Names, dexes, and dexables ===================================
@@ -2534,3 +2560,185 @@
 (define/contract (fuse-fusable-function dexable-arg-to-method)
   (-> (dexableof #/-> any/c fuse?) fuse?)
   (fuse-fusable-function-unchecked dexable-arg-to-method))
+
+
+
+; ===== Boolean clines and contracts =================================
+;
+; NOTE: These are meant to be part of `table/order`, except for
+; `table-v-of`, a contract combinator which will be handy for the
+; contracts of operations in this module. (TODO: Actually use it for
+; that.)
+
+(define-syntax-rule
+  (define-datum-dex
+    dex-internals-id dex-id tag:dex-id name:id
+    id? id->name-internals id<?)
+  (begin
+    (struct-easy (dex-internals-id)
+      
+      #:other
+      
+      #:methods internal:gen:dex-internals
+      [
+        
+        (define (dex-internals-tag this)
+          'tag:dex-id)
+        
+        (define (dex-internals-autoname this)
+          'tag:dex-id)
+        
+        (define (dex-internals-autodex this other)
+          (just #/ordering-eq))
+        
+        (define (dex-internals-in? this x)
+          (id? x))
+        
+        (define (dex-internals-name-of this x)
+          (if (id? x)
+            (just #/internal:name
+            #/list 'name:id #/id->name-internals x)
+            (nothing)))
+        
+        (define (dex-internals-compare this a b)
+          (expect (id? a) #t (nothing)
+          #/expect (id? b) #t (nothing)
+          #/just #/lt-autodex a b id<?))
+      ])
+    
+    (define/contract (dex-id)
+      (-> dex?)
+      (internal:dex #/dex-internals-id))
+  ))
+
+(define-syntax-rule
+  (define-datum-cline
+    dex-internals-id dex-id tag:dex-id
+    cline-internals-id cline-id tag:cline-id
+    name:id id? id->name-internals id<?)
+  (begin
+    (define-datum-dex
+      dex-internals-id dex-id tag:dex-id name:id
+      id? id->name-internals id<?)
+    
+    (struct-easy (cline-internals-id)
+      #:other
+      
+      #:methods internal:gen:cline-internals
+      [
+        
+        (define (cline-internals-tag this)
+          'tag:cline-id)
+        
+        (define (cline-internals-autoname this)
+          'tag:cline-id)
+        
+        (define (cline-internals-autodex this other)
+          (just #/ordering-eq))
+        
+        (define (cline-internals-dex this)
+          (dex-id))
+        
+        (define (cline-internals-in? this x)
+          (id? x))
+        
+        (define (cline-internals-compare this a b)
+          (expect (id? a) #t (nothing)
+          #/expect (id? b) #t (nothing)
+          #/just #/lt-autocline a b id<?))
+      ])
+    
+    (define/contract (cline-id)
+      (-> cline?)
+      (internal:cline #/cline-internals-id))
+  ))
+
+
+(define-datum-cline
+  dex-internals-boolean dex-boolean tag:dex-boolean
+  cline-internals-boolean-by-truer cline-boolean-by-truer
+  tag:cline-boolean-by-truer
+  name:boolean boolean? (fn x #/if x 't 'f) (fn a b #/and (not a) b))
+
+(define/contract (cline-boolean-by-falser)
+  (-> cline?)
+  (cline-flip #/cline-boolean-by-truer))
+
+(define/contract (merge-boolean-by-and)
+  (-> cline?)
+  (merge-by-cline-min #/cline-boolean-by-truer))
+
+(define/contract (merge-boolean-by-or)
+  (-> cline?)
+  (merge-by-cline-max #/cline-boolean-by-truer))
+
+
+; TODO: Come up with a better name for this, and export it from
+; `effection/order`.
+(define/contract
+  (table-kv-map-fuse-default table fuse-0 fuse-2 kv-to-operand)
+  (-> table? any/c fuse? (-> name? any/c any/c) any/c)
+  (mat
+    (table-map-fuse table fuse-2 #/fn k
+      (dissect (table-get k table) (just v)
+      #/kv-to-operand k v))
+    (just result)
+    result
+    fuse-0))
+
+(define/contract (table-kv-map table kv-to-v)
+  (-> table? (-> name? any/c any/c) table?)
+  (table-kv-map-fuse-default table (table-empty)
+    (fuse-by-merge #/merge-table #/merge-by-dex #/dex-give-up)
+  #/fn k v
+    (table-shadow k (just #/kv-to-v k v) #/table-empty)))
+
+(define/contract (table-kv-all? table kv-accepted?)
+  (-> table? (-> name? any/c boolean?) table?)
+  (table-kv-map-fuse-default table #t
+    (fuse-by-merge #/merge-boolean-by-and)
+    kv-accepted?))
+
+(define/contract (table-kv-any? table kv-accepted?)
+  (-> table? (-> name? any/c boolean?) table?)
+  (table-kv-map-fuse-default table #f
+    (fuse-by-merge #/merge-boolean-by-or)
+    kv-accepted?))
+
+(define/contract (table-v-map table v-to-v)
+  (-> table? (-> any/c any/c) table?)
+  (table-kv-map table #/fn k v #/v-to-v v))
+
+(define/contract (table-v-all? table v-accepted?)
+  (-> table? (-> any/c boolean?) table?)
+  (table-kv-all? table #/fn k v #/v-accepted? v))
+
+(define/contract (table-v-any? table v-accepted?)
+  (-> table? (-> any/c boolean?) table?)
+  (table-kv-any? table #/fn k v #/v-accepted? v))
+
+(define/contract (table-v-of c)
+  (-> contract? contract?)
+  (w- c (coerce-contract 'table-v-of c)
+  #/ (make-appropriate-non-chaperone-contract c)
+    
+    #:name `(table-v-of ,(contract-name c))
+    
+    #:first-order
+    (fn v
+      (and (table? v)
+      #/table-v-all? v #/fn v
+        (contract-first-order-passes? c v)))
+    
+    #:late-neg-projection
+    (fn blame
+      (w- c-late-neg-projection
+        ( (get/build-late-neg-projection c)
+          (blame-add-context blame "a value of"))
+      #/fn v missing-party
+        (expect (table? v) #t
+          (raise-blame-error blame #:missing-party missing-party v
+            '(expected: "a table" given: "~e")
+            v)
+        #/table-v-map v #/fn v
+          (c-late-neg-projection v missing-party))))))

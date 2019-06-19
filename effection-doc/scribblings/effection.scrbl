@@ -634,6 +634,13 @@ There is currently no way to make a fusable function that performs a tail call. 
 }
 
 
+@subsection[#:tag "order-contracts"]{Contracts for tables}
+
+@defproc[(table-v-of [c contract?]) contract?]{
+  Returns a contract that recognizes a @racket[table?] where the mapped values obey the given contract.
+}
+
+
 @subsection[#:tag "other-data"]{Operations for Other Data Types and Derived Operations}
 
 @defmodule[effection/order]
@@ -769,8 +776,4 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
   Iterates over the given hash table's entries in an unspecified order and calls the given function on each entry's mapped value. If the function ever returns @racket[#t], then the overall result is @racket[#t]; otherwise, it's @racket[#f].
   
   There is no short-circuiting. Every entry is always visited, a policy which ensures that Effection-safe code can't use nontermination or run time errors to make assertions about the iteration order of the table. (Nevertheless, Effection-unsafe code can use Racket side effects to observe the iteration order.)
-}
-
-@defproc[(table-v-of [c contract?]) contract?]{
-  Returns a contract that recognizes a @racket[table?] where the mapped values obey the given contract.
 }
