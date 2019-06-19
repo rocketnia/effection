@@ -29,7 +29,7 @@
   struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
 
-(require #/only-in effection/order dex-trivial eq-by-dex? table-of)
+(require #/only-in effection/order dex-trivial eq-by-dex? table-v-of)
 (require #/only-in effection/order/base
   dex? dexable dexableof dex-dex dex-name fuse? name? name-of
   ordering-eq table? table-empty? table-empty table-get table-shadow
@@ -187,8 +187,8 @@
       (-> (listof intuitionistic-ticket?) extfx?)
       extfx?)]
   [extfx-split-table
-    (-> intuitionistic-ticket? (table-of trivial?) error-definer?
-      (-> (table-of intuitionistic-ticket?) extfx?)
+    (-> intuitionistic-ticket? (table-v-of trivial?) error-definer?
+      (-> (table-v-of intuitionistic-ticket?) extfx?)
       extfx?)]
   [extfx-disburse
     (->i

@@ -771,6 +771,6 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
   There is no short-circuiting. Every entry is always visited, a policy which ensures that Effection-safe code can't use nontermination or run time errors to make assertions about the iteration order of the table. (Nevertheless, Effection-unsafe code can use Racket side effects to observe the iteration order.)
 }
 
-@defproc[(table-of [c contract?]) contract?]{
+@defproc[(table-v-of [c contract?]) contract?]{
   Returns a contract that recognizes a @racket[table?] where the mapped values obey the given contract.
 }
