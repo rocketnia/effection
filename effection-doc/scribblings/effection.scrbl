@@ -587,6 +587,7 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
   When compared by @racket[(dex-dex)], all @tt{dex-table} values are @racket[ordering-eq] if their @racket[dex-val] values are.
 }
 
+@; TODO: Add this to Cene for Racket.
 @defproc[(dex-table-ordered [assoc (listof (list/c name? dex?))]) dex?]{
   Returns a dex that compares tables that have precisely the given set of names as keys and whose values can be compared by the corresponding dexes.
   
@@ -597,6 +598,7 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
   When compared by @racket[(dex-dex)], all @tt{dex-table-ordered} values are @racket[ordering-eq] if they have the same key names in the same sequence and if the associated dexes are @racket[ordering-eq].
 }
 
+@; TODO: Add this to Cene for Racket.
 @defproc[(cline-table-ordered [assoc (listof (list/c name? cline?))]) cline?]{
   Returns a cline that compares tables that have precisely the given set of names as keys and whose values can be compared by the corresponding clines. The comparison is lexicographic, with the most significant comparisons being the clines that appear earliest in the @racket[assoc] association list.
   
