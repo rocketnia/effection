@@ -41,13 +41,10 @@ However, a cline does not merely expose this total ordering. Within the cline’
 @itemlist[
     @item{@racket[(nothing)]: The values are not both in the domain.}
     @item{@racket[(just (ordering-lt))]: The first value candidly precedes the second.}
-    @item{@racket[(just (make-ordering-private-lt))]: The first value secretly precedes the second.}
     @item{@racket[(just (ordering-eq))]: The first value is equal to the second.}
-    @item{@racket[(just (make-ordering-private-gt))]: The first value secretly follows the second.}
+    @item{@racket[(just (ordering-private))]: The two values are not equal, and one of them secretly precedes the other, but they fall into the same equivalence class.}
     @item{@racket[(just (ordering-gt))]: The first value candidly follows the second.}
 ]
-
-The “secretly precedes” and “secretly follows” cases are indistinguishable to Effection-safe code.
 
 A “dex” is like a cline, but it never results in the “candidly precedes” and “candidly follows” cases. Thus, a dex is useful as a kind of equality test.
 
@@ -79,6 +76,17 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 }
 
 @deftogether[(
+  @defidform[ordering-private]
+  @defform[#:link-target? #f (ordering-private)]
+  @defform[#:kind "match expander" #:link-target? #f (ordering-private)]
+  @defproc[(ordering-private? [v any/c]) boolean?]
+)]{
+  Struct-like operations which construct and deconstruct a value that represents the result of a comparison where the first value turned out to be secretly strictly less than or secretly strictly greater than the second value.
+  
+  For the purposes of Effection-unsafe Racket code, every two @tt{ordering-private} values are @racket[equal?].
+}
+
+@deftogether[(
   @defidform[ordering-gt]
   @defform[#:link-target? #f (ordering-gt)]
   @defform[#:kind "match expander" #:link-target? #f (ordering-gt)]
@@ -89,24 +97,12 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   For the purposes of Effection-unsafe Racket code, every two @tt{ordering-gt} values are @racket[equal?].
 }
 
-@defproc[(ordering-private? [x any/c]) boolean?]{
-  Returns whether the given value is an opaque value that represents the result of a comparison where the first value turned out to be secretly strictly less than or secretly strictly greater than the second value.
-}
-
 @defproc[(dex-result? [x any/c]) boolean?]{
   Returns whether the given value is a possible result for a dex (something that satisfies either @racket[ordering-eq?] or @racket[ordering-private?]).
 }
 
 @defproc[(cline-result? [x any/c]) boolean?]{
   Returns whether the given value is a possible result for a dex (something that satisfies @racket[ordering-lt?], @racket[dex-result?], or @racket[ordering-gt?]).
-}
-
-@defproc[(make-ordering-private-lt) ordering-private?]{
-  Returns a value that represents the result of a comparison where the first value turned out to be secretly strictly less than the second value.
-}
-
-@defproc[(make-ordering-private-gt) ordering-private?]{
-  Returns a value that represents the result of a comparison where the first value turned out to be secretly strictly greater than the second value.
 }
 
 

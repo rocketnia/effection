@@ -7,8 +7,6 @@
 (require #/only-in lathe-comforts/struct struct-easy)
 
 
-(provide #/struct-out ordering-private)
-
 (provide #/struct-out name)
 (provide
   gen:dex-internals
@@ -43,16 +41,6 @@
 
 (provide #/struct-out fusable-function)
 
-
-
-; ===== Orderings ====================================================
-
-; NOTE: We used to expose this as two structs, namely
-; `ordering-private-lt` and `ordering-private-gt`, but that approach
-; had a problem: Using `struct->vector`, Racket code can detect which
-; is which without even going to the trouble of writing the values to
-; a text stream.
-(struct-easy (ordering-private ordering))
 
 
 ; ===== Names, dexes, and dexables ===================================

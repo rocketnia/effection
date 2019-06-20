@@ -44,12 +44,14 @@
   auto-write define-imitation-simple-struct struct-easy)
 
 (require #/only-in effection/private/order
-  dex-result? lt-autocline lt-autodex names-autodex
-  make-appropriate-non-chaperone-contract make-ordering-private-gt
-  make-ordering-private-lt name? object-identities-autodex
-  ordering-private?
+  cline-result? dex-result? lt-autocline lt-autodex
+  names-autocline-candid names-autodex
+  make-appropriate-non-chaperone-contract name?
+  object-identities-autodex
   
   ordering-eq ordering-eq?
+  
+  ordering-private ordering-private?
   
   ordering-gt ordering-gt?
   
@@ -65,20 +67,19 @@
   dex-internals-tag dex-internals-name-of furge-internals-autodex
   furge-internals-autoname furge-internals-call furge-internals-tag
   fusable-function fusable-function? fuse fuse? gen:cline-internals
-  gen:dex-internals gen:furge-internals merge merge? name
-  ordering-private table table?)
+  gen:dex-internals gen:furge-internals merge merge? name table
+  table?)
 
 
 ; ==== Orderings ====
 
-(provide ordering-lt ordering-eq ordering-gt)
+(provide ordering-lt ordering-eq ordering-private ordering-gt)
 (provide #/contract-out
   [ordering-lt? (-> any/c boolean?)]
   [ordering-eq? (-> any/c boolean?)]
+  [ordering-private? (-> any/c boolean?)]
   [ordering-gt? (-> any/c boolean?)])
-(provide ordering-private?)
 (provide dex-result? cline-result?)
-(provide make-ordering-private-lt make-ordering-private-gt)
 
 
 ; ==== Names, dexes, and dexables ====
@@ -317,10 +318,6 @@
 
 
 ; ===== Orderings ====================================================
-
-(define/contract (cline-result? x)
-  (-> any/c boolean?)
-  (or (dex-result? x) (ordering-lt? x) (ordering-gt? x)))
 
 (define-simple-macro (maybe-ordering-or first:expr second:expr)
   (w- result first
@@ -2321,9 +2318,9 @@
     (sort (hash->list hash) #/fn a b
       (dissect a (cons ak av)
       #/dissect b (cons bk bv)
-      #/w- dex-result
-        (names-autodex (internal:name ak) (internal:name bk))
-      #/mat dex-result (internal:ordering-private #/ordering-lt) #t
+      #/w- cline-result
+        (names-autocline-candid (internal:name ak) (internal:name bk))
+      #/mat cline-result (ordering-lt) #t
         #f))
   #/dissectfn (cons k v)
     (list (internal:name k) v)))

@@ -19,7 +19,7 @@
 (require #/prefix-in internal: #/only-in
   effection/private/order-unsafe
   
-  name name? ordering-private ordering-private?)
+  name name?)
 
 
 (provide #/all-defined-out)
@@ -40,47 +40,40 @@
   'ordering-lt (current-inspector) (auto-write) (auto-equal))
 (define-imitation-simple-struct (ordering-eq?) ordering-eq
   'ordering-eq (current-inspector) (auto-write) (auto-equal))
+(define-imitation-simple-struct (ordering-private?) ordering-private
+  'ordering-private (current-inspector) (auto-write) (auto-equal))
 (define-imitation-simple-struct (ordering-gt?) ordering-gt
   'ordering-gt (current-inspector) (auto-write) (auto-equal))
-
-(define/contract (ordering-private? x)
-  (-> any/c boolean?)
-  (internal:ordering-private? x))
 
 (define/contract (dex-result? x)
   (-> any/c boolean?)
   (or (ordering-private? x) (ordering-eq? x)))
 
-; NOTE: We make these procedures because if we provided them as bare
-; values, we would encourage people to write code that appeared to
-; keep the ordering private but actually exposed it to a simple `eq?`
-; check. Of course, Effection-unsafe Racket code can still compare
-; these values by writing them to streams and observing the data
-; that's written this way, but at least that's harder to do by
-; accident.
-(define/contract (make-ordering-private-lt)
-  (-> ordering-private?)
-  (internal:ordering-private #/ordering-lt))
-(define/contract (make-ordering-private-gt)
-  (-> ordering-private?)
-  (internal:ordering-private #/ordering-gt))
+(define/contract (cline-result? x)
+  (-> any/c boolean?)
+  (or (dex-result? x) (ordering-lt? x) (ordering-gt? x)))
 
 (define-simple-macro (ordering-or first:expr second:expr)
   (w- result first
   #/expect result (ordering-eq) result
     second))
 
-(define/contract (lt-autodex a b <?)
-  (-> any/c any/c (-> any/c any/c boolean?) dex-result?)
-  (if (<? a b) (make-ordering-private-lt)
-  #/if (<? b a) (make-ordering-private-gt)
-  #/ordering-eq))
+; TODO: See if we should export this.
+(define/contract (hide-cline-result cline-result)
+  (-> cline-result? dex-result?)
+  (mat cline-result (ordering-eq)
+    (ordering-eq)
+    (ordering-private)))
 
 (define/contract (lt-autocline a b <?)
-  (-> any/c any/c (-> any/c any/c boolean?) dex-result?)
+  (-> any/c any/c (-> any/c any/c boolean?) cline-result?)
   (if (<? a b) (ordering-lt)
   #/if (<? b a) (ordering-gt)
   #/ordering-eq))
+
+(define/contract (lt-autodex a b <?)
+  (-> any/c any/c (-> any/c any/c boolean?) dex-result?)
+  (hide-cline-result #/lt-autocline a b <?))
 
 
 ; ===== Names, dexes, and dexables ===================================
@@ -115,8 +108,8 @@
   (-> any/c boolean?)
   (internal:name? x))
 
-(define/contract (names-autodex a b)
-  (-> name? name? dex-result?)
+(define/contract (names-autocline-candid a b)
+  (-> name? name? cline-result?)
   (dissect a (internal:name a)
   #/dissect b (internal:name b)
   #/w-loop next a a b b
@@ -125,14 +118,14 @@
     (mat a (cons a-first a-rest)
       (mat b (cons b-first b-rest)
         (ordering-or (next a-first b-first) (next a-rest b-rest))
-      #/make-ordering-private-gt)
-    #/mat b (cons b-first b-rest) (make-ordering-private-lt)
+      #/ordering-gt)
+    #/mat b (cons b-first b-rest) (ordering-lt)
     
     ; Handle the empty lists.
     #/mat a (list)
       (mat b (list) (ordering-eq)
-      #/make-ordering-private-gt)
-    #/mat b (list) (make-ordering-private-lt)
+      #/ordering-gt)
+    #/mat b (list) (ordering-lt)
     
     ; Handle the interned symbols.
     #/w- interned-symbol?
@@ -140,14 +133,14 @@
         (and (symbol? x) (symbol-interned? x)))
     #/if (interned-symbol? a)
       (if (interned-symbol? b) (lt-autodex a b symbol<?)
-      #/make-ordering-private-gt)
-    #/if (interned-symbol? b) (make-ordering-private-lt)
+      #/ordering-gt)
+    #/if (interned-symbol? b) (ordering-lt)
     
     ; Handle the exact rational numbers.
     #/if (exact-rational? a)
       (if (exact-rational? b) (lt-autodex a b <)
-      #/make-ordering-private-gt)
-    #/if (exact-rational? b) (make-ordering-private-lt)
+      #/ordering-gt)
+    #/if (exact-rational? b) (ordering-lt)
     
     ; Handle the uninterned symbols.
     #/w- uninterned-symbol?
@@ -158,8 +151,12 @@
           (not #/symbol-unreadable? x)))
     #/if (uninterned-symbol? a)
       (if (uninterned-symbol? b) (object-identities-autodex a b)
-      #/make-ordering-private-gt)
-    #/if (uninterned-symbol? b) (make-ordering-private-lt)
+      #/ordering-gt)
+    #/if (uninterned-symbol? b) (ordering-lt)
     
     ; Handle the structure type descriptors.
     #/object-identities-autodex a b)))
+
+(define/contract (names-autodex a b)
+  (-> name? name? dex-result?)
+  (hide-cline-result #/names-autocline-candid a b))
