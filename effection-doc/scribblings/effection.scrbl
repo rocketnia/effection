@@ -2,7 +2,7 @@
 
 @(require #/for-label racket/base)
 @(require #/for-label #/only-in racket/contract/base
-  -> any/c cons/c contract? listof)
+  -> any/c cons/c contract? list/c listof)
 
 @(require #/for-label #/only-in lathe-comforts/maybe
   just maybe? maybe/c nothing)
@@ -353,7 +353,7 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   
   Each @racket[field-position-nat] must be a distinct number indicating which field should be checked by the associated cline, and there must be an entry for every field.
   
-  For the sake of nontermination, error, and performance concerns, this cline computes by attempting the given clines in the order they appear in this call. The last cline, if any, is attempted as a tail call.
+  For the sake of nontermination, error, and performance concerns, this cline computes by attempting the given clines in the order they appear in this call. If a cline before the last one determines a non-@racket[ordering-eq] result, the following clines are only checked to be sure their domains contain the respective field values. Otherwise, the last cline, if any, is attempted as a tail call.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
@@ -585,6 +585,28 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
   Returns a dex that compares tables, using the given dex to compare each value.
   
   When compared by @racket[(dex-dex)], all @tt{dex-table} values are @racket[ordering-eq] if their @racket[dex-val] values are.
+}
+
+@defproc[(dex-table-ordered [assoc (listof (list/c name? dex?))]) dex?]{
+  Returns a dex that compares tables that have precisely the given set of names as keys and whose values can be compared by the corresponding dexes.
+  
+  The given keys must be mutually unique.
+  
+  For the sake of nontermination, error, and performance concerns, this dex computes by attempting the given dexes in the order they appear in the @racket[assoc] association list. If a dex before the last one determines a non-@racket[ordering-eq] result, the following dexes are only checked to be sure their domains contain the respective field values. Otherwise, the last dex, if any, is attempted as a tail call.
+  
+  When compared by @racket[(dex-dex)], all @tt{dex-table-ordered} values are @racket[ordering-eq] if they have the same key names in the same sequence and if the associated dexes are @racket[ordering-eq].
+}
+
+@defproc[(cline-table-ordered [assoc (listof (list/c name? cline?))]) cline?]{
+  Returns a cline that compares tables that have precisely the given set of names as keys and whose values can be compared by the corresponding clines. The comparison is lexicographic, with the most significant comparisons being the clines that appear earliest in the @racket[assoc] association list.
+  
+  The given keys must be mutually unique.
+  
+  For the sake of nontermination, error, and performance concerns, this cline computes by attempting the given clines in the order they appear in the @racket[assoc] association list. If a cline before the last one determines a non-@racket[ordering-eq] result, the following clines are only checked to be sure their domains contain the respective field values. Otherwise, the last cline, if any, is attempted as a tail call.
+  
+  When compared by @racket[(dex-cline)], all @tt{cline-table-ordered} values are @racket[ordering-eq] if they have the same key names in the same sequence and if the associated clines are @racket[ordering-eq].
+  
+  When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to the similarly constructed @racket[dex-table-ordered].
 }
 
 @deftogether[(

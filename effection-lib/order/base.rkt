@@ -28,6 +28,7 @@
   raise-blame-error)
 (require #/only-in racket/contract/region define/contract)
 (require #/only-in racket/hash hash-union)
+(require #/only-in racket/math natural?)
 (require #/only-in syntax/parse/define define-simple-macro)
 
 (require #/only-in lathe-comforts
@@ -38,7 +39,7 @@
   list-all list-any list-bind list-map)
 (require #/only-in lathe-comforts/match match/c)
 (require #/only-in lathe-comforts/maybe
-  just maybe? maybe-bind maybe/c nothing nothing?)
+  just just? maybe? maybe-bind maybe/c nothing nothing?)
 (require #/only-in lathe-comforts/struct
   auto-write define-imitation-simple-struct struct-easy)
 
@@ -830,13 +831,17 @@
         (dex-internals-struct b-descriptor b-counts? b-fields)
       #/maybe-ordering-or
         (just #/object-identities-autodex a-descriptor b-descriptor)
-      #/maybe-compare-aligned-lists a-fields b-fields
-      #/fn a-field b-field
-        (dissect a-field (list a-getter a-position a-dex)
-        #/dissect b-field (list b-getter b-position b-dex)
-        #/maybe-ordering-or
-          (just #/lt-autodex a-position b-position <)
-        #/compare-by-dex (dex-dex) a-dex b-dex)))
+      #/maybe-ordering-or
+        (maybe-compare-aligned-lists a-fields b-fields
+        #/fn a-field b-field
+          (dissect a-field (list a-getter a-position a-dex)
+          #/dissect b-field (list b-getter b-position b-dex)
+          #/just #/lt-autodex a-position b-position <))
+        (maybe-compare-aligned-lists a-fields b-fields
+        #/fn a-field b-field
+          (dissect a-field (list a-getter a-position a-dex)
+          #/dissect b-field (list b-getter b-position b-dex)
+          #/compare-by-dex (dex-dex) a-dex b-dex))))
     
     (define (dex-internals-in? this x)
       (dissect this (dex-internals-struct descriptor counts? fields)
@@ -1377,13 +1382,17 @@
         (cline-internals-struct b-descriptor b-counts? b-fields)
       #/maybe-ordering-or
         (just #/object-identities-autodex a-descriptor b-descriptor)
-      #/maybe-compare-aligned-lists a-fields b-fields
-      #/fn a-field b-field
-        (dissect a-field (list a-getter a-position a-cline)
-        #/dissect b-field (list b-getter b-position b-cline)
-        #/maybe-ordering-or
-          (just #/lt-autodex a-position b-position <)
-        #/compare-by-dex (dex-cline) a-cline b-cline)))
+      #/maybe-ordering-or
+        (maybe-compare-aligned-lists a-fields b-fields
+        #/fn a-field b-field
+          (dissect a-field (list a-getter a-position a-cline)
+          #/dissect b-field (list b-getter b-position b-cline)
+          #/just #/lt-autodex a-position b-position <))
+        (maybe-compare-aligned-lists a-fields b-fields
+        #/fn a-field b-field
+          (dissect a-field (list a-getter a-position a-cline)
+          #/dissect b-field (list b-getter b-position b-cline)
+          #/compare-by-dex (dex-cline) a-cline b-cline))))
     
     (define (cline-internals-in? this x)
       (dissect this (cline-internals-struct descriptor counts? fields)
@@ -2071,13 +2080,17 @@
           _ _ _ b-descriptor _ _ b-fields)
       #/maybe-ordering-or
         (just #/object-identities-autodex a-descriptor b-descriptor)
-      #/maybe-compare-aligned-lists a-fields b-fields
-      #/fn a-field b-field
-        (dissect a-field (list a-getter a-position a-furge)
-        #/dissect b-field (list b-getter b-position b-furge)
-        #/maybe-ordering-or
-          (just #/lt-autodex a-position b-position <)
-        #/compare-by-dex dex-furge a-furge b-furge)))
+      #/maybe-ordering-or
+        (maybe-compare-aligned-lists a-fields b-fields
+        #/fn a-field b-field
+          (dissect a-field (list a-getter a-position a-furge)
+          #/dissect b-field (list b-getter b-position b-furge)
+          #/just #/lt-autodex a-position b-position <))
+        (maybe-compare-aligned-lists a-fields b-fields
+        #/fn a-field b-field
+          (dissect a-field (list a-getter a-position a-furge)
+          #/dissect b-field (list b-getter b-position b-furge)
+          #/compare-by-dex dex-furge a-furge b-furge))))
     
     (define (furge-internals-call this a b)
       (dissect this
@@ -2294,6 +2307,13 @@
       (next sorted-flat (cons entry current-group)
         rev-sorted-grouped))))
 
+; TODO: See if we should export this. It can be implemented in
+; `effection/order` using `fuse-exact-rational-by-plus`.
+(define/contract (table-count tab)
+  (-> table? natural?)
+  (dissect tab (internal:table hash)
+  #/hash-count hash))
+
 (define/contract (table->sorted-list tab)
   (-> table? #/listof #/list/c name? any/c)
   (dissect tab (internal:table hash)
@@ -2362,9 +2382,9 @@
       #/if (not #/internal:dex-internals-in? this a) (nothing)
       #/if (not #/internal:dex-internals-in? this b) (nothing)
       #/maybe-ordering-or
-        (just #/lt-autodex (hash-count a) (hash-count b) <)
-      #/w- a (table->sorted-list #/internal:table a)
-      #/w- b (table->sorted-list #/internal:table b)
+        (just #/lt-autodex (table-count a) (table-count b) <)
+      #/w- a (table->sorted-list a)
+      #/w- b (table->sorted-list b)
       #/maybe-ordering-or
         (w-loop next
           keys
@@ -2396,6 +2416,208 @@
 
 (define/contract (dex-table dex-val) (-> dex? dex?)
   (internal:dex #/dex-internals-table dex-val))
+
+(define/contract (table-ordered-counts? assoc v)
+  (-> (listof #/list/c name? dex?) any/c boolean?)
+  (and (table? v) (= (length assoc) (table-count v))
+  #/list-all assoc #/dissectfn (list k dex-v)
+    (just? #/table-get k v)))
+
+(struct-easy (dex-internals-table-ordered assoc)
+  #:other
+  
+  #:methods internal:gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'tag:dex-table-ordered)
+    
+    (define (dex-internals-autoname this)
+      (dissect this (dex-internals-table-ordered assoc)
+      #/list* 'tag:dex-table-ordered
+      #/list-map assoc #/dissectfn (list (internal:name k) dex-v)
+        (list k #/autoname-dex dex-v)))
+    
+    (define (dex-internals-autodex this other)
+      (dissect this (dex-internals-table-ordered a-assoc)
+      #/dissect other (dex-internals-table-ordered b-assoc)
+      #/maybe-ordering-or
+        (just #/lt-autodex (length a-assoc) (length b-assoc) <)
+      #/maybe-ordering-or
+        (maybe-compare-aligned-lists a-assoc b-assoc
+        #/fn a-entry b-entry
+          (dissect a-entry (list a-k a-dex-v)
+          #/dissect b-entry (list b-k b-dex-v)
+          #/just #/names-autodex a-k b-k))
+        (maybe-compare-aligned-lists a-assoc b-assoc
+        #/fn a-entry b-entry
+          (dissect a-entry (list a-k a-dex-v)
+          #/dissect b-entry (list b-k b-dex-v)
+          #/compare-by-dex (dex-dex) a-dex-v b-dex-v))))
+    
+    (define (dex-internals-in? this x)
+      (dissect this (dex-internals-table-ordered assoc)
+      #/and (table-ordered-counts? assoc x)
+      #/w-loop next assoc assoc
+        (expect assoc (cons entry assoc) #t
+        #/dissect entry (list k dex-v)
+        #/dissect (table-get k x) (just v)
+        
+        ; We do a tail call if we can.
+        #/mat assoc (list) (in-dex? dex-v v)
+        
+        #/and (in-dex? dex-v v)
+        #/next assoc)))
+    
+    (define (dex-internals-name-of this x)
+      (dissect this (dex-internals-table-ordered assoc)
+      #/expect (table-ordered-counts? assoc x) #t (nothing)
+      #/w-loop next assoc assoc reps (table-empty)
+        (expect assoc (cons entry assoc)
+          (just #/internal:name #/cons 'name:table
+            (list-bind (table->sorted-list reps)
+            #/dissectfn (list (internal:name k-rep) v-rep)
+              (list k-rep v-rep)))
+        #/dissect entry (list k dex-v)
+        #/dissect (table-get k x) (just v)
+        #/maybe-bind (name-of dex-v v) #/dissectfn (internal:name rep)
+        #/next assoc #/table-shadow k (just rep) reps)))
+    
+    (define (dex-internals-compare this a b)
+      (dissect this (dex-internals-table-ordered assoc)
+      #/expect (table-ordered-counts? assoc a) #t (nothing)
+      #/expect (table-ordered-counts? assoc b) #t (nothing)
+      #/w-loop next assoc assoc
+        (expect assoc (cons entry assoc) (just #/ordering-eq)
+        #/dissect entry (list k dex-v)
+        #/dissect (table-get k a) (just a-v)
+        #/dissect (table-get k b) (just b-v)
+        
+        ; We do a tail call if we can.
+        #/mat assoc (list) (compare-by-dex dex-v a-v b-v)
+        
+        #/w- result (compare-by-dex dex-v a-v b-v)
+        #/expect result (just #/ordering-eq)
+          (mat result (nothing) (nothing)
+          ; We have a potential result to use, but first we check that
+          ; the rest of the field values belong to their respective
+          ; dexes' domains. If they don't, this structure instance is
+          ; not part part of this dex's domain, so the result is
+          ; `(nothing)`.
+          #/w-loop next assoc assoc
+            (expect assoc (cons entry assoc) result
+            #/dissect entry (list k dex-v)
+            #/dissect (table-get k a) (just a-v)
+            #/dissect (table-get k b) (just b-v)
+            #/expect (and (in-dex? dex-v a-v) (in-dex? dex-v b-v)) #t
+              (nothing)
+            #/next assoc))
+        #/next assoc)))
+  ])
+
+(define/contract (dex-table-ordered assoc)
+  (-> (listof #/list/c name? dex?) dex?)
+  (expect (assocs->table-if-mutually-unique assoc) (just _)
+    (raise-arguments-error 'dex-table-ordered
+      "expected the keys to be mutually unique"
+      "assoc" assoc)
+  #/internal:dex #/dex-internals-table-ordered assoc))
+
+(struct-easy (cline-internals-table-ordered assoc)
+  #:other
+  
+  #:methods internal:gen:cline-internals
+  [
+    
+    (define (cline-internals-tag this)
+      'tag:cline-table-ordered)
+    
+    (define (cline-internals-autoname this)
+      (dissect this (cline-internals-table-ordered assoc)
+      #/list* 'tag:cline-table-ordered
+      #/list-map assoc #/dissectfn (list (internal:name k) cline-v)
+        (list k #/autoname-cline cline-v)))
+    
+    (define (cline-internals-autodex this other)
+      (dissect this (cline-internals-table-ordered a-assoc)
+      #/dissect other (cline-internals-table-ordered b-assoc)
+      #/maybe-ordering-or
+        (just #/lt-autodex (length a-assoc) (length b-assoc) <)
+      #/maybe-ordering-or
+        (maybe-compare-aligned-lists a-assoc b-assoc
+        #/fn a-entry b-entry
+          (dissect a-entry (list a-k a-cline-v)
+          #/dissect b-entry (list b-k b-cline-v)
+          #/just #/names-autodex a-k b-k))
+        (maybe-compare-aligned-lists a-assoc b-assoc
+        #/fn a-entry b-entry
+          (dissect a-entry (list a-k a-cline-v)
+          #/dissect b-entry (list b-k b-cline-v)
+          #/compare-by-dex (dex-cline) a-cline-v b-cline-v))))
+    
+    (define (cline-internals-dex this)
+      (dissect this (cline-internals-table-ordered assoc)
+      ; NOTE: We inline the call to `dex-table-ordered` here because
+      ; we don't need to check that the keys are mutually unique.
+      #/internal:dex #/dex-internals-table-ordered
+        (list-map assoc #/dissectfn (list k cline-v)
+          (list k (get-dex-from-cline cline-v)))))
+    
+    (define (cline-internals-in? this x)
+      (dissect this (cline-internals-table-ordered assoc)
+      #/and (table-ordered-counts? assoc x)
+      #/w-loop next assoc assoc
+        (expect assoc (cons entry assoc) #t
+        #/dissect entry (list k cline-v)
+        #/dissect (table-get k x) (just v)
+        
+        ; We do a tail call if we can.
+        #/mat assoc (list) (in-cline? cline-v v)
+        
+        #/and (in-cline? cline-v v)
+        #/next assoc)))
+    
+    (define (cline-internals-compare this a b)
+      (dissect this (cline-internals-table-ordered assoc)
+      #/expect (table-ordered-counts? assoc a) #t (nothing)
+      #/expect (table-ordered-counts? assoc b) #t (nothing)
+      #/w-loop next assoc assoc
+        (expect assoc (cons entry assoc) (just #/ordering-eq)
+        #/dissect entry (list k cline-v)
+        #/dissect (table-get k a) (just a-v)
+        #/dissect (table-get k b) (just b-v)
+        
+        ; We do a tail call if we can.
+        #/mat assoc (list) (compare-by-cline cline-v a-v b-v)
+        
+        #/w- result (compare-by-cline cline-v a-v b-v)
+        #/expect result (just #/ordering-eq)
+          (mat result (nothing) (nothing)
+          ; We have a potential result to use, but first we check that
+          ; the rest of the field values belong to their respective
+          ; clines' domains. If they don't, this structure instance is
+          ; not part part of this cline's domain, so the result is
+          ; `(nothing)`.
+          #/w-loop next assoc assoc
+            (expect assoc (cons entry assoc) result
+            #/dissect entry (list k cline-v)
+            #/dissect (table-get k a) (just a-v)
+            #/dissect (table-get k b) (just b-v)
+            #/expect
+              (and (in-cline? cline-v a-v) (in-cline? cline-v b-v))
+              #t
+              (nothing)
+            #/next assoc))
+        #/next assoc)))
+  ])
+
+(define/contract (cline-table-ordered assoc)
+  (-> (listof #/list/c name? cline?) cline?)
+  (expect (assocs->table-if-mutually-unique assoc) (just _)
+    (raise-arguments-error 'cline-table-ordered
+      "expected the keys to be mutually unique"
+      "assoc" assoc)
+  #/internal:cline #/cline-internals-table-ordered assoc))
 
 (struct-easy
   (furge-internals-table
