@@ -10,16 +10,19 @@
 (provide #/struct-out name)
 (provide
   gen:dex-internals
+  dex-internals?
   dex-internals-tag
   dex-internals-autoname
   dex-internals-autodex
   dex-internals-in?
   dex-internals-name-of
+  dex-internals-dexed-of
   dex-internals-compare)
 (provide #/struct-out dex)
 
 (provide
   gen:cline-internals
+  cline-internals?
   cline-internals-tag
   cline-internals-autoname
   cline-internals-autodex
@@ -30,6 +33,7 @@
 
 (provide
   gen:furge-internals
+  furge-internals?
   furge-internals-tag
   furge-internals-autoname
   furge-internals-autodex
@@ -62,6 +66,7 @@
   (dex-internals-autodex dex-internals other)
   (dex-internals-in? dex-internals x)
   (dex-internals-name-of dex-internals x)
+  (dex-internals-dexed-of dex-internals x)
   (dex-internals-compare dex-internals a b))
 
 (struct-easy (dex internals))

@@ -106,7 +106,7 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 }
 
 
-@subsection[#:tag "dexes"]{Names, Dexes, and Dexables}
+@subsection[#:tag "dexes"]{Names, Dexes, Dexed Values, and Dexables}
 
 @defproc[(name? [x any/c]) boolean?]{
   Returns whether the given value is a name. In Effection, a "name" is something like a partial application of comparison by a dex. Any value can be converted to a name using @racket[name-of] if any dex for that value is at hand (and it always converts to the same name regardless of which dex is chosen), and names themselves can be compared using @racket[(dex-name)].
@@ -125,11 +125,32 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   Given a dex and a value, returns a @racket[just] of a name that the value can be compared by, if the value belongs to the dex's domain; otherwise returns a @racket[nothing].
 }
 
+@defproc[(dexed-of [dex dex?] [x any/c]) (maybe/c dexed?)]{
+  Given a dex and a value, returns a @racket[just] of a dexed version of the given value, if the value belongs to the dex's domain; otherwise returns a @racket[nothing].
+}
+
 @defproc[
   (compare-by-dex [dex dex?] [a any/c] [b any/c])
   (maybe/c dex-result?)
 ]{
   Given a dex and two values, compares those values according to the dex. The result is @racket[(nothing)] if either value is outside the dex's domain.
+}
+
+
+@defproc[(dexed? [x any/c]) boolean?]{
+  Returns whether the given value is a dexed value.
+}
+
+@defproc[(dexed-get-dex [d dexed?]) dex?]{
+  Given a dexed value, returns a dex that has a domain consisting of just one value, namely the value of the given dexed value.
+}
+
+@defproc[(dexed-get-name [d dexed?]) name?]{
+  Given a dexed value, returns the name of its value.
+}
+
+@defproc[(dexed-get-value [d dexed?]) any/c]{
+  Given a dexed value, returns its value.
 }
 
 

@@ -39,7 +39,7 @@
   list-all list-any list-bind list-map)
 (require #/only-in lathe-comforts/match match/c)
 (require #/only-in lathe-comforts/maybe
-  just just? maybe? maybe-bind maybe/c nothing nothing?)
+  just just? maybe? maybe-bind maybe/c maybe-map nothing nothing?)
 (require #/only-in lathe-comforts/struct
   auto-write define-imitation-simple-struct struct-easy)
 
@@ -62,13 +62,13 @@
   
   cline cline? cline-internals-autodex cline-internals-autoname
   cline-internals-compare cline-internals-dex cline-internals-in?
-  cline-internals-tag dex dex? dex-internals-autodex
-  dex-internals-autoname dex-internals-compare dex-internals-in?
-  dex-internals-tag dex-internals-name-of furge-internals-autodex
-  furge-internals-autoname furge-internals-call furge-internals-tag
-  fusable-function fusable-function? fuse fuse? gen:cline-internals
-  gen:dex-internals gen:furge-internals merge merge? name table
-  table?)
+  cline-internals-tag dex dex? dex-internals? dex-internals-autodex
+  dex-internals-autoname dex-internals-compare dex-internals-dexed-of
+  dex-internals-in? dex-internals-tag dex-internals-name-of
+  furge-internals-autodex furge-internals-autoname
+  furge-internals-call furge-internals-tag fusable-function
+  fusable-function? fuse fuse? gen:cline-internals gen:dex-internals
+  gen:furge-internals merge merge? name table table?)
 
 
 ; ==== Orderings ====
@@ -82,14 +82,28 @@
 (provide dex-result? cline-result?)
 
 
-; ==== Names, dexes, and dexables ====
+; ==== Names, dexes, dexed values, and dexables ====
 
 (provide name?)
 
 (provide dex?)
 (module+ private/unsafe #/provide
   autoname-dex)
-(provide in-dex? name-of compare-by-dex)
+(provide #/contract-out
+  [in-dex? (-> dex? any/c boolean?)]
+  [name-of (-> dex? any/c #/maybe/c name?)]
+  [dexed-of (-> dex? any/c #/maybe/c dexed?)]
+  [compare-by-dex (-> dex? any/c any/c #/maybe/c dex-result?)])
+(module+ private #/provide
+  dex-internals-simple-dexed-of)
+
+(module+ private/unsafe #/provide
+  dexed)
+(provide #/contract-out
+  [dexed? (-> any/c boolean?)]
+  [dexed-get-dex (-> dexed? dex?)]
+  [dexed-get-name (-> dexed? name?)]
+  [dexed-get-value (-> dexed? any/c)])
 
 (provide dexable)
 (provide #/contract-out
@@ -332,31 +346,42 @@
 
 
 
-; ===== Names, dexes, and dexables ===================================
+; ===== Names, dexes, dexed values, and dexables =====================
 
 (define/contract (dex? x)
   (-> any/c boolean?)
   (internal:dex? x))
+
+(define-imitation-simple-struct
+  (dexed? dexed-get-unwrapped-dex dexed-get-name dexed-get-value)
+  dexed 'dexed (current-inspector) (auto-write))
 
 (define/contract (autoname-dex x)
   (-> dex? any)
   (dissect x (internal:dex internals)
   #/cons 'name:dex #/internal:dex-internals-autoname internals))
 
-(define/contract (in-dex? dex x)
-  (-> dex? any/c boolean?)
+(define (in-dex? dex x)
   (dissect dex (internal:dex internals)
   #/internal:dex-internals-in? internals x))
 
-(define/contract (name-of dex x)
-  (-> dex? any/c #/maybe/c name?)
+(define (name-of dex x)
   (dissect dex (internal:dex internals)
   #/internal:dex-internals-name-of internals x))
 
-(define/contract (compare-by-dex dex a b)
-  (-> dex? any/c any/c #/maybe/c dex-result?)
+(define (dexed-of dex x)
+  (dissect dex (internal:dex internals)
+  #/internal:dex-internals-dexed-of internals x))
+
+(define (compare-by-dex dex a b)
   (dissect dex (internal:dex internals)
   #/internal:dex-internals-compare internals a b))
+
+(define/contract (dex-internals-simple-dexed-of this x)
+  (-> internal:dex-internals? any/c #/maybe/c dexed?)
+  (maybe-map (name-of this x) #/fn name
+    (dexed (dex-particular this name x) name x)))
+
 
 
 (define-imitation-simple-struct (dexable? dexable-dex dexable-value)
@@ -432,6 +457,97 @@
 
 
 
+(struct-easy (dex-internals-particular dex-val name-rep val)
+  #:other
+  
+  #:methods internal:gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'tag:dex-particular)
+    
+    (define (dex-internals-autoname this)
+      (dissect this (dex-internals-particular dex-val name-rep val)
+      #/list 'tag:dex-particular name-rep))
+    
+    (define (dex-internals-autodex this other)
+      (dissect this
+        (dex-internals-particular a-dex-val a-name-rep a-val)
+      #/dissect other
+        (dex-internals-particular b-dex-val b-name-rep b-val)
+      #/maybe-ordering-or
+        (compare-by-dex (dex-dex) a-dex-val b-dex-val)
+        (compare-by-dex a-dex-val a-val b-val)))
+    
+    (define (dex-internals-in? this x)
+      (dissect this (dex-internals-particular dex-val name-rep val)
+      #/mat (compare-by-dex dex-val val x) (just #/ordering-eq)
+        #t
+        #f))
+    
+    (define (dex-internals-name-of this x)
+      (dissect this (dex-internals-particular dex-val name-rep val)
+      #/name-of dex-val x))
+    
+    (define (dex-internals-dexed-of this x)
+      (dissect this (dex-internals-particular dex-val name-rep val)
+      #/dexed-of dex-val x))
+    
+    (define (dex-internals-compare this a b)
+      (dissect this (dex-internals-particular dex-val name-rep val)
+      #/compare-by-dex dex-val a b))
+  ])
+
+(define/contract (dex-particular dex-val name val)
+  (-> dex? name? any/c dex?)
+  (dissect name (internal:name name-rep)
+  #/internal:dex #/dex-internals-particular dex-val name-rep val))
+
+
+(struct-easy (dex-internals-for-dexed dex)
+  #:other
+  
+  #:methods internal:gen:dex-internals
+  [
+    
+    (define (dex-internals-tag this)
+      'tag:dex-for-dexed)
+    
+    (define (dex-internals-autoname this)
+      (dissect this (dex-internals-for-dexed dex)
+      #/list 'tag:dex-for-dexed #/autoname-dex dex))
+    
+    (define (dex-internals-autodex this other)
+      (dissect this (dex-internals-for-dexed a-dex)
+      #/dissect other (dex-internals-for-dexed b-dex)
+      #/compare-by-dex (dex-dex) a-dex b-dex))
+    
+    (define (dex-internals-in? this x)
+      (dissect this (dex-internals-for-dexed dex)
+      #/in-dex? dex x))
+    
+    (define (dex-internals-name-of this x)
+      (dissect this (dex-internals-for-dexed dex)
+      #/name-of dex x))
+    
+    (define (dex-internals-dexed-of this x)
+      (dissect this (dex-internals-for-dexed dex)
+      #/dexed-of dex x))
+    
+    (define (dex-internals-compare this a b)
+      (dissect this (dex-internals-for-dexed dex)
+      #/compare-by-dex dex a b))
+  ])
+
+(define/contract (dex-for-dexed dex)
+  (-> dex? dex?)
+  (internal:dex #/dex-internals-for-dexed dex))
+
+(define (dexed-get-dex d)
+  (dissect d (dexed unwrapped-dex name value)
+  #/dex-for-dexed unwrapped-dex))
+
+
 (struct-easy (dex-internals-name)
   #:other
   
@@ -453,6 +569,9 @@
     (define (dex-internals-name-of this x)
       (expect x (internal:name rep) (nothing)
       #/just #/internal:name #/list 'name:name rep))
+    
+    (define (dex-internals-dexed-of this x)
+      (dex-internals-simple-dexed-of this x))
     
     (define (dex-internals-compare this a b)
       (if (and (name? a) (name? b))
@@ -488,6 +607,9 @@
         (just #/internal:name #/autoname-dex x)
         (nothing)))
     
+    (define (dex-internals-dexed-of this x)
+      (dex-internals-simple-dexed-of this x))
+    
     (define (dex-internals-compare this a b)
       (expect a (internal:dex a) (nothing)
       #/expect b (internal:dex b) (nothing)
@@ -520,6 +642,9 @@
       #f)
     
     (define (dex-internals-name-of this x)
+      (nothing))
+    
+    (define (dex-internals-dexed-of this x)
       (nothing))
     
     (define (dex-internals-compare this a b)
@@ -564,6 +689,11 @@
       (dissect this (dex-internals-default first second)
       #/mat (name-of first x) (just result) (just result)
       #/name-of second x))
+    
+    (define (dex-internals-dexed-of this x)
+      (dissect this (dex-internals-default first second)
+      #/mat (dexed-of first x) (just result) (just result)
+      #/dexed-of second x))
     
     (define (dex-internals-compare this a b)
       (dissect this (dex-internals-default first second)
@@ -614,6 +744,10 @@
     (define (dex-internals-name-of this x)
       (dissect this (dex-internals-opaque name dex)
       #/name-of dex x))
+    
+    (define (dex-internals-dexed-of this x)
+      (dissect this (dex-internals-opaque name dex)
+      #/dexed-of dex x))
     
     (define (dex-internals-compare this a b)
       (dissect this (dex-internals-opaque name dex)
@@ -754,6 +888,13 @@
       #/fn method
       #/name-of method x))
     
+    (define (dex-internals-dexed-of this x)
+      (dissect this
+        (dex-internals-by-own-method #/dexable dex delegate)
+      #/maybe-bind (delegate #/dex-by-own-method::get-method x)
+      #/fn method
+      #/dexed-of method x))
+    
     (define (dex-internals-compare this a b)
       (dissect this
         (dex-internals-by-own-method #/dexable dex delegate)
@@ -794,6 +935,10 @@
     (define (dex-internals-name-of this x)
       (dissect this (dex-internals-fix #/dexable dex unwrap)
       #/name-of (unwrap #/internal:dex this) x))
+    
+    (define (dex-internals-dexed-of this x)
+      (dissect this (dex-internals-fix #/dexable dex unwrap)
+      #/dexed-of (unwrap #/internal:dex this) x))
     
     (define (dex-internals-compare this a b)
       (dissect this (dex-internals-fix #/dexable dex unwrap)
@@ -859,14 +1004,47 @@
     (define (dex-internals-name-of this x)
       (dissect this (dex-internals-struct descriptor counts? fields)
       #/expect (counts? x) #t (nothing)
-      #/w-loop next fields fields rev-result (list)
+      #/w-loop next fields fields unsorted-reps (list)
         (expect fields (cons field fields)
-          (just #/internal:name
-          #/list* 'name:struct descriptor #/reverse rev-result)
+          (just #/internal:name #/list* 'name:struct descriptor
+            (list-map
+              (sort unsorted-reps #/fn a b
+                (dissect a (cons a-position a-rep)
+                #/dissect b (cons b-position b-rep)
+                #/< a-position b-position))
+            #/dissectfn (list position rep)
+              rep))
         #/dissect field (list getter position dex)
         #/expect (name-of dex #/getter x) (just name) (nothing)
         #/dissect name (internal:name rep)
-        #/next fields #/cons rep rev-result)))
+        #/next fields (cons (list position rep) unsorted-reps))))
+    
+    (define (dex-internals-dexed-of this x)
+      (dissect this (dex-internals-struct descriptor counts? fields)
+      #/expect (counts? x) #t (nothing)
+      #/w-loop next fields fields unsorted-dexeds (list)
+        (expect fields (cons field fields)
+          (w- dexeds
+            (sort unsorted-dexeds #/fn a b
+              (dissect a (list a-getter a-position a-dexed)
+              #/dissect b (list b-getter b-position b-dexed)
+              #/< a-position b-position))
+          #/just #/dexed
+            (internal:dex #/dex-internals-struct descriptor counts?
+              (list-map dexeds
+              #/dissectfn (list getter position (dexed dex name val))
+                (list getter position dex)))
+            (internal:name #/list* 'name:struct descriptor
+              (list-map dexeds
+              #/dissectfn
+                (list getter position
+                  (dexed dex (internal:name rep) val))
+                rep))
+            x)
+        #/dissect field (list getter position dex)
+        #/expect (dexed-of dex #/getter x) (just dexed) (nothing)
+        #/next fields
+          (cons (list getter position dexed) unsorted-dexeds))))
     
     (define (dex-internals-compare this a b)
       (dissect this (dex-internals-struct descriptor counts? fields)
@@ -1060,6 +1238,9 @@
       (if (cline? x)
         (just #/internal:name #/autoname-cline x)
         (nothing)))
+    
+    (define (dex-internals-dexed-of this x)
+      (dex-internals-simple-dexed-of this x))
     
     (define (dex-internals-compare this a b)
       (expect a (internal:cline a) (nothing)
@@ -1601,6 +1782,9 @@
         (just #/internal:name #/autoname-merge x)
         (nothing)))
     
+    (define (dex-internals-dexed-of this x)
+      (dex-internals-simple-dexed-of this x))
+    
     (define (dex-internals-compare this a b)
       (expect a (internal:merge a) (nothing)
       #/expect b (internal:merge b) (nothing)
@@ -1636,6 +1820,9 @@
       (if (fuse? x)
         (just #/internal:name #/autoname-fuse x)
         (nothing)))
+    
+    (define (dex-internals-dexed-of this x)
+      (dex-internals-simple-dexed-of this x))
     
     (define (dex-internals-compare this a b)
       (expect a (internal:fuse a) (nothing)
@@ -2370,10 +2557,37 @@
       ; optimize this.
       #/if (not #/internal:dex-internals-in? this x) (nothing)
       #/just #/internal:name #/cons 'name:table
-      #/list-bind (table->sorted-list x)
-      #/dissectfn (list k v)
-        (dissect (name-of dex-val v) (just v)
-        #/list k v)))
+        (list-bind (table->sorted-list x)
+        #/dissectfn (list (internal:name k-rep) v)
+          (dissect (name-of dex-val v) (just #/internal:name v-rep)
+          #/list k-rep v-rep))))
+    
+    (define (dex-internals-dexed-of this x)
+      (dissect this (dex-internals-table dex-val)
+      ; TODO: Currently, this calls `in-dex?` on each value of the
+      ; table (indirectly via this one `internal:dex-internals-in?`
+      ; call), and then if they all succeed, it calls `dexed-of`. This
+      ; could be doing some redundant computation. See if we can
+      ; optimize this.
+      #/if (not #/internal:dex-internals-in? this x) (nothing)
+      #/w- dexeds
+        (list-map (table->sorted-list x) #/dissectfn (list k v)
+          (dissect (dexed-of dex-val v) (just dexed)
+          #/list k dexed))
+      #/just #/dexed
+        ; TODO: Move the definition of `dex-internals-table-ordered`
+        ; before this.
+        (internal:dex #/dex-internals-table-ordered
+          (list-map dexeds #/dissectfn (list k (dexed dex name v))
+            (list k dex)))
+        (internal:name #/cons 'name:table
+          (list-bind dexeds
+          #/dissectfn
+            (list
+              (internal:name k-rep)
+              (dexed dex (internal:name v-rep) v))
+            (list k-rep v-rep)))
+        x))
     
     (define (dex-internals-compare this a b)
       (dissect this (dex-internals-table dex-val)
@@ -2487,6 +2701,29 @@
         #/dissect (table-get k x) (just v)
         #/maybe-bind (name-of dex-v v) #/dissectfn (internal:name rep)
         #/next assoc #/table-shadow k (just rep) reps)))
+    
+    (define (dex-internals-dexed-of this x)
+      (dissect this (dex-internals-table-ordered assoc)
+      #/expect (table-ordered-counts? assoc x) #t (nothing)
+      #/w-loop next assoc assoc dexeds (table-empty)
+        (expect assoc (cons entry assoc)
+          (w- dexeds (table->sorted-list dexeds)
+          #/just #/dexed
+            (internal:dex #/dex-internals-table-ordered
+              (list-map dexeds #/dissectfn (list k (dexed dex name v))
+                (list k dex)))
+            (internal:name #/cons 'name:table
+              (list-bind dexeds
+              #/dissectfn
+                (list
+                  (internal:name k-rep)
+                  (dexed dex (internal:name v-rep) v))
+                (list k-rep v-rep)))
+            x)
+        #/dissect entry (list k dex-v)
+        #/dissect (table-get k x) (just v)
+        #/maybe-bind (dexed-of dex-v v) #/fn dexed
+        #/next assoc #/table-shadow k (just dexed) dexeds)))
     
     (define (dex-internals-compare this a b)
       (dissect this (dex-internals-table-ordered assoc)
@@ -2826,6 +3063,9 @@
             (just #/internal:name
             #/list 'name:id #/id->name-internals x)
             (nothing)))
+        
+        (define (dex-internals-dexed-of this x)
+          (dex-internals-simple-dexed-of this x))
         
         (define (dex-internals-compare this a b)
           (expect (id? a) #t (nothing)

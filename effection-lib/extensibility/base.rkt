@@ -34,6 +34,8 @@
   dex? dexable dexableof dex-dex dex-name fuse? name? name-of
   ordering-eq table? table-empty? table-empty table-get table-shadow
   valid-dexable?)
+(require #/only-in (submod effection/order/base private)
+  dex-internals-simple-dexed-of)
 (require #/only-in effection/private/order
   make-appropriate-non-chaperone-contract)
 
@@ -577,6 +579,9 @@
       #/dissect name (unsafe:name name)
       #/just #/unsafe:name #/list 'name:dspace name))
     
+    (define (dex-internals-dexed-of this x)
+      (dex-internals-simple-dexed-of this x))
+    
     (define (dex-internals-compare this a b)
       (if (and (dspace? a) (dspace? b))
         (just #/dspace-eq? a b)
@@ -940,6 +945,9 @@
       #/dissect ds (internal:dspace _ (unsafe:name ds-name) _)
       #/dissect n (unsafe:name n)
       #/just #/unsafe:name #/list 'name:authorized-name ds-name n))
+    
+    (define (dex-internals-dexed-of this x)
+      (dex-internals-simple-dexed-of this x))
     
     (define (dex-internals-compare this a b)
       (expect a (internal:authorized-name a-ds a-n a-parents)
