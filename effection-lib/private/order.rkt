@@ -76,7 +76,7 @@
   (hide-cline-result #/lt-autocline a b <?))
 
 
-; ===== Names, dexes, dexed values, and dexables =====================
+; ===== Names, dexes, and dexed values ===============================
 
 ; TODO: Test this implementation very thoroughly. We need to know what
 ; happens when this module is used through diamond dependencies, what

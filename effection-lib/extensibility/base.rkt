@@ -31,9 +31,9 @@
 
 (require #/only-in effection/order dex-trivial eq-by-dex? table-v-of)
 (require #/only-in effection/order/base
-  dex? dex-dex dexed? dexed/c dexed-get-name dexed-get-value dex-name
-  fuse? name? name-of ordering-eq table? table-empty? table-empty
-  table-get table-shadow)
+  dex? dex-dex dexed? dexed/c dexed-first-order/c dexed-get-name
+  dexed-get-value dex-name fuse? name? name-of ordering-eq table?
+  table-empty? table-empty table-get table-shadow)
 (require #/only-in (submod effection/order/base private)
   dex-internals-simple-dexed-of)
 
@@ -76,7 +76,7 @@
   [fuse-extfx (-> fuse?)]
   [extfx-run-getfx (-> getfx? (-> any/c extfx?) extfx?)]
   [getfx-err (-> error-definer? (getfx/c none/c))]
-  [extfx-spawn-dexed (-> (dexed/c #/-> extfx?) extfx?)]
+  [extfx-spawn-dexed (-> (dexed-first-order/c #/-> extfx?) extfx?)]
   [extfx-table-each
     (-> table?
       (-> any/c
@@ -312,7 +312,7 @@
   (provide-struct (extfx-fused a b))
   (provide-struct (getfx-err on-execute))
   (provide-struct (extfx-run-getfx effects then))
-  (provide-struct (extfx-spawn-dexed then))
+  (provide-struct (extfx-spawn-dexed dexed-then))
   (provide-struct (extfx-table-each t on-element then))
   
   (provide-struct
@@ -477,7 +477,7 @@
   (mat v (internal:extfx-noop) #t
   #/mat v (internal:extfx-fused a b) #t
   #/mat v (internal:extfx-run-getfx effects then) #t
-  #/mat v (internal:extfx-spawn-dexed then) #t
+  #/mat v (internal:extfx-spawn-dexed dexed-then) #t
   #/mat v (internal:extfx-table-each t on-element then) #t
   #/mat v
     (extfx-finish-table-each-element ds table-each-symbol k result)
@@ -800,8 +800,8 @@
 (define (getfx-err on-execute)
   (internal:getfx-err on-execute))
 
-(define (extfx-spawn-dexed then)
-  (internal:extfx-spawn-dexed then))
+(define (extfx-spawn-dexed dexed-then)
+  (internal:extfx-spawn-dexed dexed-then))
 
 (define (extfx-table-each t on-element then)
   (internal:extfx-table-each t on-element then))
@@ -1123,9 +1123,9 @@
 ;
 ; So instead of pursuing those other approaches directly, what if we
 ; simply implemented a state resource that allowed
-; `(dexed/c #/-> extfx?)` values to be written as a way to spawn
-; processes? (TODO: Update this comment to reflect that we've now
-; implemented this as `extfx-spawn-dexed`.)
+; `(dexed-first-order/c #/-> extfx?)` values to be written as a way to
+; spawn processes? (TODO: Update this comment to reflect that we've
+; now implemented this as `extfx-spawn-dexed`.)
 ;
 ; Well, then we run across the same design problem as before: What
 ; happens when two cousin shadowing definition spaces write to the
@@ -1949,16 +1949,26 @@
       (internal:extfx-run-getfx (internal:getfx-err on-execute) then)
       (next-with-error-definer on-execute
         "Executed an unexpected part of the program")
-    #/mat process (internal:extfx-spawn-dexed then)
-      (w- name (dexed-get-name then)
+    #/mat process (internal:extfx-spawn-dexed dexed-then)
+      (w- name (dexed-get-name dexed-then)
+      #/w- then (dexed-get-value dexed-then)
       #/mat (table-get name (hash-ref db 'spawn-dexed)) (just _)
         ; TODO: In this case, where we discover the process has
         ; already been spawned, see if we should somehow store the
         ; current value of `reads` into the `db`. Is there any way we
         ; would use this information even if we had it stored?
         (next-zero)
+      #/w- then-result (then)
+      ; NOTE DEXED-FIRST-ORDER/C: We have to check this result
+      ; manually since we can't use higher-order contracts on a dexed
+      ; value.
+      #/expect (extfx? then-result) #t
+        (raise-arguments-error 'extfx-spawn-dexed
+          "expected the result of dexed-then to be an extfx value"
+          "dexed-then" dexed-then
+          "then-result" then-result)
       #/next-full
-        (cons (process-entry reads (then)) processes)
+        (cons (process-entry reads then-result) processes)
         rev-next-processes unspent-tickets
         (hash-update db 'spawn-dexed #/fn db-spawn-dexed
           (table-shadow name (just #/trivial) db-spawn-dexed))

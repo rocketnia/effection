@@ -47,7 +47,7 @@
 
 
 
-; ===== Names, dexes, dexed values, and dexables =====================
+; ===== Names, dexes, and dexed values ===============================
 
 ; Internally, we represent name values as data made of structure type
 ; descriptors, uninterned symbols, exact rational numbers, interned

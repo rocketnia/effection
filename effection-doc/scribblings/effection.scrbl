@@ -3,6 +3,8 @@
 @(require #/for-label racket/base)
 @(require #/for-label #/only-in racket/contract/base
   -> any/c cons/c contract? list/c listof)
+@(require #/for-label #/only-in racket/contract/combinator
+  contract-first-order)
 
 @(require #/for-label #/only-in lathe-comforts/maybe
   just maybe? maybe/c nothing)
@@ -106,7 +108,7 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 }
 
 
-@subsection[#:tag "dexes"]{Names, Dexes, Dexed Values, and Dexables}
+@subsection[#:tag "dexes"]{Names, Dexes, and Dexed Values}
 
 @defproc[(name? [x any/c]) boolean?]{
   Returns whether the given value is a name. In Effection, a "name" is something like a partial application of comparison by a dex. Any value can be converted to a name using @racket[name-of] if any dex for that value is at hand (and it always converts to the same name regardless of which dex is chosen), and names themselves can be compared using @racket[(dex-name)].
@@ -142,7 +144,13 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 }
 
 @defproc[(dexed/c [c contract?]) contract?]{
-  Returns a contract that recognizes a dexed value and additionally imposes the given contract on its @racket[dexed-get-value]. That contract's projection must be @racket[ordering-eq] to the original value.
+  Returns a contract that recognizes a dexed value and additionally imposes the given contract on its @racket[dexed-get-value]. That contract's projection must be @racket[ordering-eq] to the original value. This essentially means the contract must be first-order.
+}
+
+@defproc[(dexed-first-order/c [c contract?]) contract?]{
+  Returns a contract that recognizes a dexed value and additionally imposes the first-order behavior of the given contract on its @racket[dexed-get-value]. It ignores the contract's higher-order behavior altgoether, so using certain contracts with @tt{dexed-first-order/c} has little purpose other than documentation value.
+  
+  This is nearly the same as @racket[(dexed/c (contract-first-order c))], but its name is based on @racket[c] as well.
 }
 
 @defproc[(dexed-get-dex [d dexed?]) dex?]{
@@ -160,41 +168,6 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 }
 
 
-@deftogether[(
-  @defidform[dexable]
-  @defform[#:link-target? #f (dexable dex-expr value-expr)]
-  @defform[
-    #:kind "match expander" #:link-target? #f
-    (dexable dex-pat value-pat)
-  ]
-  @defproc[(dexable? [v any/c]) boolean?]
-  @defproc[(dexable-dex [v dexable?]) any/c]
-  @defproc[(dexable-value [v dexable?]) any/c]
-)]{
-  Struct-like operations which construct and deconstruct a value that pairs a value with a dex that it purportedly belongs to. If @racket[dex-expr] actually is a dex and @racket[value-expr] actually does belong to its domain, this is considered well-formed.
-}
-
-@defproc[(valid-dexable? [x any/c]) boolean?]{
-  Returns whether the given value is a well-formed @racket[dexable].
-}
-
-@defproc[(dexableof [c contract?]) contract?]{
-  Returns a contract that recognizes a well-formed @racket[dexable] and additionally imposes the given contract on its @racket[dexable-value].
-}
-
-@defproc[(compare-dexables [a valid-dexable?] [b valid-dexable?]) (maybe/c dex-result?)]{
-  Compares the two given well-formed @racket[dexable] values to see if they have the same @racket[dexable-dex] and the same @racket[dexable-value]. If they have the same dex, this returns a @racket[just] of a @racket[dex-result?]; otherwise, this returns @racket[(nothing)].
-  
-  The dex's @racket[compare-by-dex] behavior is called as a tail call when comparing the values.
-}
-
-@defproc[(name-of-dexable [x valid-dexable?]) name?]{
-  Given a well-formed @racket[dexable] value, returns a name the contained value can be compared by.
-  
-  This is a convenience layer over @racket[name-of].
-}
-
-
 @defproc[(dex-name) dex?]{
   Returns a dex that compares names.
 }
@@ -203,6 +176,11 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   Returns a dex that compares dexes.
   
   All presently existing dexes allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(dex-default (dex-give-up) (dex-give-up))] and @racket[(dex-give-up)] can be distinguished this way despite otherwise having equivalent behavior.
+}
+
+@; TODO: Add this to Cene for Racket.
+@defproc[(dex-dexed) dex?]{
+  Returns a dex that compares dexed values.
 }
 
 
@@ -233,18 +211,22 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 
 @defproc[
   (dex-by-own-method
-    [dexable-get-method (dexableof (-> any/c (maybe/c dex?)))])
+    [dexed-get-method
+      (dexed-first-order/c (-> any/c (maybe/c dex?)))])
   dex?
 ]{
-  Given a dexable function, returns a dex that works by invoking that function with each value to get @racket[(just _dex)] or @racket[(nothing)], verifying that the two @var[dex] values are the same, and then proceeding to tail-call that dex value.
+  Given a dexed function, returns a dex that works by invoking that function with each value to get @racket[(just _dex)] or @racket[(nothing)], verifying that the two @var[dex] values are the same, and then proceeding to tail-call that dex value.
   
-  When compared by @racket[(dex-dex)], all @tt{dex-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
+  When compared by @racket[(dex-dex)], all @tt{dex-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-get-method] values' dexes and values are.
 }
 
-@defproc[(dex-fix [dexable-unwrap (dexableof (-> dex? dex?))]) dex?]{
-  Given a dexable function, returns a dex that works by passing itself to the function and then tail-calling the resulting dex.
+@defproc[
+  (dex-fix [dexed-unwrap (dexed-first-order/c (-> dex? dex?))])
+  dex?
+]{
+  Given a dexed function, returns a dex that works by passing itself to the function and then tail-calling the resulting dex.
   
-  When compared by @racket[(dex-dex)], all @tt{dex-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
+  When compared by @racket[(dex-dex)], all @tt{dex-fix} values are @racket[ordering-eq] if their @racket[dexed-unwrap] values' dexes and values are.
 }
 
 @defform[
@@ -302,7 +284,7 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 @defproc[(dex-cline) dex?]{
   Returns a dex that compares clines.
   
-  All presently existing clines allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(cline-default (cline-give-up) (cline-give-up))] and @racket[(cline-give-up)] can be distinguished this way despite otherwise having equivalent behavior.
+  Almost all presently existing clines allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(cline-default (cline-give-up) (cline-give-up))] and @racket[(cline-give-up)] can be distinguished this way despite otherwise having equivalent behavior. One exception is that calling @racket[cline-flip] twice in a row results in a cline that's @racket[ordering-eq] to the original.
 }
 
 
@@ -345,23 +327,24 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 
 @defproc[
   (cline-by-own-method
-    [dexable-get-method (dexableof (-> any/c (maybe/c cline?)))])
+    [dexed-get-method
+      (dexed-first-order/c (-> any/c (maybe/c cline?)))])
   cline?
 ]{
-  Given a dexable function, returns a cline that works by invoking that function with each value to get @racket[(just _cline)] or @racket[(nothing)], verifying that the two @var[cline] values are the same, and then proceeding to tail-call that value.
+  Given a dexed function, returns a cline that works by invoking that function with each value to get @racket[(just _cline)] or @racket[(nothing)], verifying that the two @var[cline] values are the same, and then proceeding to tail-call that value.
   
-  When compared by @racket[(dex-cline)], all @tt{cline-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
+  When compared by @racket[(dex-cline)], all @tt{cline-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-get-method] values' dexes and values are.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
 }
 
 @defproc[
-  (cline-fix [dexable-unwrap (dexableof (-> cline? cline?))])
+  (cline-fix [dexed-unwrap (dexed-first-order/c (-> cline? cline?))])
   cline?
 ]{
-  Given a dexable function, returns a cline that works by passing itself to the function and then tail-calling the resulting cline.
+  Given a dexed function, returns a cline that works by passing itself to the function and then tail-calling the resulting cline.
   
-  When compared by @racket[(dex-cline)], all @tt{cline-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
+  When compared by @racket[(dex-cline)], all @tt{cline-fix} values are @racket[ordering-eq] if their @racket[dexed-unwrap] values' dexes and values are.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
 }
@@ -485,33 +468,36 @@ The idempotence of a merge operation is such enough that if the two inputs to th
 @deftogether[(
   @defproc[
     (merge-by-own-method
-      [dexable-get-method (dexableof (-> any/c (maybe/c merge?)))])
+      [dexed-get-method
+        (dexed-first-order/c (-> any/c (maybe/c merge?)))])
     merge?
   ]
   @defproc[
     (fuse-by-own-method
-      [dexable-get-method (dexableof (-> any/c (maybe/c fuse?)))])
+      [dexed-get-method
+        (dexed-first-order/c (-> any/c (maybe/c fuse?)))])
     fuse?
   ]
 )]{
-  Given a dexable function, returns a merge/fuse that works by invoking that function with each value to get @racket[(just _method)] or @racket[(nothing)], verifying that the two @var[method] values are the same, and invoking that merge/fuse value to get a result of @racket[(just _result)] or @racket[(nothing)]. If the result is @racket[(just _result)], this does a final check before returning it: It invokes the method-getting function on the @racket[result] to verify that it obtains the same @var[method] value that was obtained from the inputs. This ensures that the operation is associative.
+  Given a dexed function, returns a merge/fuse that works by invoking that function with each value to get @racket[(just _method)] or @racket[(nothing)], verifying that the two @var[method] values are the same, and invoking that merge/fuse value to get a result of @racket[(just _result)] or @racket[(nothing)]. If the result is @racket[(just _result)], this does a final check before returning it: It invokes the method-getting function on the @racket[result] to verify that it obtains the same @var[method] value that was obtained from the inputs. This ensures that the operation is associative.
   
-  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-by-own-method}/@tt{fuse-by-own-method} values are @racket[ordering-eq] if their @racket[dexable-get-method] values' dexes and values are.
+  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-by-own-method}/@tt{fuse-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-get-method] values' dexes and values are.
 }
 
 @deftogether[(
   @defproc[
-    (merge-fix [dexable-unwrap (dexableof (-> merge? merge?))])
+    (merge-fix
+      [dexed-unwrap (dexed-first-order/c (-> merge? merge?))])
     merge?
   ]
   @defproc[
-    (fuse-fix [dexable-unwrap (dexableof (-> fuse? fuse?))])
+    (fuse-fix [dexed-unwrap (dexed-first-order/c (-> fuse? fuse?))])
     fuse?
   ]
 )]{
-  Given a dexable function, returns a merge/fuse that works by passing itself to the function and then tail-calling the resulting merge/fuse.
+  Given a dexed function, returns a merge/fuse that works by passing itself to the function and then tail-calling the resulting merge/fuse.
   
-  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-fix}/@tt{fuse-fix} values are @racket[ordering-eq] if their @racket[dexable-unwrap] values' dexes and values are.
+  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-fix}/@tt{fuse-fix} values are @racket[ordering-eq] if their @racket[dexed-unwrap] values' dexes and values are.
 }
 
 @deftogether[(
@@ -672,12 +658,12 @@ There is currently no way to make a fusable function that performs a tail call. 
 
 @defproc[
   (fuse-fusable-function
-    [dexable-arg-to-method (dexableof (-> any/c fuse?))])
+    [dexed-arg-to-method (dexed-first-order/c (-> any/c fuse?))])
   fuse?
 ]{
-  Given @racket[dexable-arg-to-method] as a dexable function, returns a fuse that combines fusable functions. The combined fusable function works by calling the @racket[dexable-arg-to-method] function to get a fuse, calling both of the originally fused functions to get each of their results, and fusing the results by that fuse. If the results turn out not to be in the fuse's domain, this causes an error.
+  Given @racket[dexed-arg-to-method] as a dexed function, returns a fuse that combines fusable functions. The combined fusable function works by calling the @racket[dexed-arg-to-method] function to get a fuse, calling both of the originally fused functions to get each of their results, and fusing the results by that fuse. If the results turn out not to be in the fuse's domain, this causes an error.
   
-  When compared by @racket[(dex-dex)], all @tt{fuse-fusable-function} values are @racket[ordering-eq] if their @racket[dexable-arg-to-method] values' dexes and values are.
+  When compared by @racket[(dex-dex)], all @tt{fuse-fusable-function} values are @racket[ordering-eq] if their @racket[dexed-arg-to-method] values' dexes and values are.
 }
 
 
