@@ -7,7 +7,7 @@
 (require #/only-in racket/contract get/build-late-neg-projection)
 (require #/only-in racket/contract/base
   -> ->i any any/c contract? contract-name contract-out list/c listof
-  none/c or/c)
+  none/c or/c rename-contract)
 (require #/only-in racket/contract/combinator
   blame-add-context coerce-contract contract-first-order-passes?
   make-contract make-flat-contract raise-blame-error)
@@ -31,13 +31,11 @@
 
 (require #/only-in effection/order dex-trivial eq-by-dex? table-v-of)
 (require #/only-in effection/order/base
-  dex? dexable dexableof dex-dex dex-name fuse? name? name-of
-  ordering-eq table? table-empty? table-empty table-get table-shadow
-  valid-dexable?)
+  dex? dex-dex dexed? dexed/c dexed-get-name dexed-get-value dex-name
+  fuse? name? name-of ordering-eq table? table-empty? table-empty
+  table-get table-shadow)
 (require #/only-in (submod effection/order/base private)
   dex-internals-simple-dexed-of)
-(require #/only-in effection/private/order
-  make-appropriate-non-chaperone-contract)
 
 (require #/prefix-in unsafe: #/only-in effection/order/unsafe
   dex fuse gen:dex-internals gen:furge-internals name table)
@@ -78,7 +76,7 @@
   [fuse-extfx (-> fuse?)]
   [extfx-run-getfx (-> getfx? (-> any/c extfx?) extfx?)]
   [getfx-err (-> error-definer? (getfx/c none/c))]
-  [extfx-spawn-dexable (-> (dexableof #/-> extfx?) extfx?)]
+  [extfx-spawn-dexed (-> (dexed/c #/-> extfx?) extfx?)]
   [extfx-table-each
     (-> table?
       (-> any/c
@@ -100,13 +98,13 @@
       (-> authorized-name? familiarity-ticket? extfx?)
       extfx?)]
   
-  [optionally-dexable? (-> any/c boolean?)]
-  ; TODO: See if we'll use `optionally-dexable-of`. We were once using
-  ; it in the signature of `extfx-sub-write`, but its `unique-name`
+  [optionally-dexed? (-> any/c boolean?)]
+  ; TODO: See if we'll use `optionally-dexed/c`. We were once using it
+  ; in the signature of `extfx-sub-write`, but its `unique-name`
   ; parameter now makes that unnecessary.
-;  [optionally-dexable-of (-> contract? contract?)]
-  [optionally-dexable-once (-> any/c optionally-dexable?)]
-  [optionally-dexable-dexable (-> valid-dexable? optionally-dexable?)]
+;  [optionally-dexed/c (-> contract? contract?)]
+  [optionally-dexed-once (-> any/c optionally-dexed?)]
+  [optionally-dexed-dexed (-> dexed? optionally-dexed?)]
   
   [extfx-put
     (->i
@@ -117,7 +115,7 @@
         [comp
           (->
             (continuation-ticket-of
-              (list/c success-or-error-definer? optionally-dexable?))
+              (list/c success-or-error-definer? optionally-dexed?))
             extfx?)])
       [_ extfx?])]
   [getfx-get (-> dspace? name? error-definer? getfx?)]
@@ -132,7 +130,7 @@
         [comp
           (->
             (continuation-ticket-of
-            #/list/c success-or-error-definer? optionally-dexable?)
+              (list/c success-or-error-definer? optionally-dexed?))
             extfx?)])
       [_ extfx?])]
   [getfx-private-get
@@ -232,7 +230,7 @@
         [comp
           (->
             (continuation-ticket-of
-              (list/c success-or-error-definer? optionally-dexable?))
+              (list/c success-or-error-definer? optionally-dexed?))
             extfx?)])
       [_ extfx?])]
   [extfx-collect
@@ -298,9 +296,8 @@
   
   (provide-struct (authorized-name ds name parents))
   
-  (provide-struct (optionally-dexable-once v))
-  (provide-struct
-    (optionally-dexable-dexable dex value name-of-dex name-of-value))
+  (provide-struct (optionally-dexed-once v))
+  (provide-struct (optionally-dexed-dexed dexed))
   
   (provide-struct (pub ds pubsub-name))
   (provide-struct (sub ds pubsub-name))
@@ -315,7 +312,7 @@
   (provide-struct (extfx-fused a b))
   (provide-struct (getfx-err on-execute))
   (provide-struct (extfx-run-getfx effects then))
-  (provide-struct (extfx-spawn-dexable then))
+  (provide-struct (extfx-spawn-dexed then))
   (provide-struct (extfx-table-each t on-element then))
   
   (provide-struct
@@ -480,7 +477,7 @@
   (mat v (internal:extfx-noop) #t
   #/mat v (internal:extfx-fused a b) #t
   #/mat v (internal:extfx-run-getfx effects then) #t
-  #/mat v (internal:extfx-spawn-dexable then) #t
+  #/mat v (internal:extfx-spawn-dexed then) #t
   #/mat v (internal:extfx-table-each t on-element then) #t
   #/mat v
     (extfx-finish-table-each-element ds table-each-symbol k result)
@@ -803,8 +800,8 @@
 (define (getfx-err on-execute)
   (internal:getfx-err on-execute))
 
-(define (extfx-spawn-dexable then)
-  (internal:extfx-spawn-dexable then))
+(define (extfx-spawn-dexed then)
+  (internal:extfx-spawn-dexed then))
 
 (define (extfx-table-each t on-element then)
   (internal:extfx-table-each t on-element then))
@@ -1012,66 +1009,31 @@
     n on-conflict on-familiarity-ticket-unspent then))
 
 
-(define (optionally-dexable? v)
+(define (optionally-dexed? v)
   (or
-    (internal:optionally-dexable-once? v)
-    (internal:optionally-dexable-dexable? v)))
+    (internal:optionally-dexed-once? v)
+    (internal:optionally-dexed-dexed? v)))
 
-(define (optionally-dexable-of c)
-  (w- c (coerce-contract 'optionally-dexable-of c)
-  #/ (make-appropriate-non-chaperone-contract c)
-    
-    #:name `(optionally-dexable-of ,(contract-name c))
-    
-    #:first-order
-    (fn v
-      (contract-first-order-passes?
-        (or/c
-          (istruct/c internal:optionally-dexable-once any/c)
-          (istruct/c internal:optionally-dexable-dexable
-            any/c c any/c any/c))
-        v))
-    
-    #:late-neg-projection
-    (fn blame
-      (w- c-late-neg-projection
-        ( (get/build-late-neg-projection c)
-          (blame-add-context blame "the value of"))
-      #/fn v missing-party
-        (expect (optionally-dexable? v) #t
-          (raise-blame-error blame #:missing-party missing-party v
-            '(expected: "an optionally dexable value" given: "~e")
-            v)
-        #/expect v
-          (internal:optionally-dexable-dexable
-            dex value name-of-dex name-of-value)
-          v
-        #/w- new-value (c-late-neg-projection value missing-party)
-        #/expect (eq-by-dex? dex value new-value) #t
-          (raise-blame-error blame #:missing-party missing-party v
-            '(expected: "an optionally dexable value which, if dexable, projected to something equal to the original by that dex" given: "~e")
-            v)
-        #/internal:optionally-dexable-dexable
-          dex new-value name-of-dex name-of-value)))))
+(define (optionally-dexed/c c)
+  (w- c (coerce-contract 'optionally-dexed/c c)
+  #/rename-contract
+    (or/c
+      (istruct/c internal:optionally-dexed-once c)
+      (istruct/c internal:optionally-dexed-dexed #/dexed/c c))
+    `(optionally-dexed/c ,(contract-name c))))
 
-(define (optionally-dexable-once v)
-  (internal:optionally-dexable-once v))
+(define (optionally-dexed-once v)
+  (internal:optionally-dexed-once v))
 
-(define (optionally-dexable-dexable v)
-  (dissect v (dexable dex value)
-  #/dissect (name-of (dex-dex) dex) (just name-of-dex)
-  #/dissect (name-of dex value) (just name-of-value)
-  #/internal:optionally-dexable-dexable
-    dex value name-of-dex name-of-value))
+(define (optionally-dexed-dexed d)
+  (internal:optionally-dexed-dexed d))
 
 ; TODO: See if we should export this.
-(define/contract (optionally-dexable-value od)
-  (-> optionally-dexable? any/c)
-  (mat od (internal:optionally-dexable-once v) v
-  #/dissect od
-    (internal:optionally-dexable-dexable
-      dex value name-of-dex name-of-value)
-    value))
+(define/contract (optionally-dexed-value od)
+  (-> optionally-dexed? any/c)
+  (mat od (internal:optionally-dexed-once v) v
+  #/dissect od (internal:optionally-dexed-dexed d)
+    (dexed-get-value d)))
 
 
 (define (extfx-put ds n on-cont-unspent comp)
@@ -1107,10 +1069,10 @@
 ; It may be possible to come up with a design for `extfx-pub-write`
 ; and `extfx-sub-write` where their `unique-name` parameter is
 ; replaced with a name that doesn't have to be unique. For instance,
-; the `arg` and `func` parameters could be `optionally-dexable?`
-; values such that two writes of the same dexable value to the same
-; pub or sub under the same "pubber name" or "subber name" would
-; combine together to act like a single write.
+; the `arg` and `func` parameters could be `optionally-dexed?` values
+; such that two writes of the same dexed value to the same pub or sub
+; under the same "pubber name" or "subber name" would combine together
+; to act like a single write.
 ;
 ; However, it seems to be difficult to account for shadowing
 ; definition spaces this way. If writes of two different values are
@@ -1127,7 +1089,7 @@
 ;     to two cousins, even if that value is never written to one of
 ;     their shared ancestors. Unfortunately, this essentially means
 ;     *all* values we might like to write to two different cousins
-;     must be dexable (as opposed to optionally dexable).
+;     must be dexed (as opposed to optionally dexed).
 ;
 ;   - We could consider the identity of the definition space we're
 ;     writing to to be part of the name we're writing to. That way,
@@ -1156,29 +1118,29 @@
 ; process. That is, if two processes perform writes, they're always
 ; under two names, and hence if they spawn any processes, they spawn a
 ; different process for each of those two writes. In the other
-; approaches, two processes can write the same dexable value to the
-; same name, spawning a single process as a result.
+; approaches, two processes can write the same dexed value to the same
+; name, spawning a single process as a result.
 ;
 ; So instead of pursuing those other approaches directly, what if we
 ; simply implemented a state resource that allowed
-; `(dexableof #/-> extfs?)` values to be written as a way to spawn
+; `(dexed/c #/-> extfx?)` values to be written as a way to spawn
 ; processes? (TODO: Update this comment to reflect that we've now
-; implemented this as `extfx-spawn-dexable`.)
+; implemented this as `extfx-spawn-dexed`.)
 ;
 ; Well, then we run across the same design problem as before: What
 ; happens when two cousin shadowing definition spaces write to the
 ; same name and then one of their shared ancestors does too?
 ;
 ; Fortunately, in this case, the answer is much clearer: The value
-; written is always dexable, so we don't need to store it under "name"
+; written is always dexed, so we don't need to store it under "name"
 ; apart from the name obtained from the value itself; and since
 ; Effection-safe functions and `extfx?` effects are deterministic and
 ; `extfx?` effects are idempotent, we never need to run the same
 ; process more than once, even if it's written to different definition
 ; spaces.
 ;
-; Hmm, this means we should make `dspace?` and `authorized-name?`
-; values dexable so they can be used from those dexable processes.
+; Hmm, this means we should give `dspace?` and `authorized-name?`
+; values dexes so they can be used from those dexed processes.
 ; (TODO: Update this comment to reflect that we've now implemented
 ; `dex-dspace` and `dex-authorized-name`.)
 ;
@@ -1190,8 +1152,8 @@
 ; compound data structures which include unique names derived from
 ; the one used. These are each processed by a single sub write at a
 ; definition space that all the others descend from. This sub write
-; acts by spawning certain dexable processes, thereby achieving the
-; spawn-only-once behavior we expect of dexable pub and sub writes.
+; acts by spawning certain dexed processes, thereby achieving the
+; spawn-only-once behavior we expect of dexed pub and sub writes.
 ; Differences between the three approaches can be accomplished using
 ; differences in this implementation. (Will this actually work? I'm
 ; not sure of the details here.)
@@ -1401,7 +1363,7 @@
     db
     (hasheq
       'claim-unique (table-empty)
-      'spawn-dexable (table-empty)
+      'spawn-dexed (table-empty)
       'table-each (hasheq)
       'put (table-empty)
       'private-put (table-empty)
@@ -1707,36 +1669,23 @@
         #/w- do-not-conflict
           (fn existing-value then
             (mat existing-value
-              (internal:optionally-dexable-once existing-value)
+              (internal:optionally-dexed-once existing-value)
               (err-once)
             #/mat existing-value
-              (internal:optionally-dexable-dexable
-                existing-dex
-                existing-value
-                name-of-existing-dex
-                name-of-existing-value)
-              (mat value (internal:optionally-dexable-once value)
+              (internal:optionally-dexed-dexed existing-dexed)
+              (mat value (internal:optionally-dexed-once value)
                 (err-once)
-              #/mat value
-                (internal:optionally-dexable-dexable
-                  dex value name-of-dex name-of-value)
+              #/mat value (internal:optionally-dexed-dexed d)
                 (expect
                   (eq-by-dex? (dex-name)
-                    name-of-existing-dex
-                    name-of-dex)
+                    (dexed-get-name existing-dexed)
+                    (dexed-get-name d))
                   #t
                   (next-conflict
-                    "Wrote to the same name where two of the writes were dexable with different dexes")
-                #/expect
-                  (eq-by-dex? (dex-name)
-                    name-of-existing-value
-                    name-of-value)
-                  #t
-                  (next-conflict
-                    "Wrote to the same name where two of the writes were dexable with different values")
+                    "Wrote to the same name where two of the writes were dexed writes with different values")
                 #/then)
-              #/error "Internal error: Encountered an unknown kind of optionally dexable value")
-            #/error "Internal error: Encountered an unknown kind of optionally dexable value"))
+              #/error "Internal error: Encountered an unknown kind of optionally dexed value")
+            #/error "Internal error: Encountered an unknown kind of optionally dexed value"))
         #/w- next-after-put
           (fn ds-name-written-to db
             (next-full
@@ -1888,7 +1837,7 @@
             (db-update reads #/fn reads-part
               (table-shadow place (just #/trivial) reads-part))
             
-            (optionally-dexable-value existing-value))))
+            (optionally-dexed-value existing-value))))
     #/w- handle-generic-get
       (fn ds db-get db-update then
         ; If there has not yet been a definition installed for this
@@ -2000,10 +1949,9 @@
       (internal:extfx-run-getfx (internal:getfx-err on-execute) then)
       (next-with-error-definer on-execute
         "Executed an unexpected part of the program")
-    #/mat process (internal:extfx-spawn-dexable then)
-      (dissect then (dexable dex then)
-      #/dissect (name-of dex then) (just name)
-      #/mat (table-get name (hash-ref db 'spawn-dexable)) (just _)
+    #/mat process (internal:extfx-spawn-dexed then)
+      (w- name (dexed-get-name then)
+      #/mat (table-get name (hash-ref db 'spawn-dexed)) (just _)
         ; TODO: In this case, where we discover the process has
         ; already been spawned, see if we should somehow store the
         ; current value of `reads` into the `db`. Is there any way we
@@ -2012,8 +1960,8 @@
       #/next-full
         (cons (process-entry reads (then)) processes)
         rev-next-processes unspent-tickets
-        (hash-update db 'spawn-dexable #/fn db-spawn-dexable
-          (table-shadow name (just #/trivial) db-spawn-dexable))
+        (hash-update db 'spawn-dexed #/fn db-spawn-dexed
+          (table-shadow name (just #/trivial) db-spawn-dexed))
         rev-errors #t)
     #/mat process (internal:extfx-table-each t on-element then)
       (dissect t (unsafe:table t)
@@ -2408,7 +2356,7 @@
               (table-empty)
               func)))
         on-conflict
-        (internal:optionally-dexable-once entry))
+        (internal:optionally-dexed-once entry))
     #/mat process
       (internal:extfx-imburse
         ds hub-familiarity-ticket on-conflict then)
@@ -2657,7 +2605,7 @@
             (cons contributor-name-rep
             #/db-put-entry-written write-reads value)
           #/cons contributor-name-rep
-          #/optionally-dexable-value value)))
+          #/optionally-dexed-value value)))
     
     #/mat process (extfx-finish-run ds value)
       (expect (dspace-eq? root-ds ds) #t

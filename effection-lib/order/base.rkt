@@ -94,6 +94,8 @@
   [name-of (-> dex? any/c #/maybe/c name?)]
   [dexed-of (-> dex? any/c #/maybe/c dexed?)]
   [compare-by-dex (-> dex? any/c any/c #/maybe/c dex-result?)])
+(module+ private/order #/provide
+  eq-by-dex?)
 (module+ private #/provide
   dex-internals-simple-dexed-of)
 
@@ -101,6 +103,7 @@
   dexed)
 (provide #/contract-out
   [dexed? (-> any/c boolean?)]
+  [dexed/c (-> contract? contract?)]
   [dexed-get-dex (-> dexed? dex?)]
   [dexed-get-name (-> dexed? name?)]
   [dexed-get-value (-> dexed? any/c)])
@@ -377,11 +380,50 @@
   (dissect dex (internal:dex internals)
   #/internal:dex-internals-compare internals a b))
 
+(define/contract (eq-by-dex? dex a b)
+  (-> dex? any/c any/c boolean?)
+  (expect (compare-by-dex dex a b) (just comparison)
+    (raise-arguments-error 'eq-by-dex?
+      "expected a and b to be members of the domain of dex"
+      "dex" dex
+      "a" a
+      "b" b)
+  #/ordering-eq? comparison))
+
 (define/contract (dex-internals-simple-dexed-of this x)
   (-> internal:dex-internals? any/c #/maybe/c dexed?)
-  (maybe-map (name-of this x) #/fn name
+  (w- this (internal:dex this)
+  #/maybe-map (name-of this x) #/fn name
     (dexed (dex-particular this name x) name x)))
 
+
+(define (dexed/c c)
+  (w- c (coerce-contract 'dexed/c c)
+  #/ (make-appropriate-non-chaperone-contract c)
+    
+    #:name `(dexed/c ,(contract-name c))
+    
+    #:first-order
+    (fn v
+      (contract-first-order-passes? (match/c dexed any/c c any/c) v))
+    
+    #:late-neg-projection
+    (fn blame
+      (w- c-late-neg-projection
+        ( (get/build-late-neg-projection c)
+          (blame-add-context blame "the value of"))
+      #/fn v missing-party
+        (expect v (dexed dex name value)
+          (raise-blame-error blame #:missing-party missing-party v
+            '(expected: "a dexed value" given: "~e")
+            v)
+        #/w- new-value (c-late-neg-projection value missing-party)
+        #/expect (compare-by-dex dex value new-value)
+          (just #/ordering-eq)
+          (raise-blame-error blame #:missing-party missing-party v
+            '(expected: "a dexed value which projected to something ordering-eq to the original" given: "~e")
+            v)
+        #/dexed dex name value)))))
 
 
 (define-imitation-simple-struct (dexable? dexable-dex dexable-value)
@@ -445,8 +487,7 @@
   (-> valid-dexable? valid-dexable? #/maybe/c dex-result?)
   (dissect a (dexable a-dex a)
   #/dissect b (dexable b-dex b)
-  #/expect (compare-by-dex (dex-dex) a-dex b-dex) (just #/ordering-eq)
-    (nothing)
+  #/expect (eq-by-dex? (dex-dex) a-dex b-dex) #t (nothing)
   #/compare-by-dex a-dex a b))
 
 (define/contract (name-of-dexable x)

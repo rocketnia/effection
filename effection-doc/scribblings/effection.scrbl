@@ -141,8 +141,14 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   Returns whether the given value is a dexed value.
 }
 
+@defproc[(dexed/c [c contract?]) contract?]{
+  Returns a contract that recognizes a dexed value and additionally imposes the given contract on its @racket[dexed-get-value]. That contract's projection must be @racket[ordering-eq] to the original value.
+}
+
 @defproc[(dexed-get-dex [d dexed?]) dex?]{
   Given a dexed value, returns a dex that has a domain consisting of just one value, namely the value of the given dexed value.
+  
+  When compared by @racket[(dex-dex)], all @tt{dexed-get-dex} results are @racket[ordering-eq] if the values of their given dexed values are.
 }
 
 @defproc[(dexed-get-name [d dexed?]) name?]{
