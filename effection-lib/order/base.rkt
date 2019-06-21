@@ -460,7 +460,8 @@
         (nothing)))
   ])
 
-(define/contract (dex-name) (-> dex?)
+(define/contract (dex-name)
+  (-> dex?)
   (internal:dex #/dex-internals-name))
 
 
@@ -495,7 +496,8 @@
       #/internal:dex-internals-autodex a b))
   ])
 
-(define/contract (dex-dex) (-> dex?)
+(define/contract (dex-dex)
+  (-> dex?)
   (internal:dex #/dex-internals-dex))
 
 
@@ -524,7 +526,8 @@
       (nothing))
   ])
 
-(define/contract (dex-give-up) (-> dex?)
+(define/contract (dex-give-up)
+  (-> dex?)
   (internal:dex #/dex-internals-give-up))
 
 
@@ -1066,7 +1069,8 @@
       #/internal:cline-internals-autodex a b))
   ])
 
-(define/contract (dex-cline) (-> dex?)
+(define/contract (dex-cline)
+  (-> dex?)
   (internal:dex #/dex-internals-cline))
 
 
@@ -1131,7 +1135,8 @@
       (nothing))
   ])
 
-(define/contract (cline-give-up) (-> cline?)
+(define/contract (cline-give-up)
+  (-> cline?)
   (internal:cline #/cline-internals-give-up))
 
 
@@ -1604,7 +1609,8 @@
       #/internal:furge-internals-autodex a b))
   ])
 
-(define/contract (dex-merge) (-> dex?)
+(define/contract (dex-merge)
+  (-> dex?)
   (internal:dex #/dex-internals-merge))
 
 
@@ -1639,7 +1645,8 @@
       #/internal:furge-internals-autodex a b))
   ])
 
-(define/contract (dex-fuse) (-> dex?)
+(define/contract (dex-fuse)
+  (-> dex?)
   (internal:dex #/dex-internals-fuse))
 
 
@@ -2411,7 +2418,8 @@
           #/next vals))))
   ])
 
-(define/contract (dex-table dex-val) (-> dex? dex?)
+(define/contract (dex-table dex-val)
+  (-> dex? dex?)
   (internal:dex #/dex-internals-table dex-val))
 
 (define/contract (table-ordered-counts? assoc v)
