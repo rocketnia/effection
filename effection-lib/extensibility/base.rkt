@@ -159,7 +159,7 @@
       (
         [ds dspace?]
         [pubsub-name (ds) (authorized-name-dspace-ancestor/c ds)])
-      [_ (ds) (pub-ancestor/c ds)])]
+      [_ (ds) (sub-ancestor/c ds)])]
   [pub-restrict
     (->i ([new-ds dspace?] [p (new-ds) (pub-ancestor/c new-ds)])
       [_ (new-ds) (pub-ancestor/c new-ds)])]
