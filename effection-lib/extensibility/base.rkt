@@ -148,19 +148,24 @@
   [sub-dspace-descends? (-> dspace? sub? boolean?)]
   [pub-ancestor/c (-> dspace? contract?)]
   [sub-ancestor/c (-> dspace? contract?)]
+  [make-pub
+    (->i
+      (
+        [ds dspace?]
+        [pubsub-name (ds) (authorized-name-dspace-ancestor/c ds)])
+      [_ (ds) (pub-ancestor/c ds)])]
+  [make-sub
+    (->i
+      (
+        [ds dspace?]
+        [pubsub-name (ds) (authorized-name-dspace-ancestor/c ds)])
+      [_ (ds) (pub-ancestor/c ds)])]
   [pub-restrict
     (->i ([new-ds dspace?] [p (new-ds) (pub-ancestor/c new-ds)])
       [_ (new-ds) (pub-ancestor/c new-ds)])]
   [sub-restrict
     (->i ([new-ds dspace?] [s (new-ds) (sub-ancestor/c new-ds)])
       [_ (new-ds) (pub-ancestor/c new-ds)])]
-  [getfx-establish-pubsub
-    (->i
-      (
-        [ds dspace?]
-        [pubsub-name (ds) (authorized-name-dspace-ancestor/c ds)])
-      [_ (ds)
-        (getfx/c #/list/c (pub-ancestor/c ds) (sub-ancestor/c ds))])]
   [extfx-pub-write
     (->i
       (
@@ -328,7 +333,6 @@
   (provide-struct
     (getfx-private-get ds putter-name getter-name on-stall))
   
-  (provide-struct (getfx-establish-pubsub ds pubsub-name))
   (provide-struct (extfx-pub-write ds p unique-name on-conflict arg))
   (provide-struct (extfx-sub-write ds s unique-name on-conflict func))
   
@@ -441,8 +445,6 @@
   #/mat v
     (internal:getfx-private-get ds putter-name getter-name on-stall)
     #t
-  
-  #/mat v (internal:getfx-establish-pubsub ds pubsub-name) #t
   
     #f))
 
@@ -1190,6 +1192,12 @@
     (fn v
       (and (sub? v) (sub-dspace-descends? v ds)))))
 
+(define (make-pub ds pubsub-name)
+  (internal:pub ds pubsub-name))
+
+(define (make-sub ds pubsub-name)
+  (internal:sub ds pubsub-name))
+
 (define (pub-restrict new-ds p)
   (dissect p (internal:pub original-ds pubsub-name)
   #/internal:pub new-ds pubsub-name))
@@ -1197,9 +1205,6 @@
 (define (sub-restrict new-ds s)
   (dissect s (internal:sub original-ds pubsub-name)
   #/internal:sub new-ds pubsub-name))
-
-(define (getfx-establish-pubsub ds pubsub-name)
-  (internal:getfx-establish-pubsub ds pubsub-name))
 
 (define (extfx-pub-write ds p unique-name on-conflict arg)
   (internal:extfx-pub-write ds p unique-name on-conflict arg))
@@ -2203,19 +2208,6 @@
                 func))))
         then)
     
-    #/mat process
-      (internal:extfx-run-getfx
-        (internal:getfx-establish-pubsub ds pubsub-name)
-        then)
-      ; TODO: See if we really need to enforce that `ds` descends from
-      ; `root-ds` here.
-      (expect (dspace-descends? root-ds ds) #t
-        (next-with-error "Expected ds to be a definition space descending from the extfx runner's root definition space")
-      #/next-one-fruitful #/process-entry
-        reads
-        (then #/list
-          (internal:pub ds pubsub-name)
-          (internal:sub ds pubsub-name)))
     #/mat process
       (internal:extfx-pub-write ds p unique-name on-conflict arg)
       (expect (dspace-descends? root-ds ds) #t
