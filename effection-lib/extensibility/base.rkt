@@ -36,6 +36,7 @@
   table-empty? table-empty table-get table-shadow)
 (require #/only-in (submod effection/order/base private)
   dex-internals-simple-dexed-of)
+(require effection/private/getfx)
 
 (require #/prefix-in unsafe: #/only-in effection/order/unsafe
   dex fuse gen:dex-internals gen:furge-internals name table)
@@ -295,8 +296,6 @@
   
   (provide-struct (dspace runtime-symbol name parents-list))
   
-  (provide-struct (error-definer-uninformative))
-  (provide-struct (error-definer-from-message message))
   (provide-struct (success-or-error-definer on-error on-success))
   
   (provide-struct (authorized-name ds name parents))
@@ -311,11 +310,8 @@
   (provide-struct (familiarity-ticket ticket-symbol ds))
   
   
-  (provide-struct (getfx-done result))
-  (provide-struct (getfx-bind effects then))
   (provide-struct (extfx-noop))
   (provide-struct (extfx-fused a b))
-  (provide-struct (getfx-err on-execute))
   (provide-struct (extfx-run-getfx effects then))
   (provide-struct (extfx-spawn-dexed dexed-then))
   (provide-struct (extfx-table-each t on-element then))
@@ -325,13 +321,10 @@
       n on-conflict on-familiarity-ticket-unspent then))
   
   (provide-struct (extfx-put ds n on-cont-unspent comp))
-  (provide-struct (getfx-get ds n on-stall))
   
   (provide-struct
     (extfx-private-put
       ds putter-name getter-name on-cont-unspent comp))
-  (provide-struct
-    (getfx-private-get ds putter-name getter-name on-stall))
   
   (provide-struct (extfx-pub-write ds p unique-name on-conflict arg))
   (provide-struct (extfx-sub-write ds s unique-name on-conflict func))
@@ -434,46 +427,6 @@
     ds collector-name contributor-name on-value-conflict value))
 
 (struct-easy (extfx-finish-run ds value))
-
-(define (getfx? v)
-  (mat v (internal:getfx-done result) #t
-  #/mat v (internal:getfx-bind effects then) #t
-  #/mat v (internal:getfx-err on-execute) #t
-  
-  #/mat v (internal:getfx-get ds n on-stall) #t
-  
-  #/mat v
-    (internal:getfx-private-get ds putter-name getter-name on-stall)
-    #t
-  
-    #f))
-
-; TODO: See if we should export this from `effection/extensibility`.
-(define (getfx-map effects func)
-  (getfx-bind effects #/fn result
-  #/getfx-done #/func result))
-
-(define (getfx/c c)
-  (w- c (coerce-contract 'getfx/c c)
-  #/make-contract
-    
-    #:name `(getfx/c ,(contract-name c))
-    
-    #:first-order (fn v #/getfx? v)
-    
-    #:late-neg-projection
-    (fn blame
-      (w- c-late-neg-projection
-        ( (get/build-late-neg-projection c)
-          (blame-add-context blame #:swap? #t
-            "the anticipated value of"))
-      #/fn v missing-party
-        (expect (getfx? v) #t
-          (raise-blame-error blame #:missing-party missing-party v
-            '(expected: "a getfx effectful computation" given: "~e")
-            v)
-        #/getfx-map v #/fn result
-          (c-late-neg-projection result missing-party))))))
 
 (define (extfx? v)
   (mat v (internal:extfx-noop) #t
@@ -604,77 +557,6 @@
   #/list-any (cons descendant-name descendant-parents-list) #/fn name
     (eq-by-dex? (dex-name) ancestor-name name)))
 
-
-; An `error-definer?` is a way of specifying a custom error message.
-; Although all the ways of constructing `error-definer?` values are
-; currently very simple, they may someday (TODO) perform more
-; sophisticated computations to produce holistic error reports.
-;
-; NOTE:
-;
-; Once they do this, it may be tempting to call them "error handlers".
-; However, they cannot be used to recover from an error. They can only
-; produce an error report.
-;
-; The Effection extensibility process calculus depends on monotonicity
-; of all state resources to ensure the backwards compatibility of each
-; extension. If Effection-safe computations had a way to recover from
-; all errors, then a computation could positively depend on the
-; *presence* of an error, even an error that results from the *lack*
-; of some definition or an *incmplete* implementation, meaning that
-; the very act of implementing an unimplemented thing could break
-; backwards compatibility. We can't very well disallow implementing
-; things, so we disallow recovering from errors instead.
-
-; TODO:
-;
-; Add more expressive ways to create `error-definer?` values. It seems
-; like in general, they should be similar to top-level Cene
-; definitions (i.e. `extfx?`-returning functions which take a unique
-; `authorized-name?` and a `(-> name? authorized-name?)` name
-; qualification function), but with the distinction that the
-; information they define is only used to construct a detailed and
-; focused error report.
-;
-; Treating them as *services* (i.e. top-level definitions which have
-; familiarity tickets for each other) this way would make it possible
-; for them to coordinate to produce *simpler* error reports than they
-; could produce independently. However, for them to obtain familiarity
-; tickets for each other, we'll need to create variations of
-; `extfx-split-list`, `extfx-split-table`, and `extfx-disburse` which
-; take their own top-level definitions that act like phone operator
-; switchboards to allow cousin unspent ticket errors to connect with
-; each other. We may also need variations of `fuse-extfx` and
-; `extfx-table-each` which do the same kind of thing to allow
-; concurrent processes' error definers to coordinate with each other,
-; as well as possibly some more effects (unlike any we currently have)
-; which allow concurrent errors and unspent ticket errors to interact
-; with each other.
-;
-; It's possible we may also want a way to twist-tie (so to speak) some
-; ticket values so that their unspent ticket errors are managed
-; together. Perhaps in order to do this, we could hide them all inside
-; a single ticket value until it's unwrapped again, but it seems like
-; we might just be able to install this kind of connection using a
-; side effect without changing the way we pass the tickets around.
-
-(define (error-definer? v)
-  (mat v (internal:error-definer-uninformative) #t
-  #/mat v (internal:error-definer-from-message message) #t
-    #f))
-
-(define (error-definer-uninformative)
-  (internal:error-definer-uninformative))
-
-(define (error-definer-from-message message)
-  (internal:error-definer-from-message message))
-
-; TODO: See if we should export this.
-(define/contract (error-definer-or-message ed message)
-  (-> error-definer? string? error-definer?)
-  (expect ed (internal:error-definer-uninformative) ed
-  #/internal:error-definer-from-message message))
-
 ; NOTE: In our interfaces here, the point of
 ; `success-or-error-definer?` values is not only to let conflicts be
 ; reported, but to let certain `extfx?` computations run only after
@@ -763,12 +645,6 @@
         (intuitionistic-ticket-dspace-descends? v ds)))))
 
 
-(define (getfx-done result)
-  (internal:getfx-done result))
-
-(define (getfx-bind effects then)
-  (internal:getfx-bind effects then))
-
 (define (extfx-noop)
   (internal:extfx-noop))
 
@@ -798,9 +674,6 @@
 
 (define (extfx-run-getfx effects then)
   (internal:extfx-run-getfx effects then))
-
-(define (getfx-err on-execute)
-  (internal:getfx-err on-execute))
 
 (define (extfx-spawn-dexed dexed-then)
   (internal:extfx-spawn-dexed dexed-then))
@@ -1511,9 +1384,7 @@
           #t))
     #/w- next-with-error
       (fn error
-        (next-with-error-definer
-          (internal:error-definer-uninformative)
-          error))
+        (next-with-error-definer (error-definer-uninformative) error))
     #/w- next-purging
       (fn on-error default-message should-keep
         (next-full
