@@ -3279,6 +3279,9 @@
 
 (define/contract (make-fusable-function proc)
   (-> (-> any/c getfx?) fusable-function?)
+  ; TODO: See if `proc` is ever really a `fusable-function?` here,
+  ; since we already projected it through a higher-order `->`
+  ; contract.
   (if (fusable-function? proc) proc
   #/internal:fusable-function proc))
 
