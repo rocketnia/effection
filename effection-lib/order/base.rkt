@@ -3203,9 +3203,9 @@
     
     (define (furge-internals-call this a b)
       (dissect this (furge-internals-fusable-function dexed-delegate)
-      #/expect (procedure? a) #t (nothing)
-      #/expect (procedure? b) #t (nothing)
-      #/just #/fn arg
+      #/expect a (internal:fusable-function a) (nothing)
+      #/expect b (internal:fusable-function b) (nothing)
+      #/just #/internal:fusable-function #/fn arg
         (w- method
           (furge-internals-fusable-function-delegate-arg-to-method
             dexed-delegate arg)
