@@ -1522,10 +1522,8 @@
       (fn unspent-tickets reads ds db-get db-update on-conflict value
         ; If there has already been a definition installed for this
         ; purpose in this definition space, this checks that the
-        ; proposed dex matches the stored dex and that the proposed
-        ; value matches the stored value according to that dex.
-        ; Otherwise, it stores the proposed dex and value without
-        ; question.
+        ; proposed dexed value matches the stored dexed value.
+        ; Otherwise, it stores the proposed value without question.
         (dissect on-conflict
           (internal:success-or-error-definer
             on-conflict on-no-conflict)
