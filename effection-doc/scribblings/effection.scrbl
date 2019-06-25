@@ -217,7 +217,7 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 ]{
   Given a dexed function, returns a dex that works by invoking that function with each value to get @racket[(just _dex)] or @racket[(nothing)], verifying that the two @var[dex] values are the same, and then proceeding to tail-call that dex value.
   
-  When compared by @racket[(dex-dex)], all @tt{dex-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-get-method] values' dexes and values are.
+  When compared by @racket[(dex-dex)], all @tt{dex-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-get-method] values are.
 }
 
 @defproc[
@@ -226,7 +226,7 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 ]{
   Given a dexed function, returns a dex that works by passing itself to the function and then tail-calling the resulting dex.
   
-  When compared by @racket[(dex-dex)], all @tt{dex-fix} values are @racket[ordering-eq] if their @racket[dexed-unwrap] values' dexes and values are.
+  When compared by @racket[(dex-dex)], all @tt{dex-fix} values are @racket[ordering-eq] if their @racket[dexed-unwrap] values are.
 }
 
 @defform[
@@ -333,7 +333,7 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 ]{
   Given a dexed function, returns a cline that works by invoking that function with each value to get @racket[(just _cline)] or @racket[(nothing)], verifying that the two @var[cline] values are the same, and then proceeding to tail-call that value.
   
-  When compared by @racket[(dex-cline)], all @tt{cline-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-get-method] values' dexes and values are.
+  When compared by @racket[(dex-cline)], all @tt{cline-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-get-method] values are.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
 }
@@ -344,7 +344,7 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 ]{
   Given a dexed function, returns a cline that works by passing itself to the function and then tail-calling the resulting cline.
   
-  When compared by @racket[(dex-cline)], all @tt{cline-fix} values are @racket[ordering-eq] if their @racket[dexed-unwrap] values' dexes and values are.
+  When compared by @racket[(dex-cline)], all @tt{cline-fix} values are @racket[ordering-eq] if their @racket[dexed-unwrap] values are.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
 }
@@ -481,7 +481,7 @@ The idempotence of a merge operation is such enough that if the two inputs to th
 )]{
   Given a dexed function, returns a merge/fuse that works by invoking that function with each value to get @racket[(just _method)] or @racket[(nothing)], verifying that the two @var[method] values are the same, and invoking that merge/fuse value to get a result of @racket[(just _result)] or @racket[(nothing)]. If the result is @racket[(just _result)], this does a final check before returning it: It invokes the method-getting function on the @racket[result] to verify that it obtains the same @var[method] value that was obtained from the inputs. This ensures that the operation is associative.
   
-  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-by-own-method}/@tt{fuse-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-get-method] values' dexes and values are.
+  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-by-own-method}/@tt{fuse-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-get-method] values are.
 }
 
 @deftogether[(
@@ -497,7 +497,7 @@ The idempotence of a merge operation is such enough that if the two inputs to th
 )]{
   Given a dexed function, returns a merge/fuse that works by passing itself to the function and then tail-calling the resulting merge/fuse.
   
-  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-fix}/@tt{fuse-fix} values are @racket[ordering-eq] if their @racket[dexed-unwrap] values' dexes and values are.
+  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-fix}/@tt{fuse-fix} values are @racket[ordering-eq] if their @racket[dexed-unwrap] values are.
 }
 
 @deftogether[(
@@ -663,7 +663,7 @@ There is currently no way to make a fusable function that performs a tail call. 
 ]{
   Given @racket[dexed-arg-to-method] as a dexed function, returns a fuse that combines fusable functions. The combined fusable function works by calling the @racket[dexed-arg-to-method] function to get a fuse, calling both of the originally fused functions to get each of their results, and fusing the results by that fuse. If the results turn out not to be in the fuse's domain, this causes an error.
   
-  When compared by @racket[(dex-dex)], all @tt{fuse-fusable-function} values are @racket[ordering-eq] if their @racket[dexed-arg-to-method] values' dexes and values are.
+  When compared by @racket[(dex-dex)], all @tt{fuse-fusable-function} values are @racket[ordering-eq] if their @racket[dexed-arg-to-method] values are.
 }
 
 
