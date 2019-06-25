@@ -3248,14 +3248,18 @@
       #/getmaybefx-bind
         (getmaybefx-table-each #/internal:table #/hash-v-map a #/fn v
           (getfx-call-furge furge-val v v))
-      #/dissectfn (internal:table a)
+      #/dissectfn _
       #/getmaybefx-bind
         (getmaybefx-table-each #/internal:table #/hash-v-map b #/fn v
           (getfx-call-furge furge-val v v))
-      #/dissectfn (internal:table b)
+      #/dissectfn _
+      #/w- a (hash-v-map a #/fn v #/getfx-done #/just v)
+      #/w- b (hash-v-map b #/fn v #/getfx-done #/just v)
       #/getmaybefx-table-each #/internal:table
         (hash-union a b #:combine #/fn a b
-          (getfx-call-furge furge-val a b))))
+          (getmaybefx-bind a #/fn a
+          #/getmaybefx-bind b #/fn b
+          #/getfx-call-furge furge-val a b))))
   ])
 
 (define/contract (merge-table merge-val)
