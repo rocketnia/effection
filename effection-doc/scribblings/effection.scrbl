@@ -157,7 +157,7 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 @defproc[(dexed-get-dex [d dexed?]) dex?]{
   Given a dexed value, returns a dex that has a domain consisting of just one value, namely the value of the given dexed value.
   
-  When compared by @racket[(dex-dex)], all @tt{dexed-get-dex} results are @racket[ordering-eq] if the values of their given dexed values are.
+  When compared by @racket[(dex-dex)], all @tt{dexed-get-dex} results are @racket[ordering-eq] if the corresponding @racket[dexed-get-value] results are.
 }
 
 @defproc[(dexed-get-name [d dexed?]) name?]{
