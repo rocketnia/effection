@@ -2175,7 +2175,7 @@
         (delegate #/furge-by-own-method::raise-cannot-get-output-method-error
           a b furge-result input-method)
       #/raise-arguments-error 'furge-by-own-method-thorough
-        expected-raise-different-input-methods
+        expected-raise-cannot-get-output-method
         "dexed-delegate" dexed-delegate
         "a" a
         "b" b
@@ -2199,7 +2199,7 @@
         (delegate #/furge-by-own-method::raise-different-output-method-error
           a b furge-result input-method output-method)
       #/raise-arguments-error 'furge-by-own-method-thorough
-        expected-raise-different-input-methods
+        expected-raise-different-output-method
         "dexed-delegate" dexed-delegate
         "a" a
         "b" b
