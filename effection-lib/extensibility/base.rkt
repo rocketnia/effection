@@ -24,6 +24,7 @@
 (require #/only-in lathe-comforts/match match/c)
 (require #/only-in lathe-comforts/maybe
   just maybe? maybe-bind nothing)
+(require #/only-in lathe-comforts/string immutable-string?)
 (require #/only-in lathe-comforts/struct
   auto-equal auto-write define-imitation-simple-struct istruct/c
   struct-easy)
@@ -56,7 +57,7 @@
   
   [error-definer? (-> any/c boolean?)]
   [error-definer-uninformative (-> error-definer?)]
-  [error-definer-from-message (-> string? error-definer?)]
+  [error-definer-from-message (-> immutable-string? error-definer?)]
   [error-definer-from-exn (-> exn:fail? error-definer?)]
   [success-or-error-definer? (-> any/c boolean?)]
   [success-or-error-definer

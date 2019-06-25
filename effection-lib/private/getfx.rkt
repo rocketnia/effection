@@ -19,6 +19,7 @@
 
 (require #/only-in lathe-comforts dissect expect fn mat w- w-loop)
 (require #/only-in lathe-comforts/maybe just maybe? maybe/c nothing)
+(require #/only-in lathe-comforts/string immutable-string?)
 
 
 (provide #/all-defined-out)
@@ -133,7 +134,7 @@
 ; migrating all uses of this one to that one.
 ;
 (define/contract (error-definer-or-message ed message)
-  (-> error-definer? string? error-definer?)
+  (-> error-definer? immutable-string? error-definer?)
   (expect ed (internal:error-definer-uninformative) ed
   #/internal:error-definer-from-message message))
 
