@@ -57,6 +57,7 @@
   [error-definer? (-> any/c boolean?)]
   [error-definer-uninformative (-> error-definer?)]
   [error-definer-from-message (-> string? error-definer?)]
+  [error-definer-from-exn (-> exn:fail? error-definer?)]
   [success-or-error-definer? (-> any/c boolean?)]
   [success-or-error-definer
     (-> error-definer? extfx? success-or-error-definer?)]
@@ -71,6 +72,7 @@
   [familiarity-ticket? (-> any/c boolean?)]
   [familiarity-ticket-dspace-ancestor/c (-> dspace? contract?)]
   
+  [pure-run-getfx (-> getfx? any/c)]
   [getfx-done (-> any/c getfx?)]
   [getfx-bind (-> getfx? (-> any/c getfx?) getfx?)]
   [extfx-noop (-> extfx?)]
@@ -663,10 +665,11 @@
     (define (furge-internals-autodex this other)
       (just #/ordering-eq))
     
-    (define (furge-internals-call this a b)
-      (expect (extfx? a) #t (nothing)
-      #/expect (extfx? b) #t (nothing)
-      #/just #/internal:extfx-fused a b))
+    (define (getfx-furge-internals-call this a b)
+      (getfx-done
+        (expect (extfx? a) #t (nothing)
+        #/expect (extfx? b) #t (nothing)
+        #/just #/internal:extfx-fused a b)))
   ])
 
 (define (fuse-extfx)

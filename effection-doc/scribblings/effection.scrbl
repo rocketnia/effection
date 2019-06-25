@@ -10,6 +10,7 @@
   just maybe? maybe/c nothing)
 @(require #/for-label #/only-in lathe-comforts/trivial trivial?)
 
+@(require #/for-label effection/extensibility/base)
 @(require #/for-label effection/order)
 @(require #/for-label effection/order/base)
 
@@ -397,7 +398,7 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 
 @subsection[#:tag "merges-and-fuses"]{Merges and Fuses}
 
-Effection offers a non-exhaustive but extensive selection of "merges" and "fuses." These are values which can be compared for equality with like values (using @racket[(dex-merge)] and @racket[(dex-fuse)]), and they represent operations of two arguments (invocable using @racket[call-merge] and @racket[call-fuse]).
+Effection offers a non-exhaustive but extensive selection of "merges" and "fuses." These are values which can be compared for equality with like values (using @racket[(dex-merge)] and @racket[(dex-fuse)]), and they represent operations of two arguments (invocable using @racket[getfx-call-merge] and @racket[getfx-call-fuse]).
 
 Merges represent operations that are commutative, associative, and idempotent, or in other words exactly the kind of operation that can operate on a (nonempty and finite) unordered set of inputs.
 
@@ -414,12 +415,20 @@ The idempotence of a merge operation is such enough that if the two inputs to th
 }
 
 @deftogether[(
-  @defproc[(call-merge [merge merge?] [a any/c] [b any/c]) maybe?]
-  @defproc[(call-fuse [fuse fuse?] [a any/c] [b any/c]) maybe?]
+  @defproc[
+    (getfx-call-merge [merge merge?] [a any/c] [b any/c])
+    (getfx/c maybe?)
+  ]
+  @defproc[
+    (getfx-call-fuse [fuse fuse?] [a any/c] [b any/c])
+    (getfx/c maybe?)
+  ]
 )]{
-  Given a merge/fuse and two values, combines those values according to the merge/fuse. The result is @racket[(nothing)] if either value is outside the merge's/fuse's domain. Otherwise, the result is @racket[(just _value)] for some @var[value] that's also in the domain.
+  Given a merge/fuse and two values, this @racket[getfx?] computation combines those values according to the merge/fuse. The result is @racket[(nothing)] if either value is outside the merge's/fuse's domain. Otherwise, the result is @racket[(just _value)] for some @var[value] that's also in the domain.
   
-  For @tt{call-merge}, if there is any dex for which the input values are @racket[ordering-eq], then the result will be @racket[ordering-eq] to them both.
+  Whether this @racket[getfx?] computation can be run through @racket[pure-run-getfx] without problems depends on the given merge/fuse.
+  
+  For @tt{getfx-call-merge}, if there is any dex for which the input values are @racket[ordering-eq], then the result will be @racket[ordering-eq] to them both.
 }
 
 @deftogether[(
@@ -433,12 +442,16 @@ The idempotence of a merge operation is such enough that if the two inputs to th
 @defproc[(merge-by-dex [dex dex?]) merge?]{
   Returns a merge that merges any values that are already @racket[ordering-eq] according the given dex. The result of the merge is @racket[ordering-eq] to both of the inputs.
   
+  A call to this merge can be run through @racket[pure-run-getfx] without problems.
+  
   When compared by @racket[(dex-merge)], all @tt{merge-by-dex} values are @racket[ordering-eq] if their dexes are.
 }
 
 @; TODO: Add this to Cene for Racket.
 @defproc[(merge-by-cline-min [cline cline?]) merge?]{
   Returns a merge that finds the minimum of any set of values in the given cline's domain. The result of the merge is @racket[ordering-eq] to at least one of the inputs, and it's @racket[ordering-lt] to the rest.
+  
+  A call to this merge can be run through @racket[pure-run-getfx] without problems.
   
   When compared by @racket[(dex-merge)], all @tt{merge-by-cline-min} values are @racket[ordering-eq] if their clines are. They're also @racket[ordering-eq] to @racket[(merge-by-cline-max (cline-flip cline))].
 }
@@ -447,11 +460,15 @@ The idempotence of a merge operation is such enough that if the two inputs to th
 @defproc[(merge-by-cline-max [cline cline?]) merge?]{
   Returns a merge that finds the maximum of any set of values in the given cline's domain. The result of the merge is @racket[ordering-eq] to at least one of the inputs, and it's @racket[ordering-gt] to the rest.
   
+  A call to this merge can be run through @racket[pure-run-getfx] without problems.
+  
   When compared by @racket[(dex-merge)], all @tt{merge-by-cline-max} values are @racket[ordering-eq] if their clines are. They're also @racket[ordering-eq] to @racket[(merge-by-cline-min (cline-flip cline))].
 }
 
 @defproc[(fuse-by-merge [merge merge?]) fuse?]{
   Returns a fuse that fuses values by merging them using the given merge.
+  
+  If a call to the given merge can be run through @racket[pure-run-getfx] without problems, then so can a call to the resulting fuse.
   
   When compared by @racket[(dex-fuse)], all @tt{fuse-by-merge} values are @racket[ordering-eq] if their merges are.
 }
@@ -462,24 +479,28 @@ The idempotence of a merge operation is such enough that if the two inputs to th
 )]{
   Given a name and a merge/fuse, returns another merge/fuse that behaves like the given one but is not equal to it.
   
+  If a call to the given merge/fuse can be run through @racket[pure-run-getfx] without problems, then so can a call to the resulting merge/fuse.
+  
   When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-opaque}/@tt{fuse-opaque} values are @racket[ordering-eq] if their @racket[name] values are and their @racket[merge]/@racket[fuse] values are.
 }
 
 @deftogether[(
   @defproc[
     (merge-by-own-method
-      [dexed-get-method
-        (dexed-first-order/c (-> any/c (maybe/c merge?)))])
+      [dexed-getfx-get-method
+        (dexed-first-order/c (-> any/c (getfx/c (maybe/c merge?))))])
     merge?
   ]
   @defproc[
     (fuse-by-own-method
-      [dexed-get-method
-        (dexed-first-order/c (-> any/c (maybe/c fuse?)))])
+      [dexed-getfx-get-method
+        (dexed-first-order/c (-> any/c (getfx/c (maybe/c fuse?))))])
     fuse?
   ]
 )]{
-  Given a dexed function, returns a merge/fuse that works by invoking that function with each value to get @racket[(just _method)] or @racket[(nothing)], verifying that the two @var[method] values are the same, and invoking that merge/fuse value to get a result of @racket[(just _result)] or @racket[(nothing)]. If the result is @racket[(just _result)], this does a final check before returning it: It invokes the method-getting function on the @racket[result] to verify that it obtains the same @var[method] value that was obtained from the inputs. This ensures that the operation is associative.
+  Given a dexed @racket[getfx?] operation, returns a merge/fuse that works by invoking that operation with each value to get @racket[(just _method)] or @racket[(nothing)], verifying that the two @var[method] values are the same, and invoking that merge/fuse value to get a result of @racket[(just _result)] or @racket[(nothing)]. If the result is @racket[(just _result)], this does a final check before returning it: It invokes the method-getting operation on the @racket[result] to verify that it obtains the same @var[method] value that was obtained from the inputs. This ensures that the operation is associative.
+  
+  If the @racket[getfx?] computations that result from @racket[dexed-getfx-get-method] and the calls to their resulting merges/fuses can be run through @racket[pure-run-getfx] without problems, then so can a call to this merge/fuse.
   
   When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-by-own-method}/@tt{fuse-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-get-method] values are.
 }
@@ -487,17 +508,22 @@ The idempotence of a merge operation is such enough that if the two inputs to th
 @deftogether[(
   @defproc[
     (merge-fix
-      [dexed-unwrap (dexed-first-order/c (-> merge? merge?))])
+      [dexed-getfx-unwrap
+        (dexed-first-order/c (-> merge? (getfx/c merge?)))])
     merge?
   ]
   @defproc[
-    (fuse-fix [dexed-unwrap (dexed-first-order/c (-> fuse? fuse?))])
+    (fuse-fix
+      [dexed-getfx-unwrap
+        (dexed-first-order/c (-> fuse? (getfx/c fuse?)))])
     fuse?
   ]
 )]{
-  Given a dexed function, returns a merge/fuse that works by passing itself to the function and then tail-calling the resulting merge/fuse.
+  Given a dexed function, returns a merge/fuse that works by passing itself to the function, running the resulting @racket[getfx?] computation, and then tail-calling the resulting merge/fuse.
   
-  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-fix}/@tt{fuse-fix} values are @racket[ordering-eq] if their @racket[dexed-unwrap] values are.
+  If the @racket[getfx?] computations that result from @racket[dexed-getfx-unwrap] and the calls to their resulting merges/fuses can be run through @racket[pure-run-getfx] without problems, then so can a call to this merge/fuse.
+  
+  When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-fix}/@tt{fuse-fix} values are @racket[ordering-eq] if their @racket[dexed-getfx-unwrap] values are.
 }
 
 @deftogether[(
@@ -520,6 +546,8 @@ The idempotence of a merge operation is such enough that if the two inputs to th
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
+  If calls to the given merges/fuses can be run through @racket[pure-run-getfx] without problems, then so can a call to this merge/fuse.
+  
   When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-struct-by-field-position}/@tt{fuse-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[field-method-expr] values are @racket[ordering-eq].
 }
 
@@ -536,6 +564,8 @@ The idempotence of a merge operation is such enough that if the two inputs to th
   Returns a merge/fuse that combines instances of the structure type named by @racket[struct-id], and whose field values can be combined by the merges/fuses produced by the @racket[field-method-expr] expressions.
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
+  
+  If calls to the given merges/fuses can be run through @racket[pure-run-getfx] without problems, then so can a call to this merge/fuse.
   
   When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], each @tt{merge-struct}/@tt{fuse-struct} value is @racket[ordering-eq] to the equivalent @racket[merge-struct-by-field-position]/@racket[fuse-struct-by-field-position] value.
 }
@@ -570,13 +600,15 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
 }
 
 @defproc[
-  (table-map-fuse
+  (getfx-table-map-fuse
     [table table?]
     [fuse fuse?]
-    [key-to-operand (-> name? any/c)])
-  maybe?
+    [key-to-operand (-> name? getfx?)])
+  (getfx/c maybe?)
 ]{
-  Given a table, a fuse, and a function, calls that function with each key of the table, and returns a @racket[just] containing the fused value of all the function results. If the table is empty or if any function result is outside the fuse’s domain, this returns @racket[(nothing)] instead.
+  Given a table, a fuse, and a @racket[getfx?] operation, returns a @racket[getfx?] computation that calls that operation with each key of the table and results in a @racket[just] containing the fused value of all the operation's results. If the table is empty or if any operation result is outside the fuse’s domain, this computation results in @racket[(nothing)] instead.
+  
+  If the @racket[getfx?] computations that result from @racket[key-to-operand] and calls to the given fuse can be run through @racket[pure-run-getfx] without problems, then so can the overall computation.
 }
 
 @defproc[
@@ -626,6 +658,8 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
 )]{
   Returns a merge/fuse that combines tables by collecting all the nonoverlapping entries and combining the overlapping entries using the given @racket[merge-val]/@racket[fuse-val].
   
+  If calls to the given merge/fuse can be run through @racket[pure-run-getfx] without problems, then so can a call to the resulting merge/fuse.
+  
   When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-table}/@tt{fuse-table} values are @racket[ordering-eq] if their @racket[merge-val]/@racket[fuse-val] values are.
 }
 
@@ -650,20 +684,27 @@ There is currently no way to make a fusable function that performs a tail call. 
 }
 
 @defproc[
-  (make-fusable-function [proc (-> any/c any/c)])
+  (make-fusable-function [proc (-> any/c getfx?)])
   fusable-function?
 ]{
-  Returns a fusable function that behaves like the given single-input, single-output function.
+  Returns a fusable function that behaves like the given single-input, single-output @racket[getfx?] operation.
+  
+  If the @racket[getfx?] computations that result from @racket[proc] can be run through @racket[pure-run-getfx] without problems, then so can a call to the resulting fusable function.
 }
 
 @defproc[
   (fuse-fusable-function
-    [dexed-arg-to-method (dexed-first-order/c (-> any/c fuse?))])
+    [dexed-getfx-arg-to-method
+      (dexed-first-order/c (-> any/c (getfx/c fuse?)))])
   fuse?
 ]{
-  Given @racket[dexed-arg-to-method] as a dexed function, returns a fuse that combines fusable functions. The combined fusable function works by calling the @racket[dexed-arg-to-method] function to get a fuse, calling both of the originally fused functions to get each of their results, and fusing the results by that fuse. If the results turn out not to be in the fuse's domain, this causes an error.
+  Given @racket[dexed-getfx-arg-to-method] as a dexed function, returns a fuse that combines fusable functions. The combined fusable function works by calling the @racket[dexed-getfx-arg-to-method] function and running its @racket[getfx?] result to get a fuse; doing the same with both of the original fusable functions to get each of their results; and fusing the results by that fuse. If the results turn out not to be in the fuse's domain, this causes an error.
   
-  When compared by @racket[(dex-dex)], all @tt{fuse-fusable-function} values are @racket[ordering-eq] if their @racket[dexed-arg-to-method] values are.
+  If the @racket[getfx?] computations that result from @racket[dexed-getfx-arg-to-method] and the calls to their resulting fuses can be run through @racket[pure-run-getfx] without problems, then so can a call to the fused fusable function.
+  
+  A call to this fuse can be run through @racket[pure-run-getfx] without problems.
+  
+  When compared by @racket[(dex-dex)], all @tt{fuse-fusable-function} values are @racket[ordering-eq] if their @racket[dexed-getfx-arg-to-method] values are.
 }
 
 
@@ -706,11 +747,15 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
 @; TODO: Add this to Cene for Racket.
 @defproc[(merge-boolean-by-and) merge?]{
   Returns a merge that merges booleans using @racket[and].
+  
+  A call to this merge can be run through @racket[pure-run-getfx] without problems.
 }
 
 @; TODO: Add this to Cene for Racket.
 @defproc[(merge-boolean-by-or) merge?]{
   Returns a merge that merges booleans using @racket[or].
+  
+  A call to this merge can be run through @racket[pure-run-getfx] without problems.
 }
 
 @defproc[(dex-immutable-string) dex?]{
@@ -737,10 +782,14 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
 
 @defproc[(fuse-exact-rational-by-plus) fuse?]{
   Returns a fuse that fuses exact rational numbers using @racket[+].
+  
+  A call to this fuse can be run through @racket[pure-run-getfx] without problems.
 }
 
 @defproc[(fuse-exact-rational-by-times) fuse?]{
   Returns a fuse that fuses exact rational numbers using @racket[*].
+  
+  A call to this fuse can be run through @racket[pure-run-getfx] without problems.
 }
 
 @defproc[
@@ -809,4 +858,46 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
   Iterates over the given hash table's entries in an unspecified order and calls the given function on each entry's mapped value. If the function ever returns @racket[#t], then the overall result is @racket[#t]; otherwise, it's @racket[#f].
   
   There is no short-circuiting. Every entry is always visited, a policy which ensures that Effection-safe code can't use nontermination or run time errors to make assertions about the iteration order of the table. (Nevertheless, Effection-unsafe code can use Racket side effects to observe the iteration order.)
+}
+
+
+
+@section[#:tag "extensibility"]{Extensibility}
+
+@defmodule[effection/extensibility/base]
+
+This module supplies an effect system designed for deterministic concurrency for the sake of implementing module systems. So that modules don't have to be able to observe the relative order they're processed in, this makes use of the orderless @racket[table?] collections from @racketmodname[effection/order/base]. In turn, some parts of @racketmodname[effection/order/base] are designed to be able to read modular extensions of the currently running program using @racket[getfx?] effects.
+
+For now, nothing but some trivial @racket[getfx?] effects are documented. The full system also has "extfx" effects which can read and write to definition spaces.
+
+@; TODO: Document some more of this module.
+
+@; TODO: Add the text "All the exports of @tt{effection/extensibility/base} are also exported by @racketmodname[effection/extensibility]." once we actually have an `effection/extensibility module.
+
+
+@subsection[#:tag "getfx"]{Read-only extensibility effects ("getfx")}
+
+@defproc[(getfx? [v any/c]) boolean?]{
+  Returns whether the given value is a representation of an effectful computation that performs read-only extensibility side effects as it computes a result.
+}
+
+@defproc[(getfx/c [result/c contract?]) contract?]{
+  Returns a contract that recognizes a representation of an effectful computation taht performs read-only extensibility side effects and returns a value that abides by the given contract.
+}
+
+@defproc[(pure-run-getfx [effects getfx?]) any/c]{
+  Attempts to run the given @racket[getfx?] computation, raising an error if it attempts to read just about anything.
+}
+
+@defproc[(getfx-done [result any/c]) getfx?]{
+  Returns a @racket[getfx?] computation that performs no side effects and has the given result.
+}
+
+@defproc[
+  (getfx-bind [effects getfx?] [then (-> any/c getfx?)])
+  getfx?
+]{
+  Returns a @racket[getfx?] computation that proceeds by running the given @racket[effects] @racket[getfx?] computation, passing its result to @racket[then], and finally running the @racket[getfx?] computatin that results from that.
+  
+  If both the subcomputations performed this way can be run through @racket[pure-run-getfx] without problems, then so can the overall computation.
 }

@@ -37,7 +37,7 @@
   furge-internals-tag
   furge-internals-autoname
   furge-internals-autodex
-  furge-internals-call)
+  getfx-furge-internals-call)
 (provide #/struct-out merge)
 (provide #/struct-out fuse)
 
@@ -91,7 +91,7 @@
   (furge-internals-tag furge-internals)
   (furge-internals-autoname furge-internals)
   (furge-internals-autodex furge-internals other)
-  (furge-internals-call furge-internals a b))
+  (getfx-furge-internals-call furge-internals a b))
 
 (struct-easy (merge internals))
 (struct-easy (fuse internals))

@@ -13,6 +13,7 @@
 (require #/submod effection/order/base private/order)
 (require #/only-in (submod effection/order/base private)
   define-datum-cline define-datum-dex)
+(require #/only-in effection/private/getfx getfx-done)
 (require #/only-in effection/private/order
   exact-rational?)
 (require #/prefix-in internal: #/only-in effection/order/unsafe
@@ -65,10 +66,11 @@
     (define (furge-internals-autodex this other)
       (just #/ordering-eq))
     
-    (define (furge-internals-call this a b)
-      (expect (exact-rational? a) #t (nothing)
-      #/expect (exact-rational? b) #t (nothing)
-      #/just #/+ a b))
+    (define (getfx-furge-internals-call this a b)
+      (getfx-done
+        (expect (exact-rational? a) #t (nothing)
+        #/expect (exact-rational? b) #t (nothing)
+        #/just #/+ a b)))
   ])
 
 (define/contract (fuse-exact-rational-by-plus)
@@ -91,10 +93,11 @@
     (define (furge-internals-autodex this other)
       (just #/ordering-eq))
     
-    (define (furge-internals-call this a b)
-      (expect (exact-rational? a) #t (nothing)
-      #/expect (exact-rational? b) #t (nothing)
-      #/just #/* a b))
+    (define (getfx-furge-internals-call this a b)
+      (getfx-done
+        (expect (exact-rational? a) #t (nothing)
+        #/expect (exact-rational? b) #t (nothing)
+        #/just #/* a b)))
   ])
 
 (define/contract (fuse-exact-rational-by-times)

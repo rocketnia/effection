@@ -58,6 +58,10 @@
   
   ordering-lt ordering-lt?
   )
+(require #/only-in effection/private/getfx
+  getfx? getfx-bind getfx/c getfx-done getfx-err-unraise
+  getfx-list-map getmaybefx-bind getmaybefx-list-map monad-list-map
+  pure-run-getfx)
 (require #/prefix-in internal: #/only-in
   effection/private/order-unsafe
   
@@ -66,10 +70,10 @@
   cline-internals-tag dex dex? dex-internals? dex-internals-autodex
   dex-internals-autoname dex-internals-compare dex-internals-dexed-of
   dex-internals-in? dex-internals-tag dex-internals-name-of
-  furge-internals-autodex furge-internals-autoname
-  furge-internals-call furge-internals-tag fusable-function
-  fusable-function? fuse fuse? gen:cline-internals gen:dex-internals
-  gen:furge-internals merge merge? name table table?)
+  furge-internals-autodex furge-internals-autoname furge-internals-tag
+  fusable-function fusable-function? fuse fuse? gen:cline-internals
+  gen:dex-internals gen:furge-internals getfx-furge-internals-call
+  merge merge? name table table?)
 
 
 ; ==== Orderings ====
@@ -163,8 +167,8 @@
   autoname-merge
   autoname-fuse)
 (provide
-  call-merge
-  call-fuse)
+  getfx-call-merge
+  getfx-call-fuse)
 (provide
   dex-merge
   dex-fuse)
@@ -184,10 +188,10 @@
   merge-struct-by-field-position
   merge-struct)
 (module+ private/unsafe #/provide
-  (struct-out merge-by-own-method::raise-different-input-methods-error)
-  (struct-out merge-by-own-method::raise-cannot-get-output-method-error)
-  (struct-out merge-by-own-method::raise-different-output-method-error)
-  (struct-out merge-by-own-method::get-method)
+  (struct-out merge-by-own-method::getfx-err-different-input-methods)
+  (struct-out merge-by-own-method::getfx-err-cannot-get-output-method)
+  (struct-out merge-by-own-method::getfx-err-different-output-method)
+  (struct-out merge-by-own-method::getfx-get-method)
   merge-by-own-method-delegate/c
   merge-by-own-method-thorough)
 (provide
@@ -197,10 +201,10 @@
   fuse-struct-by-field-position
   fuse-struct)
 (module+ private/unsafe #/provide
-  (struct-out fuse-by-own-method::raise-different-input-methods-error)
-  (struct-out fuse-by-own-method::raise-cannot-get-output-method-error)
-  (struct-out fuse-by-own-method::raise-different-output-method-error)
-  (struct-out fuse-by-own-method::get-method)
+  (struct-out fuse-by-own-method::getfx-err-different-input-methods)
+  (struct-out fuse-by-own-method::getfx-err-cannot-get-output-method)
+  (struct-out fuse-by-own-method::getfx-err-different-output-method)
+  (struct-out fuse-by-own-method::getfx-get-method)
   fuse-by-own-method-delegate/c
   fuse-by-own-method-thorough)
 
@@ -209,7 +213,7 @@
 
 (provide
   table? table-empty? table-get table-empty table-shadow
-  table-map-fuse table-sort)
+  getfx-table-map-fuse table-sort)
 (module+ private/order #/provide
   assocs->table-if-mutually-unique)
 (module+ private/unsafe #/provide
@@ -222,8 +226,8 @@
 (provide
   fusable-function? make-fusable-function fuse-fusable-function)
 (module+ private/unsafe #/provide
-  (struct-out fuse-fusable-function::raise-cannot-combine-results-error)
-  (struct-out fuse-fusable-function::arg-to-method)
+  (struct-out fuse-fusable-function::getfx-err-cannot-combine-results)
+  (struct-out fuse-fusable-function::getfx-arg-to-method)
   fuse-fusable-function-delegate/c
   fuse-fusable-function-thorough)
 
@@ -255,6 +259,17 @@
 
 
 ; ===== Miscellaneous utilities ======================================
+
+; TODO: See if we should export this from somewhere.
+(define/contract (monad-map fx-done fx-bind effects func)
+  (->
+    (-> any/c any/c)
+    (-> any/c (-> any/c any/c) any/c)
+    any/c
+    (-> any/c any/c)
+    any/c)
+  (fx-bind effects #/fn intermediate
+  #/fx-done #/func intermediate))
 
 (begin-for-syntax
   
@@ -1825,10 +1840,10 @@
   (dissect x (internal:merge internals)
   #/cons 'name:merge #/internal:furge-internals-autoname internals))
 
-(define/contract (call-merge merge a b)
-  (-> merge? any/c any/c maybe?)
+(define/contract (getfx-call-merge merge a b)
+  (-> merge? any/c any/c #/getfx/c maybe?)
   (dissect merge (internal:merge internals)
-  #/internal:furge-internals-call internals a b))
+  #/internal:getfx-furge-internals-call internals a b))
 
 (define/contract (fuse? x)
   (-> any/c boolean?)
@@ -1839,10 +1854,10 @@
   (dissect x (internal:fuse internals)
   #/cons 'name:fuse #/internal:furge-internals-autoname internals))
 
-(define/contract (call-fuse fuse a b)
-  (-> fuse? any/c any/c maybe?)
+(define/contract (getfx-call-fuse fuse a b)
+  (-> fuse? any/c any/c #/getfx/c maybe?)
   (dissect fuse (internal:fuse internals)
-  #/internal:furge-internals-call internals a b))
+  #/internal:getfx-furge-internals-call internals a b))
 
 
 (struct-easy (dex-internals-merge)
@@ -1941,9 +1956,9 @@
       #/dissect other (fuse-internals-by-merge b)
       #/compare-by-dex (dex-merge) a b))
     
-    (define (furge-internals-call this a b)
+    (define (getfx-furge-internals-call this a b)
       (dissect this (fuse-internals-by-merge merge)
-      #/call-merge merge a b))
+      #/getfx-call-merge merge a b))
   ])
 
 (define/contract (fuse-by-merge merge)
@@ -1969,11 +1984,12 @@
       #/dissect other (furge-internals-by-dex b)
       #/compare-by-dex (dex-dex) a b))
     
-    (define (furge-internals-call this a b)
+    (define (getfx-furge-internals-call this a b)
       (dissect this (furge-internals-by-dex dex)
-      #/mat (compare-by-dex dex a b) (just #/ordering-eq)
-        (just a)
-        (nothing)))
+      #/getfx-done
+        (mat (compare-by-dex dex a b) (just #/ordering-eq)
+          (just a)
+          (nothing))))
   ])
 
 (define/contract (merge-by-dex dex)
@@ -1998,13 +2014,12 @@
       #/dissect other (furge-internals-by-cline-min b)
       #/compare-by-dex (dex-cline) a b))
     
-    (define (furge-internals-call this a b)
+    (define (getfx-furge-internals-call this a b)
       (dissect this (furge-internals-by-cline-min cline)
-      #/expect (compare-by-cline cline a b) (just cline-result)
-        (nothing)
-      #/just
-      #/mat cline-result (ordering-gt) b
-        a))
+      #/getfx-done
+        (maybe-map (compare-by-cline cline a b) #/fn cline-result
+          (mat cline-result (ordering-gt) b
+            a))))
   ])
 
 (define/contract (merge-by-cline-min cline)
@@ -2021,7 +2036,7 @@
     internal:furge
     furge?
     autoname-furge
-    call-furge
+    getfx-call-furge
     dex-furge
     furge-internals-opaque
     tag:furge-opaque
@@ -2048,9 +2063,9 @@
             (compare-by-dex (dex-name) a-name b-name)
             (compare-by-dex (dex-furge) a-furge b-furge)))
         
-        (define (furge-internals-call this a b)
+        (define (getfx-furge-internals-call this a b)
           (dissect this (furge-internals-opaque name furge)
-          #/call-furge furge a b))
+          #/getfx-call-furge furge a b))
       ])
     
     (define/contract (furge-opaque name furge)
@@ -2062,7 +2077,7 @@
   internal:merge
   merge?
   autoname-merge
-  call-merge
+  getfx-call-merge
   dex-merge
   merge-internals-opaque
   tag:merge-opaque
@@ -2072,7 +2087,7 @@
   internal:fuse
   fuse?
   autoname-fuse
-  call-fuse
+  getfx-call-fuse
   dex-fuse
   fuse-internals-opaque
   tag:fuse-opaque
@@ -2083,62 +2098,67 @@
   (define-furge-by-own-method
     internal:furge
     furge?
-    call-furge
+    getfx-call-furge
     dex-furge
-    furge-by-own-method::raise-different-input-methods-error
-    furge-by-own-method::raise-cannot-get-output-method-error
-    furge-by-own-method::raise-different-output-method-error
-    furge-by-own-method::get-method
+    furge-by-own-method::getfx-err-different-input-methods
+    furge-by-own-method::getfx-err-cannot-get-output-method
+    furge-by-own-method::getfx-err-different-output-method
+    furge-by-own-method::getfx-get-method
     furge-by-own-method-delegate/c
     furge-internals-by-own-method
     tag:furge-by-own-method
     furge-by-own-method-thorough
     furge-by-own-method-unthorough
     furge-by-own-method
-    expected-raise-different-input-methods
-    expected-raise-cannot-get-output-method
-    expected-raise-different-output-method
+    expected-getfx-err-different-input-methods
+    expected-err-different-input-methods
+    expected-getfx-err-cannot-get-output-method
+    expected-err-cannot-get-output-method
+    expected-getfx-err-different-output-method
+    expected-err-different-output-method
     furge-result-str
-    expected-the-result-of-delegate-get-method-to-be-a-furge
-    expected-the-result-of-dexed-get-method-to-be-a-furge)
+    expected-getfx-delegate-get-method
+    expected-delegate-get-method
+    expected-getfx-get-method
+    expected-get-method)
   (begin
     
     (struct-easy
-      (furge-by-own-method::raise-different-input-methods-error
+      (furge-by-own-method::getfx-err-different-input-methods
         a b a-method b-method))
     (struct-easy
-      (furge-by-own-method::raise-cannot-get-output-method-error
+      (furge-by-own-method::getfx-err-cannot-get-output-method
         a b result input-method))
     (struct-easy
-      (furge-by-own-method::raise-different-output-method-error
+      (furge-by-own-method::getfx-err-different-output-method
         a b result input-method output-method))
     (struct-easy
-      (furge-by-own-method::get-method source))
+      (furge-by-own-method::getfx-get-method source))
     
     (define/contract furge-by-own-method-delegate/c
       contract?
       (case->
         (->
           (match/c
-            furge-by-own-method::raise-different-input-methods-error
+            furge-by-own-method::getfx-err-different-input-methods
             any/c any/c furge? furge?)
-          none/c)
+          (getfx/c none/c))
         (->
           (match/c
-            furge-by-own-method::raise-cannot-get-output-method-error
+            furge-by-own-method::getfx-err-cannot-get-output-method
             any/c any/c any/c furge?)
-          none/c)
+          (getfx/c none/c))
         (->
           (match/c
-            furge-by-own-method::raise-different-output-method-error
+            furge-by-own-method::getfx-err-different-output-method
             any/c any/c any/c furge? furge?)
-          none/c)
+          (getfx/c none/c))
         (->
-          (match/c furge-by-own-method::get-method any/c)
-          (maybe/c furge?))))
+          (match/c furge-by-own-method::getfx-get-method any/c)
+          (getfx/c #/maybe/c furge?))))
     
     (define/contract
-      (furge-internals-by-own-method-delegate-raise-different-input-methods-error
+      (getfx-err-furge-internals-by-own-method-delegate-different-input-methods
         dexed-delegate a b a-method b-method)
       (->
         (dexed-first-order/c furge-by-own-method-delegate/c)
@@ -2146,22 +2166,34 @@
         any/c
         furge?
         furge?
-        none/c)
+        (getfx/c none/c))
       (w- delegate (dexed-get-value dexed-delegate)
-      #/w- result
-        (delegate #/furge-by-own-method::raise-different-input-methods-error
+      #/w- getfx-delegate-result
+        (delegate #/furge-by-own-method::getfx-err-different-input-methods
           a b a-method b-method)
-      #/raise-arguments-error 'furge-by-own-method-thorough
-        expected-raise-different-input-methods
+      #/expect (getfx? getfx-delegate-result) #t
+        (getfx-err-unraise #/raise-arguments-error
+          'furge-by-own-method-thorough
+          expected-getfx-err-different-input-methods
+          "dexed-delegate" dexed-delegate
+          "a" a
+          "b" b
+          "a-method" a-method
+          "b-method" b-method
+          "getfx-delegate-result" getfx-delegate-result)
+      #/getfx-bind getfx-delegate-result #/fn delegate-result
+      #/getfx-err-unraise #/raise-arguments-error
+        'furge-by-own-method-thorough
+        expected-err-different-input-methods
         "dexed-delegate" dexed-delegate
         "a" a
         "b" b
         "a-method" a-method
         "b-method" b-method
-        "result" result))
+        "delegate-result" delegate-result))
     
     (define/contract
-      (furge-internals-by-own-method-delegate-raise-cannot-get-output-method-error
+      (getfx-err-furge-internals-by-own-method-delegate-cannot-get-output-method
         dexed-delegate a b furge-result input-method)
       (->
         (dexed-first-order/c furge-by-own-method-delegate/c)
@@ -2169,22 +2201,34 @@
         any/c
         any/c
         furge?
-        none/c)
+        (getfx/c none/c))
       (w- delegate (dexed-get-value dexed-delegate)
-      #/w- error-result
-        (delegate #/furge-by-own-method::raise-cannot-get-output-method-error
+      #/w- getfx-delegate-result
+        (delegate #/furge-by-own-method::getfx-err-cannot-get-output-method
           a b furge-result input-method)
-      #/raise-arguments-error 'furge-by-own-method-thorough
-        expected-raise-cannot-get-output-method
+      #/expect (getfx? getfx-delegate-result) #t
+        (getfx-err-unraise #/raise-arguments-error
+          'furge-by-own-method-thorough
+          expected-getfx-err-cannot-get-output-method
+          "dexed-delegate" dexed-delegate
+          "a" a
+          "b" b
+          furge-result-str furge-result
+          "input-method" input-method
+          "getfx-delegate-result" getfx-delegate-result)
+      #/getfx-bind getfx-delegate-result #/fn delegate-result
+      #/getfx-err-unraise #/raise-arguments-error
+        'furge-by-own-method-thorough
+        expected-err-cannot-get-output-method
         "dexed-delegate" dexed-delegate
         "a" a
         "b" b
         furge-result-str furge-result
         "input-method" input-method
-        "error-result" error-result))
+        "delegate-result" delegate-result))
     
     (define/contract
-      (furge-internals-by-own-method-delegate-raise-different-output-method-error
+      (getfx-err-furge-internals-by-own-method-delegate-different-output-method
         dexed-delegate a b furge-result input-method output-method)
       (->
         (dexed-first-order/c furge-by-own-method-delegate/c)
@@ -2193,36 +2237,61 @@
         any/c
         furge?
         furge?
-        none/c)
+        (getfx/c none/c))
       (w- delegate (dexed-get-value dexed-delegate)
-      #/w- error-result
-        (delegate #/furge-by-own-method::raise-different-output-method-error
+      #/w- getfx-delegate-result
+        (delegate #/furge-by-own-method::getfx-err-different-output-method
           a b furge-result input-method output-method)
-      #/raise-arguments-error 'furge-by-own-method-thorough
-        expected-raise-different-output-method
+      #/expect (getfx? getfx-delegate-result) #t
+        (getfx-err-unraise #/raise-arguments-error
+          'furge-by-own-method-thorough
+          expected-getfx-err-different-output-method
+          "dexed-delegate" dexed-delegate
+          "a" a
+          "b" b
+          furge-result-str furge-result
+          "input-method" input-method
+          "output-method" output-method
+          "getfx-delegate-result" getfx-delegate-result)
+      #/getfx-bind getfx-delegate-result #/fn delegate-result
+      #/getfx-err-unraise #/raise-arguments-error
+        'furge-by-own-method-thorough
+        expected-err-different-output-method
         "dexed-delegate" dexed-delegate
         "a" a
         "b" b
         furge-result-str furge-result
         "input-method" input-method
         "output-method" output-method
-        "error-result" error-result))
+        "delegate-result" delegate-result))
     
     (define/contract
-      (furge-internals-by-own-method-delegate-get-method
+      (getfx-furge-internals-by-own-method-delegate-get-method
         dexed-delegate source)
       (-> (dexed-first-order/c furge-by-own-method-delegate/c) any/c
-        (maybe/c furge?))
+        (getfx/c #/maybe/c furge?))
       (w- delegate (dexed-get-value dexed-delegate)
-      #/w- result (delegate #/furge-by-own-method::get-method source)
-      #/expect (contract-first-order-passes? (maybe/c furge?) result)
-        #t
-        (raise-arguments-error 'furge-by-own-method-thorough
-          expected-the-result-of-delegate-get-method-to-be-a-furge
+      #/w- getfx-delegate-result
+        (delegate #/furge-by-own-method::getfx-get-method source)
+      #/expect (getfx? getfx-delegate-result) #t
+        (getfx-err-unraise #/raise-arguments-error
+          'furge-by-own-method-thorough
+          expected-getfx-delegate-get-method
           "dexed-delegate" dexed-delegate
           "source" source
-          "result" result)
-        result))
+          "getfx-delegate-result" getfx-delegate-result)
+      #/getfx-bind getfx-delegate-result #/fn delegate-result
+      #/expect
+        (contract-first-order-passes? (maybe/c furge?)
+          delegate-result)
+        #t
+        (getfx-err-unraise #/raise-arguments-error
+          'furge-by-own-method-thorough
+          expected-delegate-get-method
+          "dexed-delegate" dexed-delegate
+          "source" source
+          "delegate-result" delegate-result)
+      #/getfx-done delegate-result))
     
     (struct-easy (furge-internals-by-own-method dexed-delegate)
       #:other
@@ -2244,91 +2313,108 @@
           #/dissect other (furge-internals-by-own-method b)
           #/compare-by-dex (dex-dexed) a b))
         
-        (define (furge-internals-call this a b)
+        (define (getfx-furge-internals-call this a b)
           (dissect this (furge-internals-by-own-method dexed-delegate)
-          #/maybe-bind
-            (furge-internals-by-own-method-delegate-get-method
+          #/getmaybefx-bind
+            (getfx-furge-internals-by-own-method-delegate-get-method
               dexed-delegate a)
           #/fn a-method
-          #/maybe-bind
-            (furge-internals-by-own-method-delegate-get-method
+          #/getmaybefx-bind
+            (getfx-furge-internals-by-own-method-delegate-get-method
               dexed-delegate b)
           #/fn b-method
           #/expect (compare-by-dex (dex-furge) a-method b-method)
             (just #/ordering-eq)
-            (furge-internals-by-own-method-delegate-raise-different-input-methods-error
+            (getfx-err-furge-internals-by-own-method-delegate-different-input-methods
               dexed-delegate a b a-method b-method)
-          #/expect (call-furge a-method a b) (just result) (nothing)
-          #/expect
-            (furge-internals-by-own-method-delegate-get-method
+          #/getmaybefx-bind (getfx-call-furge a-method a b)
+          #/fn result
+          #/getfx-bind
+            (getfx-furge-internals-by-own-method-delegate-get-method
               dexed-delegate result)
-            (just result-method)
-            (furge-internals-by-own-method-delegate-raise-cannot-get-output-method-error
+          #/fn maybe-result-method
+          #/expect maybe-result-method (just result-method)
+            (getfx-err-furge-internals-by-own-method-delegate-cannot-get-output-method
               dexed-delegate a b result a-method)
           #/expect (compare-by-dex (dex-furge) a-method result-method)
             (just #/ordering-eq)
-            (furge-internals-by-own-method-delegate-raise-different-output-method-error
+            (getfx-err-furge-internals-by-own-method-delegate-different-output-method
               dexed-delegate a b result a-method result-method)
-          #/just result))
+          #/getfx-done #/just result))
       ])
     
     (define/contract (furge-by-own-method-thorough dexed-delegate)
       (-> (dexed-first-order/c furge-by-own-method-delegate/c) furge?)
       (internal:furge #/furge-internals-by-own-method dexed-delegate))
     
-    (struct-easy (furge-by-own-method-unthorough dexed-get-method)
+    (struct-easy
+      (furge-by-own-method-unthorough dexed-getfx-get-method)
       #:other
       
       #:property prop:procedure
       (fn this command
         (dissect this
-          (furge-by-own-method-unthorough dexed-get-method)
+          (furge-by-own-method-unthorough dexed-getfx-get-method)
         #/mat command
-          (furge-by-own-method::raise-different-input-methods-error
+          (furge-by-own-method::getfx-err-different-input-methods
             a b a-method b-method)
-          (raise-arguments-error 'furge-by-own-method
+          (getfx-err-unraise #/raise-arguments-error
+            'furge-by-own-method
             "obtained two different methods from the two input values"
-            "dexed-get-method" dexed-get-method
+            "dexed-getfx-get-method" dexed-getfx-get-method
             "a" a
             "b" b
             "a-method" a-method
             "b-method" b-method)
         #/mat command
-          (furge-by-own-method::raise-cannot-get-output-method-error
+          (furge-by-own-method::getfx-err-cannot-get-output-method
             a b result input-method)
-          (raise-arguments-error 'furge-by-own-method
+          (getfx-err-unraise #/raise-arguments-error
+            'furge-by-own-method
             "could not obtain a method from the result value"
-            "dexed-get-method" dexed-get-method
+            "dexed-getfx-get-method" dexed-getfx-get-method
             "a" a
             "b" b
             "result" result
             "input-method" input-method)
         #/mat command
-          (furge-by-own-method::raise-different-output-method-error
+          (furge-by-own-method::getfx-err-different-output-method
             a b result input-method output-method)
-          (raise-arguments-error 'furge-by-own-method
+          (getfx-err-unraise #/raise-arguments-error
+            'furge-by-own-method
             "obtained two different methods from the input and the output"
-            "dexed-get-method" dexed-get-method
+            "dexed-getfx-get-method" dexed-getfx-get-method
             "a" a
             "b" b
             "result" result
             "input-method" input-method
             "output-method" output-method)
-        #/dissect command (furge-by-own-method::get-method source)
-        #/w- get-method (dexed-get-value dexed-get-method)
-        #/w- result (get-method source)
-        #/expect
-          (contract-first-order-passes? (maybe/c furge?) result)
-          #t
-          (raise-arguments-error 'furge-by-own-method
-            expected-the-result-of-dexed-get-method-to-be-a-furge
-            "dexed-get-method" dexed-get-method
+        #/dissect command
+          (furge-by-own-method::getfx-get-method source)
+        #/w- getfx-get-method (dexed-get-value dexed-getfx-get-method)
+        #/w- getfx-method (getfx-get-method source)
+        #/expect (getfx? getfx-method) #t
+          (getfx-err-unraise #/raise-arguments-error
+            'furge-by-own-method
+            expected-getfx-get-method
+            "dexed-getfx-get-method" dexed-getfx-get-method
             "source" source
-            "result" result)
-          result)))
+            "getfx-method" getfx-method)
+        #/getfx-bind getfx-method #/fn method
+        #/expect
+          (contract-first-order-passes? (maybe/c furge?) method)
+          #t
+          (getfx-err-unraise #/raise-arguments-error
+            'furge-by-own-method
+            expected-get-method
+            "dexed-getfx-get-method" dexed-getfx-get-method
+            "source" source
+            "method" method)
+          method)))
     
     (define/contract (furge-by-own-method dexed-get-method)
-      (-> (dexed-first-order/c #/-> any/c #/maybe/c furge?) furge?)
+      (-> (dexed-first-order/c #/-> any/c #/getfx/c #/maybe/c furge?)
+        furge?)
       (furge-by-own-method-thorough #/just-value #/dexed-of
         (dex-struct furge-by-own-method-unthorough #/dex-dexed)
         (furge-by-own-method-unthorough dexed-get-method)))
@@ -2337,50 +2423,61 @@
 (define-furge-by-own-method
   internal:merge
   merge?
-  call-merge
+  getfx-call-merge
   dex-merge
-  merge-by-own-method::raise-different-input-methods-error
-  merge-by-own-method::raise-cannot-get-output-method-error
-  merge-by-own-method::raise-different-output-method-error
-  merge-by-own-method::get-method
+  merge-by-own-method::getfx-err-different-input-methods
+  merge-by-own-method::getfx-err-cannot-get-output-method
+  merge-by-own-method::getfx-err-different-output-method
+  merge-by-own-method::getfx-get-method
   merge-by-own-method-delegate/c
   merge-internals-by-own-method
   tag:merge-by-own-method
   merge-by-own-method-thorough
   merge-by-own-method-unthorough
   merge-by-own-method
-  "expected dexed-delegate not to return for merge-by-own-method::raise-different-input-methods-error"
-  "expected dexed-delegate not to return for merge-by-own-method::raise-cannot-get-output-method-error"
-  "expected dexed-delegate not to return for merge-by-own-method::raise-different-output-method-error"
+  "expected the pure result of dexed-delegate for merge-by-own-method::getfx-err-different-input-methods to be a getfx effectful computation"
+  "expected dexed-delegate not to have a result for merge-by-own-method::getfx-err-different-input-methods"
+  "expected the pure result of dexed-delegate for merge-by-own-method::getfx-err-cannot-get-output-method to be a getfx effectful computation"
+  "expected dexed-delegate not to have a result for merge-by-own-method::getfx-err-cannot-get-output-method"
+  "expected the pure result of dexed-delegate for merge-by-own-method::getfx-err-different-output-method to be a getfx effectful computation"
+  "expected dexed-delegate not to have a result for merge-by-own-method::getfx-err-different-output-method"
   "merge-result"
-  "expected the result of dexed-delegate for merge-by-own-method::get-method to be a maybe of a merge"
-  "expected the result of dexed-get-method to be a maybe of a merge")
+  "expected the pure result of dexed-delegate for merge-by-own-method::getfx-get-method to be a getfx effectful computation"
+  "expected the result of dexed-delegate for merge-by-own-method::getfx-get-method to be a maybe of a merge"
+  "expected the pure result of dexed-getfx-get-method to be a getfx effectful computation"
+  "expected the result of dexed-getfx-get-method to be a maybe of a merge")
 
 (define-furge-by-own-method
   internal:fuse
   fuse?
-  call-fuse
+  getfx-call-fuse
   dex-fuse
-  fuse-by-own-method::raise-different-input-methods-error
-  fuse-by-own-method::raise-cannot-get-output-method-error
-  fuse-by-own-method::raise-different-output-method-error
-  fuse-by-own-method::get-method
+  fuse-by-own-method::getfx-err-different-input-methods
+  fuse-by-own-method::getfx-err-cannot-get-output-method
+  fuse-by-own-method::getfx-err-different-output-method
+  fuse-by-own-method::getfx-get-method
   fuse-by-own-method-delegate/c
   fuse-internals-by-own-method
   tag:fuse-by-own-method
   fuse-by-own-method-thorough
   fuse-by-own-method-unthorough
   fuse-by-own-method
-  "expected dexed-delegate not to return for fuse-by-own-method::raise-different-input-methods-error"
-  "expected dexed-delegate not to return for fuse-by-own-method::raise-cannot-get-output-method-error"
-  "expected dexed-delegate not to return for fuse-by-own-method::raise-different-output-method-error"
+  "expected the pure result of dexed-delegate for fuse-by-own-method::getfx-err-different-input-methods to be a getfx effectful computation"
+  "expected dexed-delegate not to have a result for fuse-by-own-method::getfx-err-different-input-methods"
+  "expected the pure result of dexed-delegate for fuse-by-own-method::getfx-err-cannot-get-output-method to be a getfx effectful computation"
+  "expected dexed-delegate not to have a result for fuse-by-own-method::getfx-err-cannot-get-output-method"
+  "expected the pure result of dexed-delegate for fuse-by-own-method::getfx-err-different-output-method to be a getfx effectful computation"
+  "expected dexed-delegate not to have a result for fuse-by-own-method::getfx-err-different-output-method"
   "fuse-result"
-  "expected the result of dexed-delegate for fuse-by-own-method::get-method to be a maybe of a fuse"
-  "expected the result of dexed-get-method to be a maybe of a fuse")
+  "expected the pure result of dexed-delegate for fuse-by-own-method::getfx-get-method to be a getfx effectful computation"
+  "expected the result of dexed-delegate for fuse-by-own-method::getfx-get-method to be a maybe of a fuse"
+  "expected the pure result of dexed-getfx-get-method to be a getfx effectful computation"
+  "expected the result of dexed-getfx-get-method to be a maybe of a fuse")
 
 
 (struct-easy
-  (furge-internals-fix call-furge unwrap-internals dexed-unwrap)
+  (furge-internals-fix
+    getfx-call-furge getfx-unwrap-internals dexed-getfx-unwrap)
   #:other
   
   #:methods internal:gen:furge-internals
@@ -2390,8 +2487,9 @@
       'tag:furge-fix)
     
     (define (furge-internals-autoname this)
-      (dissect this (furge-internals-fix _ _ dexed-unwrap)
-      #/dissect (dexed-get-name dexed-unwrap) (internal:name rep)
+      (dissect this (furge-internals-fix _ _ dexed-getfx-unwrap)
+      #/dissect (dexed-get-name dexed-getfx-unwrap)
+        (internal:name rep)
       #/list 'tag:furge-fix rep))
     
     (define (furge-internals-autodex this other)
@@ -2399,51 +2497,67 @@
       #/dissect other (furge-internals-fix _ _ b)
       #/compare-by-dex (dex-dexed) a b))
     
-    (define (furge-internals-call this a b)
+    (define (getfx-furge-internals-call this a b)
       (dissect this
         (furge-internals-fix
-          call-furge unwrap-internals dexed-unwrap)
-      #/call-furge (unwrap-internals this dexed-unwrap) a b))
+          getfx-call-furge getfx-unwrap-internals dexed-getfx-unwrap)
+      #/getfx-bind (getfx-unwrap-internals this dexed-getfx-unwrap)
+      #/fn unwrapped
+      #/getfx-call-furge unwrapped a b))
   ])
 
-(define/contract (merge-fix dexed-unwrap)
+(define/contract (merge-fix dexed-getfx-unwrap)
   (-> (dexed-first-order/c #/-> merge? merge?) merge?)
   (internal:merge #/furge-internals-fix
-    call-merge
-    (fn internals dexed-unwrap
+    getfx-call-merge
+    (fn internals dexed-getfx-unwrap
       (w- this (internal:merge internals)
-      #/w- unwrap (dexed-get-value dexed-unwrap)
-      #/w- result (unwrap this)
+      #/w- getfx-unwrap (dexed-get-value dexed-getfx-unwrap)
+      #/w- getfx-result (getfx-unwrap this)
+      #/expect (getfx? getfx-result) #t
+        (getfx-err-unraise #/raise-arguments-error 'merge-fix
+          "expected the pure result of dexed-getfx-unwrap to be a getfx effectful computation"
+          "dexed-getfx-unwrap" dexed-getfx-unwrap
+          "this" this
+          "getfx-result" getfx-result)
+      #/getfx-bind getfx-result #/fn result
       #/expect (merge? result) #t
-        (raise-arguments-error 'merge-fix
-          "expected the result of dexed-unwrap to be a merge"
-          "dexed-unwrap" dexed-unwrap
+        (getfx-err-unraise #/raise-arguments-error 'merge-fix
+          "expected the result of dexed-getfx-unwrap to be a merge"
+          "dexed-getfx-unwrap" dexed-getfx-unwrap
           "this" this
           "result" result)
-        result))
-    dexed-unwrap))
+      #/getfx-done result))
+    dexed-getfx-unwrap))
 
-(define/contract (fuse-fix dexed-unwrap)
+(define/contract (fuse-fix dexed-getfx-unwrap)
   (-> (dexed-first-order/c #/-> fuse? fuse?) fuse?)
   (internal:fuse #/furge-internals-fix
-    call-fuse
-    (fn internals dexed-unwrap
-      (w- this (internal:merge internals)
-      #/w- unwrap (dexed-get-value dexed-unwrap)
-      #/w- result (unwrap this)
+    getfx-call-fuse
+    (fn internals dexed-getfx-unwrap
+      (w- this (internal:fuse internals)
+      #/w- getfx-unwrap (dexed-get-value dexed-getfx-unwrap)
+      #/w- getfx-result (getfx-unwrap this)
+      #/expect (getfx? getfx-result) #t
+        (getfx-err-unraise #/raise-arguments-error 'fuse-fix
+          "expected the pure result of dexed-getfx-unwrap to be a getfx effectful computation"
+          "dexed-getfx-unwrap" dexed-getfx-unwrap
+          "this" this
+          "getfx-result" getfx-result)
+      #/getfx-bind getfx-result #/fn result
       #/expect (fuse? result) #t
-        (raise-arguments-error 'fuse-fix
-          "expected the result of dexed-unwrap to be a fuse"
-          "dexed-unwrap" dexed-unwrap
+        (getfx-err-unraise #/raise-arguments-error 'fuse-fix
+          "expected the result of dexed-getfx-unwrap to be a fuse"
+          "dexed-getfx-unwrap" dexed-getfx-unwrap
           "this" this
           "result" result)
-        result))
-    dexed-unwrap))
+      #/getfx-done result))
+    dexed-getfx-unwrap))
 
 
 (struct-easy
   (furge-internals-struct
-    autoname-furge dex-furge call-furge
+    autoname-furge dex-furge getfx-call-furge
     descriptor constructor counts? fields)
   #:other
   
@@ -2482,27 +2596,29 @@
           #/dissect b-field (list b-getter b-position b-furge)
           #/compare-by-dex dex-furge a-furge b-furge))))
     
-    (define (furge-internals-call this a b)
+    (define (getfx-furge-internals-call this a b)
       (dissect this
         (furge-internals-struct
-          _ _ call-furge descriptor constructor counts? fields)
-      #/expect (counts? a) #t (nothing)
-      #/expect (counts? b) #t (nothing)
+          _ _ getfx-call-furge descriptor constructor counts? fields)
+      #/expect (counts? a) #t (getfx-done #/nothing)
+      #/expect (counts? b) #t (getfx-done #/nothing)
       #/w- n (length fields)
       #/w-loop next fields fields args (hasheq)
         (expect fields (cons field fields)
-          (just
-          #/apply constructor #/build-list n #/fn i #/hash-ref args i)
+          (getfx-done #/just
+            (apply constructor
+              (build-list n #/fn i #/hash-ref args i)))
         #/dissect field (list getter position furge)
-        #/maybe-bind (call-furge furge (getter a) (getter b))
+        #/getmaybefx-bind
+          (getfx-call-furge furge (getter a) (getter b))
         #/fn furged
-        #/next fields #/hash-set args position furged)))
+        #/next fields (hash-set args position furged))))
   ])
 
 (define-for-syntax
   (expand-furge-struct-by-field-position
     stx furges-message furge-encapsulated-id autoname-furge-id
-    dex-furge-id call-furge-id)
+    dex-furge-id getfx-call-furge-id)
   (syntax-parse stx #/
     (_ struct-tag:id [field-position:nat field-furge:expr] ...)
   #/dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
@@ -2520,7 +2636,7 @@
   #/syntax-protect
     #`(#,furge-encapsulated-id
       #/furge-internals-struct
-        #,autoname-furge-id #,dex-furge-id #,call-furge-id
+        #,autoname-furge-id #,dex-furge-id #,getfx-call-furge-id
         #,struct:foo #,make-foo #,foo?
       #/list
         #,@(list-map fields #/fn field
@@ -2546,16 +2662,22 @@
 
 (define-syntax (merge-struct-by-field-position stx)
   (expand-furge-struct-by-field-position stx "merges"
-    #'internal:merge #'autoname-merge #'(dex-merge) #'call-merge))
+    #'internal:merge
+    #'autoname-merge
+    #'(dex-merge)
+    #'getfx-call-merge))
 
 (define-syntax (fuse-struct-by-field-position stx)
   (expand-furge-struct-by-field-position stx "fuses"
-    #'internal:fuse #'autoname-fuse #'(dex-fuse) #'call-fuse))
+    #'internal:fuse
+    #'autoname-fuse
+    #'(dex-fuse)
+    #'getfx-call-fuse))
 
 (define-for-syntax
   (expand-furge-struct
     stx furges-message furge-encapsulated-id autoname-furge-id
-    dex-furge-id call-furge-id)
+    dex-furge-id getfx-call-furge-id)
   (syntax-parse stx #/ (_ struct-tag:id field-furge:expr ...)
   #/dissect (get-immutable-root-ancestor-struct-info stx #'struct-tag)
     (list struct:foo make-foo foo? getters)
@@ -2571,7 +2693,7 @@
   #/syntax-protect
     #`(#,furge-encapsulated-id
       #/furge-internals-struct
-        #,autoname-furge-id #,dex-furge-id #,call-furge-id
+        #,autoname-furge-id #,dex-furge-id #,getfx-call-furge-id
         #,struct:foo #,make-foo #,foo?
       #/list
         #,@(list-kv-map (map list fields getters) #/fn position field
@@ -2580,11 +2702,17 @@
 
 (define-syntax (merge-struct stx)
   (expand-furge-struct stx "merges"
-    #'internal:merge #'autoname-merge #'(dex-merge) #'call-merge))
+    #'internal:merge
+    #'autoname-merge
+    #'(dex-merge)
+    #'getfx-call-merge))
 
 (define-syntax (fuse-struct stx)
   (expand-furge-struct stx "fuses"
-    #'internal:fuse #'autoname-fuse #'(dex-fuse) #'call-fuse))
+    #'internal:fuse
+    #'autoname-fuse
+    #'(dex-fuse)
+    #'getfx-call-fuse))
 
 
 
@@ -2615,26 +2743,30 @@
   #/dissect table (internal:table hash)
   #/internal:table #/hash-set-maybe hash key maybe-val))
 
-(define/contract (table-map-fuse table fuse key-to-operand)
-  (-> table? fuse? (-> name? any/c) maybe?)
+(define/contract
+  (getfx-table-map-fuse table fuse getfx-key-to-operand)
+  (-> table? fuse? (-> name? getfx?) #/getfx/c maybe?)
   (dissect table (internal:table hash)
-  #/w- operands
-    (list-map (hash-keys hash) #/fn key
-      (key-to-operand #/internal:name key))
+  #/getfx-bind
+    (getfx-list-map #/list-map (hash-keys hash) #/fn key
+      (getfx-key-to-operand #/internal:name key))
+  #/fn operands
   
   ; NOTE: We do a first pass over the operands to make sure they're
   ; all in the fuse's domain because otherwise a client could detect
   ; that their sometimes-non-terminating `fuse-by-own-method` wasn't
   ; called on certain operands.
-  #/if
-    (list-any operands #/fn operand
-      (nothing? #/call-fuse fuse operand operand))
-    (nothing)
+  #/getmaybefx-bind
+    (getmaybefx-list-map #/list-map operands #/fn operand
+      (getfx-call-fuse fuse operand operand))
+  #/dissectfn _
   
-  #/expect operands (cons so-far operands) (nothing)
+  #/expect operands (cons so-far operands) (getfx-done #/nothing)
   #/w-loop next so-far so-far operands operands
-    (expect operands (cons operand operands) (just so-far)
-    #/maybe-bind (call-fuse fuse so-far operand) #/fn so-far
+    (expect operands (cons operand operands)
+      (getfx-done #/just so-far)
+    #/getmaybefx-bind (getfx-call-fuse fuse so-far operand)
+    #/fn so-far
     #/next so-far operands)))
 
 (define/contract (assocs->table-if-mutually-unique assocs)
@@ -2717,6 +2849,31 @@
         #f))
   #/dissectfn (cons k v)
     (list (internal:name k) v)))
+
+; TODO: See if we should export this from somewhere.
+(define/contract (monad-table-each fx-done fx-bind table-of-fx)
+  (-> (-> any/c any/c) (-> any/c (-> any/c any/c) any/c) table? any/c)
+  (monad-map fx-done fx-bind
+    (monad-list-map fx-done fx-bind
+      (list-map (table->sorted-list table-of-fx)
+      #/dissectfn (list k fx-v)
+        (monad-map fx-done fx-bind fx-v #/fn v #/list k v)))
+  #/fn assocs
+    (dissect (assocs->table-if-mutually-unique assocs) (just result)
+      result)))
+
+; TODO: See if we should export this.
+(define/contract (getmaybefx-table-each table-of-getmaybefx)
+  (-> table? #/getfx/c #/maybe/c table?)
+  ; TODO: If we export this, export it under this contract instead.
+  ; The problem with using this contract internally is that the
+  ; implementation of `table-v-of` depends on `merge-table`, which
+  ; depends on this.
+;  (-> (table-v-of #/getfx/c maybe?) #/getfx/c #/maybe/c table?)
+  (monad-table-each
+    (fn result #/getfx-done #/just result)
+    (fn effects then #/getmaybefx-bind effects then)
+    table-of-getmaybefx))
 
 (struct-easy (dex-internals-table dex-val)
   #:other
@@ -3062,7 +3219,7 @@
 
 (struct-easy
   (furge-internals-table
-    autoname-furge dex-furge call-furge furge-val)
+    autoname-furge dex-furge getfx-call-furge furge-val)
   #:other
   
   #:methods internal:gen:furge-internals
@@ -3081,35 +3238,35 @@
       #/dissect other (furge-internals-table _ _ _ b)
       #/compare-by-dex dex-furge a b))
     
-    (define (furge-internals-call this a b)
-      (dissect this (furge-internals-table _ _ call-furge furge-val)
-      #/expect a (internal:table a) (nothing)
-      #/expect b (internal:table b) (nothing)
-      ; NOTE: We run `call-furge` on all the entries to detect if any
-      ; of them is outside the furge's domain.
-      #/w- a (hash-v-map a #/fn v #/call-furge furge-val v v)
-      #/w- b (hash-v-map b #/fn v #/call-furge furge-val v v)
-      #/if (hash-v-any a #/fn v #/nothing? v) (nothing)
-      #/if (hash-v-any b #/fn v #/nothing? v) (nothing)
-      #/w- furged
+    (define (getfx-furge-internals-call this a b)
+      (dissect this
+        (furge-internals-table _ _ getfx-call-furge furge-val)
+      #/expect a (internal:table a) (getfx-done #/nothing)
+      #/expect b (internal:table b) (getfx-done #/nothing)
+      ; NOTE: We run `getfx-call-furge` on all the entries to detect
+      ; if any of them is outside the furge's domain.
+      #/getmaybefx-bind
+        (getmaybefx-table-each #/internal:table #/hash-v-map a #/fn v
+          (getfx-call-furge furge-val v v))
+      #/dissectfn (internal:table a)
+      #/getmaybefx-bind
+        (getmaybefx-table-each #/internal:table #/hash-v-map b #/fn v
+          (getfx-call-furge furge-val v v))
+      #/dissectfn (internal:table b)
+      #/getmaybefx-table-each #/internal:table
         (hash-union a b #:combine #/fn a b
-          (maybe-bind a #/fn a
-          #/maybe-bind b #/fn b
-          #/call-furge furge-val a b))
-      #/if (hash-v-any furged #/fn v #/nothing? v) (nothing)
-      #/just #/internal:table
-      #/hash-v-map furged #/dissectfn (just v) v))
+          (getfx-call-furge furge-val a b))))
   ])
 
 (define/contract (merge-table merge-val)
   (-> merge? merge?)
   (internal:merge #/furge-internals-table
-    autoname-merge (dex-merge) call-merge merge-val))
+    autoname-merge (dex-merge) getfx-call-merge merge-val))
 
 (define/contract (fuse-table fuse-val)
   (-> fuse? fuse?)
   (internal:fuse #/furge-internals-table
-    autoname-fuse (dex-fuse) call-fuse fuse-val))
+    autoname-fuse (dex-fuse) getfx-call-fuse fuse-val))
 
 
 
@@ -3121,30 +3278,31 @@
   (internal:fusable-function? v))
 
 (define/contract (make-fusable-function proc)
-  (-> (-> any/c any/c) fusable-function?)
+  (-> (-> any/c getfx?) fusable-function?)
   (if (fusable-function? proc) proc
   #/internal:fusable-function proc))
 
 
 
 (struct-easy
-  (fuse-fusable-function::raise-cannot-combine-results-error
+  (fuse-fusable-function::getfx-err-cannot-combine-results
     method a b a-result b-result))
 (struct-easy
-  (fuse-fusable-function::arg-to-method arg))
+  (fuse-fusable-function::getfx-arg-to-method arg))
 
 (define/contract fuse-fusable-function-delegate/c
   contract?
   (case->
     (->
       (match/c
-        fuse-fusable-function::raise-cannot-combine-results-error
+        fuse-fusable-function::getfx-err-cannot-combine-results
         fuse? any/c any/c any/c any/c)
-      none/c)
-    (-> (match/c fuse-fusable-function::arg-to-method any/c) fuse?)))
+      (getfx/c none/c))
+    (-> (match/c fuse-fusable-function::getfx-arg-to-method any/c)
+      (getfx/c fuse?))))
 
 (define/contract
-  (furge-internals-fusable-function-delegate-raise-cannot-combine-results-error
+  (getfx-err-furge-internals-fusable-function-delegate-cannot-combine-results
     dexed-delegate method a b a-result b-result)
   (->
     (dexed-first-order/c fuse-fusable-function-delegate/c)
@@ -3153,34 +3311,57 @@
     any/c
     any/c
     any/c
-    none/c)
+    (getfx/c none/c))
   (w- delegate (dexed-get-value dexed-delegate)
-  #/w- result
-    (delegate #/fuse-fusable-function::raise-cannot-combine-results-error
+  #/w- getfx-delegate-result
+    (delegate #/fuse-fusable-function::getfx-err-cannot-combine-results
       method a b a-result b-result)
-  #/raise-arguments-error 'fuse-fusable-function-thorough
-    "expected dexed-delegate not to return for fuse-fusable-function::raise-cannot-combine-results-error"
+  #/expect (getfx? getfx-delegate-result) #t
+    (getfx-err-unraise #/raise-arguments-error
+      'fuse-fusable-function-thorough
+      "expected the pure result of dexed-delegate for fuse-fusable-function::getfx-err-cannot-combine-results to be a getfx effectful computation"
+      "dexed-delegate" dexed-delegate
+      "method" method
+      "a" a
+      "b" b
+      "a-result" a-result
+      "b-result" b-result
+      "getfx-delegate-result" getfx-delegate-result)
+  #/getfx-bind getfx-delegate-result #/fn delegate-result
+  #/getfx-err-unraise #/raise-arguments-error 'fuse-fusable-function-thorough
+    "expected dexed-delegate not to have a result for fuse-fusable-function::getfx-err-cannot-combine-results"
     "dexed-delegate" dexed-delegate
     "method" method
     "a" a
     "b" b
     "a-result" a-result
-    "b-result" b-result))
+    "b-result" b-result
+    "delegate-result" delegate-result))
 
 (define/contract
-  (furge-internals-fusable-function-delegate-arg-to-method
+  (getfx-furge-internals-fusable-function-delegate-arg-to-method
     dexed-delegate arg)
   (-> (dexed-first-order/c fuse-fusable-function-delegate/c) any/c
-    fuse?)
+    (getfx/c fuse?))
   (w- delegate (dexed-get-value dexed-delegate)
-  #/w- result (delegate #/fuse-fusable-function::arg-to-method arg)
+  #/w- getfx-result
+    (delegate #/fuse-fusable-function::getfx-arg-to-method arg)
+  #/expect (getfx? getfx-result) #t
+    (getfx-err-unraise #/raise-arguments-error
+      'fuse-fusable-function-thorough
+      "expected the pure result of dexed-delegate for fuse-fusable-function::getfx-arg-to-method to be a getfx effectful computation"
+      "dexed-delegate" dexed-delegate
+      "arg" arg
+      "getfx-result" getfx-result)
+  #/getfx-bind getfx-result #/fn result
   #/expect (fuse? result) #t
-    (raise-arguments-error 'fuse-fusable-function-thorough
-      "expected the result of dexed-delegate for fuse-fusable-function::arg-to-method to be a fuse"
+    (getfx-err-unraise #/raise-arguments-error
+      'fuse-fusable-function-thorough
+      "expected the result of dexed-delegate for fuse-fusable-function::getfx-arg-to-method to be a fuse"
       "dexed-delegate" dexed-delegate
       "arg" arg
       "result" result)
-    result))
+  #/getfx-done result))
 
 (struct-easy (furge-internals-fusable-function dexed-delegate)
   #:other
@@ -3201,56 +3382,73 @@
       #/dissect other (furge-internals-fusable-function b)
       #/compare-by-dex (dex-dexed) a b))
     
-    (define (furge-internals-call this a b)
+    (define (getfx-furge-internals-call this a b)
       (dissect this (furge-internals-fusable-function dexed-delegate)
-      #/expect a (internal:fusable-function a) (nothing)
-      #/expect b (internal:fusable-function b) (nothing)
-      #/just #/internal:fusable-function #/fn arg
-        (w- method
-          (furge-internals-fusable-function-delegate-arg-to-method
-            dexed-delegate arg)
-        #/w- a-result (a arg)
-        #/w- b-result (b arg)
-        #/expect (call-fuse method a-result b-result) (just result)
-          (furge-internals-fusable-function-delegate-raise-cannot-combine-results-error
-            dexed-delegate method a b a-result b-result)
-          result)))
+      #/getfx-done
+        (expect a (internal:fusable-function a) (nothing)
+        #/expect b (internal:fusable-function b) (nothing)
+        #/just #/internal:fusable-function #/fn arg
+          (getfx-bind
+            (getfx-furge-internals-fusable-function-delegate-arg-to-method
+              dexed-delegate arg)
+          #/fn method
+          #/getfx-bind (a arg) #/fn a-result
+          #/getfx-bind (b arg) #/fn b-result
+          #/getfx-bind (getfx-call-fuse method a-result b-result)
+          #/fn maybe-result
+          #/expect maybe-result (just result)
+            (getfx-err-furge-internals-fusable-function-delegate-cannot-combine-results
+              dexed-delegate method a b a-result b-result)
+          #/getfx-done result))))
   ])
 
 (define/contract (fuse-fusable-function-thorough dexed-delegate)
   (-> (dexed-first-order/c fuse-fusable-function-delegate/c) fuse?)
   (internal:fuse #/furge-internals-fusable-function dexed-delegate))
 
-(struct-easy (fuse-fusable-function-unthorough dexed-arg-to-method)
+(struct-easy
+  (fuse-fusable-function-unthorough dexed-getfx-arg-to-method)
   #:other
   
   #:property prop:procedure
   (fn this command
     (dissect this
-      (fuse-fusable-function-unthorough dexed-arg-to-method)
+      (fuse-fusable-function-unthorough dexed-getfx-arg-to-method)
     #/mat command
-      (fuse-fusable-function::raise-cannot-combine-results-error
+      (fuse-fusable-function::getfx-err-cannot-combine-results
         method a b a-result b-result)
-      (raise-arguments-error 'fuse-fusable-function
+      (getfx-err-unraise #/raise-arguments-error
+        'fuse-fusable-function
         "could not combine the result values"
-        "dexed-arg-to-method" dexed-arg-to-method
+        "dexed-getfx-arg-to-method" dexed-getfx-arg-to-method
         "method" method
         "a" a
         "b" b
         "a-result" a-result
         "b-result" b-result)
-    #/dissect command (fuse-fusable-function::arg-to-method arg)
-    #/w- arg-to-method (dexed-get-value dexed-arg-to-method)
-    #/w- result (arg-to-method arg)
+    #/dissect command (fuse-fusable-function::getfx-arg-to-method arg)
+    #/w- getfx-arg-to-method
+      (dexed-get-value dexed-getfx-arg-to-method)
+    #/w- getfx-result (getfx-arg-to-method arg)
+    #/expect (getfx? getfx-result) #t
+      (getfx-err-unraise #/raise-arguments-error
+        'fuse-fusable-function
+        "expected the pure result of dexed-getfx-arg-to-method to be a getfx effectful computation"
+        "dexed-getfx-arg-to-method" dexed-getfx-arg-to-method
+        "arg" arg
+        "getfx-result" getfx-result)
+    #/getfx-bind getfx-result #/fn result
     #/expect (fuse? result) #t
-      (raise-arguments-error 'fuse-fusable-function
-        "expected the result of dexed-arg-to-method to be a fuse"
-        "dexed-arg-to-method" dexed-arg-to-method
+      (getfx-err-unraise #/raise-arguments-error
+        'fuse-fusable-function
+        "expected the result of dexed-getfx-arg-to-method to be a fuse"
+        "dexed-getfx-arg-to-method" dexed-getfx-arg-to-method
+        "arg" arg
         "result" result)
-      result)))
+    #/getfx-done result)))
 
 (define/contract (fuse-fusable-function dexed-arg-to-method)
-  (-> (dexed-first-order/c #/-> any/c fuse?) fuse?)
+  (-> (dexed-first-order/c #/-> any/c #/getfx/c fuse?) fuse?)
   (fuse-fusable-function-thorough #/just-value #/dexed-of
     (dex-struct fuse-fusable-function-unthorough #/dex-dexed)
     (fuse-fusable-function-unthorough dexed-arg-to-method)))
@@ -3373,32 +3571,32 @@
 ; TODO: Come up with a better name for this, and export it from
 ; `effection/order`.
 (define/contract
-  (table-kv-map-fuse-default table fuse-0 fuse-2 kv-to-operand)
+  (pure-table-kv-map-fuse-default table fuse-0 fuse-2 kv-to-operand)
   (-> table? any/c fuse? (-> name? any/c any/c) any/c)
   (mat
-    (table-map-fuse table fuse-2 #/fn k
+    (pure-run-getfx #/getfx-table-map-fuse table fuse-2 #/fn k
       (dissect (table-get k table) (just v)
-      #/kv-to-operand k v))
+      #/getfx-done #/kv-to-operand k v))
     (just result)
     result
     fuse-0))
 
 (define/contract (table-kv-map table kv-to-v)
   (-> table? (-> name? any/c any/c) table?)
-  (table-kv-map-fuse-default table (table-empty)
+  (pure-table-kv-map-fuse-default table (table-empty)
     (fuse-by-merge #/merge-table #/merge-by-dex #/dex-give-up)
   #/fn k v
     (table-shadow k (just #/kv-to-v k v) #/table-empty)))
 
 (define/contract (table-kv-all? table kv-accepted?)
   (-> table? (-> name? any/c boolean?) table?)
-  (table-kv-map-fuse-default table #t
+  (pure-table-kv-map-fuse-default table #t
     (fuse-by-merge #/merge-boolean-by-and)
     kv-accepted?))
 
 (define/contract (table-kv-any? table kv-accepted?)
   (-> table? (-> name? any/c boolean?) table?)
-  (table-kv-map-fuse-default table #f
+  (pure-table-kv-map-fuse-default table #f
     (fuse-by-merge #/merge-boolean-by-or)
     kv-accepted?))
 
