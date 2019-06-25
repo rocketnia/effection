@@ -29,11 +29,11 @@
   struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
 
-(require #/only-in effection/order dex-trivial eq-by-dex? table-v-of)
+(require #/only-in effection/order eq-by-dex? table-v-of)
 (require #/only-in effection/order/base
-  dex? dex-dex dexed? dexed/c dexed-first-order/c dexed-get-name
-  dexed-get-value dex-name fuse? name? name-of ordering-eq table?
-  table-empty? table-empty table-get table-shadow)
+  dex? dexed? dexed/c dexed-first-order/c dexed-get-name
+  dexed-get-value dex-name fuse? name? ordering-eq table? table-empty?
+  table-empty table-get table-shadow)
 (require #/only-in (submod effection/order/base private)
   dex-internals-simple-dexed-of)
 (require effection/private/getfx)

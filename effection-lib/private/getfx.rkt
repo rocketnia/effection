@@ -10,29 +10,15 @@
 ; documentation correctly says it is, we require it from there.
 (require #/only-in racket/contract get/build-late-neg-projection)
 (require #/only-in racket/contract/base
-  -> ->i any any/c contract? contract-name contract-out list/c listof
-  none/c or/c rename-contract)
+  -> any any/c contract-name listof none/c)
 (require #/only-in racket/contract/combinator
-  blame-add-context coerce-contract contract-first-order-passes?
-  make-contract make-flat-contract raise-blame-error)
+  blame-add-context coerce-contract make-contract make-flat-contract
+  raise-blame-error)
 (require #/only-in racket/contract/region define/contract)
-(require #/only-in racket/hash hash-union)
-(require #/only-in racket/math natural?)
 (require #/only-in syntax/parse/define define-simple-macro)
 
-(require #/only-in lathe-comforts
-  dissect dissectfn expect expectfn fn mat w- w-loop)
-(require #/only-in lathe-comforts/hash
-  hash-ref-maybe hash-v-all hash-v-any hash-v-map)
-(require #/only-in lathe-comforts/list
-  list-any list-bind list-foldl list-map list-zip-map nat->maybe)
-(require #/only-in lathe-comforts/match match/c)
-(require #/only-in lathe-comforts/maybe
-  just maybe? maybe-bind maybe/c nothing)
-(require #/only-in lathe-comforts/struct
-  auto-equal auto-write define-imitation-simple-struct istruct/c
-  struct-easy)
-(require #/only-in lathe-comforts/trivial trivial trivial?)
+(require #/only-in lathe-comforts dissect expect fn mat w- w-loop)
+(require #/only-in lathe-comforts/maybe just maybe? maybe/c nothing)
 
 
 (provide #/all-defined-out)
