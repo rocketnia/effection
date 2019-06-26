@@ -84,6 +84,9 @@
   [ordering-eq? (-> any/c boolean?)]
   [ordering-private? (-> any/c boolean?)]
   [ordering-gt? (-> any/c boolean?)])
+; TODO: See if we should export this publicly.
+(module+ private #/provide
+  maybe-ordering-or)
 (provide dex-result? cline-result?)
 
 

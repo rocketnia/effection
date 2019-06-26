@@ -32,12 +32,13 @@
 
 (require #/only-in effection/order eq-by-dex? table-v-of)
 (require #/only-in effection/order/base
-  dex? dexed? dexed/c dexed-first-order/c dexed-get-name
-  dexed-get-value dex-name fuse? name? ordering-eq table? table-empty?
-  table-empty table-get table-shadow)
+  compare-by-dex dex? dexed? dexed/c dexed-first-order/c
+  dexed-get-name dexed-get-value dex-name fuse? name? ordering-eq
+  table? table-empty? table-empty table-get table-shadow)
 (require #/only-in (submod effection/order/base private)
-  dex-internals-simple-dexed-of)
+  dex-internals-simple-dexed-of maybe-ordering-or)
 (require effection/private/getfx)
+(require #/only-in effection/private/order object-identities-autodex)
 
 (require #/prefix-in unsafe: #/only-in effection/order/unsafe
   dex fuse gen:dex-internals gen:furge-internals name table)
@@ -51,8 +52,8 @@
   [extfx? (-> any/c boolean?)]
   [dspace? (-> any/c boolean?)]
   [dspace-shadower (-> name? dspace? dspace?)]
-  [dspace-eq? (-> dspace? dspace? boolean?)]
   [dex-dspace (-> dex?)]
+  [dspace-eq? (-> dspace? dspace? boolean?)]
   [dspace-descends? (-> dspace? dspace? boolean?)]
   
   [error-definer? (-> any/c boolean?)]
@@ -504,12 +505,6 @@
     (name-subname key-name name)
     (cons name parents-list)))
 
-(define (dspace-eq? a b)
-  (dissect a (internal:dspace a-runtime-symbol a-name _)
-  #/dissect a (internal:dspace b-runtime-symbol b-name _)
-  #/and (eq? a-runtime-symbol b-runtime-symbol)
-  #/eq-by-dex? (dex-name) a-name b-name))
-
 (struct-easy (dex-internals-dspace)
   #:other
   
@@ -538,13 +533,20 @@
       (dex-internals-simple-dexed-of this x))
     
     (define (dex-internals-compare this a b)
-      (if (and (dspace? a) (dspace? b))
-        (just #/dspace-eq? a b)
-        (nothing)))
+      (expect a (internal:dspace a-runtime-symbol a-name _) (nothing)
+      #/expect b (internal:dspace b-runtime-symbol b-name _) (nothing)
+      #/maybe-ordering-or
+        (just #/object-identities-autodex
+          a-runtime-symbol
+          b-runtime-symbol)
+        (compare-by-dex (dex-name) a-name b-name)))
   ])
 
 (define (dex-dspace)
   (unsafe:dex #/dex-internals-dspace))
+
+(define (dspace-eq? a b)
+  (eq-by-dex? (dex-dspace) a b))
 
 (define (dspace-descends? ancestor descendant)
   (dissect ancestor
@@ -830,7 +832,9 @@
         (nothing)
       #/expect b (internal:authorized-name b-ds b-n b-parents)
         (nothing)
-      #/just #/and (dspace-eq? a b) (eq-by-dex? (dex-name) a-n b-n)))
+      #/maybe-ordering-or
+        (compare-by-dex (dex-dspace) a-ds b-ds)
+        (compare-by-dex (dex-name) a-n b-n)))
   ])
 
 (define (dex-authorized-name)
