@@ -430,7 +430,7 @@
 
 
 
-(struct-easy (dex-internals-particular dex-val name-rep val)
+(struct-easy (dex-internals-particular dex-val name val)
   #:other
   
   #:methods internal:gen:dex-internals
@@ -440,41 +440,48 @@
       'tag:dex-particular)
     
     (define (dex-internals-autoname this)
-      (dissect this (dex-internals-particular dex-val name-rep val)
+      (dissect this (dex-internals-particular dex-val name val)
+      #/dissect name (internal:name name-rep)
       #/list 'tag:dex-particular name-rep))
     
     (define (dex-internals-autodex this other)
       (dissect this
-        (dex-internals-particular a-dex-val a-name-rep a-val)
+        (dex-internals-particular a-dex-val a-name a-val)
       #/dissect other
-        (dex-internals-particular b-dex-val b-name-rep b-val)
+        (dex-internals-particular b-dex-val b-name b-val)
       #/maybe-ordering-or
         (compare-by-dex (dex-dex) a-dex-val b-dex-val)
         (compare-by-dex a-dex-val a-val b-val)))
     
     (define (dex-internals-in? this x)
-      (dissect this (dex-internals-particular dex-val name-rep val)
-      #/mat (compare-by-dex dex-val val x) (just #/ordering-eq)
-        #t
-        #f))
+      (dissect this (dex-internals-particular dex-val name val)
+      #/expect (compare-by-dex dex-val val x) (just #/ordering-eq) #f
+        #t))
     
     (define (dex-internals-name-of this x)
-      (dissect this (dex-internals-particular dex-val name-rep val)
-      #/name-of dex-val x))
+      (dissect this (dex-internals-particular dex-val name val)
+      #/expect (compare-by-dex dex-val val x) (just #/ordering-eq)
+        (nothing)
+      #/just name))
     
     (define (dex-internals-dexed-of this x)
-      (dissect this (dex-internals-particular dex-val name-rep val)
+      (dissect this (dex-internals-particular dex-val name val)
+      #/expect (compare-by-dex dex-val val x) (just #/ordering-eq)
+        (nothing)
       #/dexed-of dex-val x))
     
     (define (dex-internals-compare this a b)
-      (dissect this (dex-internals-particular dex-val name-rep val)
-      #/compare-by-dex dex-val a b))
+      (dissect this (dex-internals-particular dex-val name val)
+      #/expect (compare-by-dex dex-val val a) (just #/ordering-eq)
+        (nothing)
+      #/expect (compare-by-dex dex-val val b) (just #/ordering-eq)
+        (nothing)
+      #/just #/ordering-eq))
   ])
 
 (define/contract (dex-particular dex-val name val)
   (-> dex? name? any/c dex?)
-  (dissect name (internal:name name-rep)
-  #/internal:dex #/dex-internals-particular dex-val name-rep val))
+  (internal:dex #/dex-internals-particular dex-val name val))
 
 
 (struct-easy (dex-internals-for-dexed dex)
