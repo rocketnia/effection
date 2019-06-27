@@ -2949,7 +2949,13 @@
   
   ; We use a merge sort. We start with one-element lists (which are
   ; trivially sorted) and sweep back and forth merging the sorted
-  ; lists in pairs until there's only one sorted list left.
+  ; lists in pairs until there's only one sorted list left. (We sweep
+  ; back and forth mainly to avoid the small cost of reversing the
+  ; list on each iteration.)
+  ;
+  ; This algorithm is inspired by Donnacha Oisín Kidney's discussion
+  ; of balancing folds and their application to merge sort at
+  ; <https://doisinkidney.com/posts/2018-12-21-balancing-scans.html>.
   ;
   ; TODO: See if we ought to use a different algorithm for some
   ; reason.
