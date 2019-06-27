@@ -1820,10 +1820,10 @@
     
     (define (cline-internals-compare this a b)
       (dissect this (cline-internals-flip cline)
-      #/w- unflipped-result (compare-by-cline cline a b)
-      #/mat unflipped-result (ordering-lt) (ordering-gt)
-      #/mat unflipped-result (ordering-gt) (ordering-lt)
-        unflipped-result))
+      #/maybe-map (compare-by-cline cline a b) #/fn unflipped-result
+        (mat unflipped-result (ordering-lt) (ordering-gt)
+        #/mat unflipped-result (ordering-gt) (ordering-lt)
+          unflipped-result)))
   ])
 
 (define/contract (cline-flip cline)
