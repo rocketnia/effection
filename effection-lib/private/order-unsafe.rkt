@@ -14,10 +14,10 @@
   dex-internals-tag
   dex-internals-autoname
   dex-internals-autodex
-  dex-internals-in?
-  dex-internals-name-of
-  dex-internals-dexed-of
-  dex-internals-compare)
+  getfx-dex-internals-is-in
+  getfx-dex-internals-name-of
+  getfx-dex-internals-dexed-of
+  getfx-dex-internals-compare)
 (provide #/struct-out dex)
 
 (provide
@@ -27,8 +27,8 @@
   cline-internals-autoname
   cline-internals-autodex
   cline-internals-dex
-  cline-internals-in?
-  cline-internals-compare)
+  getfx-cline-internals-is-in
+  getfx-cline-internals-compare)
 (provide #/struct-out cline)
 
 (provide
@@ -64,10 +64,10 @@
   (dex-internals-tag dex-internals)
   (dex-internals-autoname dex-internals)
   (dex-internals-autodex dex-internals other)
-  (dex-internals-in? dex-internals x)
-  (dex-internals-name-of dex-internals x)
-  (dex-internals-dexed-of dex-internals x)
-  (dex-internals-compare dex-internals a b))
+  (getfx-dex-internals-is-in dex-internals x)
+  (getfx-dex-internals-name-of dex-internals x)
+  (getfx-dex-internals-dexed-of dex-internals x)
+  (getfx-dex-internals-compare dex-internals a b))
 
 (struct-easy (dex internals))
 
@@ -79,8 +79,8 @@
   (cline-internals-autoname cline-internals)
   (cline-internals-autodex cline-internals other)
   (cline-internals-dex cline-internals)
-  (cline-internals-in? cline-internals x)
-  (cline-internals-compare cline-internals a b))
+  (getfx-cline-internals-is-in cline-internals x)
+  (getfx-cline-internals-compare cline-internals a b))
 
 (struct-easy (cline internals))
 

@@ -7,7 +7,8 @@
 (require #/for-syntax #/only-in racket/contract/base -> any/c listof)
 (require #/for-syntax #/only-in racket/contract/region
   define/contract)
-(require #/for-syntax #/only-in syntax/parse expr id nat syntax-parse)
+(require #/for-syntax #/only-in syntax/parse
+  expr expr/c id nat syntax-parse)
 
 (require #/for-syntax #/only-in lathe-comforts
   dissect expect fn mat w- w-loop)
@@ -32,7 +33,7 @@
 (require #/only-in syntax/parse/define define-simple-macro)
 
 (require #/only-in lathe-comforts
-  dissect dissectfn expect fn mat w- w-loop)
+  dissect dissectfn expect expectfn fn mat w- w-loop)
 (require #/only-in lathe-comforts/hash
   hash-ref-maybe hash-set-maybe hash-v-all hash-v-any hash-v-map)
 (require #/only-in lathe-comforts/list
@@ -43,6 +44,7 @@
   nothing?)
 (require #/only-in lathe-comforts/struct
   auto-write define-imitation-simple-struct struct-easy)
+(require #/only-in lathe-comforts/trivial trivial)
 
 (require #/only-in effection/private/order
   cline-result? dex-result? lt-autocline lt-autodex
@@ -60,20 +62,21 @@
   )
 (require #/only-in effection/private/getfx
   getfx? getfx-bind getfx/c getfx-done getfx-err-unraise
-  getfx-list-map getmaybefx-bind getmaybefx-list-map monad-list-map
-  pure-run-getfx)
+  getfx-list-map getfx-map getmaybefx-bind getmaybefx-list-map
+  getmaybefx-map monad-list-map pure-run-getfx)
 (require #/prefix-in internal: #/only-in
   effection/private/order-unsafe
   
   cline cline? cline-internals-autodex cline-internals-autoname
-  cline-internals-compare cline-internals-dex cline-internals-in?
-  cline-internals-tag dex dex? dex-internals? dex-internals-autodex
-  dex-internals-autoname dex-internals-compare dex-internals-dexed-of
-  dex-internals-in? dex-internals-tag dex-internals-name-of
+  cline-internals-dex cline-internals-tag dex dex? dex-internals?
+  dex-internals-autodex dex-internals-autoname dex-internals-tag
   furge-internals-autodex furge-internals-autoname furge-internals-tag
   fusable-function fusable-function? fuse fuse? gen:cline-internals
-  gen:dex-internals gen:furge-internals getfx-furge-internals-call
-  merge merge? name table table?)
+  gen:dex-internals gen:furge-internals getfx-cline-internals-compare
+  getfx-cline-internals-is-in getfx-dex-internals-compare
+  getfx-dex-internals-dexed-of getfx-dex-internals-is-in
+  getfx-dex-internals-name-of getfx-furge-internals-call merge merge?
+  name table table?)
 
 
 ; ==== Orderings ====
@@ -84,9 +87,10 @@
   [ordering-eq? (-> any/c boolean?)]
   [ordering-private? (-> any/c boolean?)]
   [ordering-gt? (-> any/c boolean?)])
-; TODO: See if we should export this publicly.
+; TODO: See if we should export these publicly.
 (module+ private #/provide
-  maybe-ordering-or)
+  maybe-ordering-or
+  getmaybefx-ordering-or)
 (provide dex-result? cline-result?)
 
 
@@ -98,14 +102,15 @@
 (module+ private/unsafe #/provide
   autoname-dex)
 (provide #/contract-out
-  [in-dex? (-> dex? any/c boolean?)]
-  [name-of (-> dex? any/c #/maybe/c name?)]
-  [dexed-of (-> dex? any/c #/maybe/c dexed?)]
-  [compare-by-dex (-> dex? any/c any/c #/maybe/c dex-result?)])
+  [getfx-is-in-dex (-> dex? any/c #/getfx/c boolean?)]
+  [getfx-name-of (-> dex? any/c #/getfx/c #/maybe/c name?)]
+  [getfx-dexed-of (-> dex? any/c #/getfx/c #/maybe/c dexed?)]
+  [getfx-compare-by-dex
+    (-> dex? any/c any/c #/getfx/c #/maybe/c dex-result?)])
 (module+ private/order #/provide
-  eq-by-dex?)
+  getfx-is-eq-by-dex)
 (module+ private #/provide
-  dex-internals-simple-dexed-of)
+  getfx-dex-internals-simple-dexed-of)
 
 (module+ private/unsafe #/provide
   dexed)
@@ -129,8 +134,8 @@
   dex-struct)
 
 (module+ private/unsafe #/provide
-  (struct-out dex-by-own-method::raise-different-methods-error)
-  (struct-out dex-by-own-method::get-method)
+  (struct-out dex-by-own-method::getfx-err-different-methods)
+  (struct-out dex-by-own-method::getfx-get-method)
   dex-by-own-method-delegate/c
   dex-by-own-method-thorough)
 
@@ -140,7 +145,7 @@
 (provide cline?)
 (module+ private/unsafe #/provide
   autoname-cline)
-(provide get-dex-from-cline in-cline? compare-by-cline)
+(provide get-dex-from-cline getfx-is-in-cline getfx-compare-by-cline)
 (provide dex-cline)
 
 (provide
@@ -155,8 +160,8 @@
   cline-flip)
 
 (module+ private/unsafe #/provide
-  (struct-out cline-by-own-method::raise-different-methods-error)
-  (struct-out cline-by-own-method::get-method)
+  (struct-out cline-by-own-method::getfx-err-different-methods)
+  (struct-out cline-by-own-method::getfx-get-method)
   cline-by-own-method-delegate/c
   cline-by-own-method-thorough)
 
@@ -216,7 +221,7 @@
 
 (provide
   table? table-empty? table-get table-empty table-shadow
-  getfx-table-map-fuse table-sort)
+  getfx-table-map-fuse getfx-table-sort)
 (module+ private/order #/provide
   assocs->table-if-mutually-unique)
 (module+ private/unsafe #/provide
@@ -338,6 +343,11 @@
   #/expect result (just #/ordering-eq) result
     second))
 
+(define-simple-macro (getmaybefx-ordering-or first:expr second:expr)
+  (getfx-bind first #/fn result
+  #/expect result (just #/ordering-eq) result
+    second))
+
 (define (maybe-compare-aligned-lists as bs maybe-compare-elems)
   (expect (list as bs) (list (cons a as) (cons b bs))
     (just #/ordering-eq)
@@ -361,37 +371,63 @@
   (dissect x (internal:dex internals)
   #/cons 'name:dex #/internal:dex-internals-autoname internals))
 
-(define (in-dex? dex x)
+(define (getfx-is-in-dex dex x)
   (dissect dex (internal:dex internals)
-  #/internal:dex-internals-in? internals x))
+  #/internal:getfx-dex-internals-is-in internals x))
 
-(define (name-of dex x)
+(define (getfx-name-of dex x)
   (dissect dex (internal:dex internals)
-  #/internal:dex-internals-name-of internals x))
+  #/internal:getfx-dex-internals-name-of internals x))
 
-(define (dexed-of dex x)
+(define (getfx-dexed-of dex x)
   (dissect dex (internal:dex internals)
-  #/internal:dex-internals-dexed-of internals x))
+  #/internal:getfx-dex-internals-dexed-of internals x))
 
-(define (compare-by-dex dex a b)
+(define (getfx-compare-by-dex dex a b)
   (dissect dex (internal:dex internals)
-  #/internal:dex-internals-compare internals a b))
+  #/internal:getfx-dex-internals-compare internals a b))
 
-(define/contract (eq-by-dex? dex a b)
-  (-> dex? any/c any/c boolean?)
-  (expect (compare-by-dex dex a b) (just comparison)
-    (raise-arguments-error 'eq-by-dex?
+(define/contract (getfx-is-eq-by-dex dex a b)
+  (-> dex? any/c any/c #/getfx/c boolean?)
+  (getfx-bind (getfx-compare-by-dex dex a b) #/fn maybe-comparison
+  #/expect maybe-comparison (just comparison)
+    (getfx-err-unraise #/raise-arguments-error 'getfx-is-eq-by-dex
       "expected a and b to be members of the domain of dex"
       "dex" dex
       "a" a
       "b" b)
-  #/ordering-eq? comparison))
+  #/getfx-done #/ordering-eq? comparison))
 
-(define/contract (dex-internals-simple-dexed-of this x)
-  (-> internal:dex-internals? any/c #/maybe/c dexed?)
+(define/contract (getfx-dex-internals-simple-dexed-of this x)
+  (-> internal:dex-internals? any/c #/getfx/c #/maybe/c dexed?)
   (w- this (internal:dex this)
-  #/maybe-map (name-of this x) #/fn name
+  #/getmaybefx-map (getfx-name-of this x) #/fn name
     (dexed (dex-particular this name x) name x)))
+
+; TODO: We use this in Cene for Racket as well. See if we should
+; export this.
+(define-syntax (dexed-struct stx)
+  (syntax-parse stx #/ (_ tag:id dexed-field ...)
+    
+    #:declare dexed-field (expr/c #'dexed? #:name "a field")
+    
+    #:with (dexed-field-result ...)
+    (generate-temporaries #'(dexed-field ...))
+    
+    #'(let ([dexed-field-result dexed-field.c] ...)
+        (just-value #/pure-run-getfx #/getfx-dexed-of
+          (dex-struct tag (dexed-get-dex dexed-field-result) ...)
+          (tag (dexed-get-value dexed-field-result) ...)))))
+
+(define-syntax (dexed-struct-of-dexed stx)
+  (syntax-parse stx #/ (_ tag:id dexed-field ...)
+    
+    #:declare dexed-field (expr/c #'dexed? #:name "a field")
+    
+    #'(dexed-struct tag
+        (just-value #/pure-run-getfx #/getfx-dexed-of (dex-dexed)
+          dexed-field.c)
+        ...)))
 
 
 (define (dexed/c c)
@@ -415,7 +451,8 @@
             '(expected: "a dexed value" given: "~e")
             v)
         #/w- new-value (c-late-neg-projection value missing-party)
-        #/expect (compare-by-dex dex value new-value)
+        #/expect
+          (pure-run-getfx #/getfx-compare-by-dex dex value new-value)
           (just #/ordering-eq)
           (raise-blame-error blame #:missing-party missing-party v
             '(expected: "a dexed value which projected to something ordering-eq to the original" given: "~e")
@@ -450,33 +487,36 @@
       #/dissect other
         (dex-internals-particular b-dex-val b-name b-val)
       #/maybe-ordering-or
-        (compare-by-dex (dex-dex) a-dex-val b-dex-val)
-        (compare-by-dex a-dex-val a-val b-val)))
+        (pure-run-getfx
+          (getfx-compare-by-dex (dex-dex) a-dex-val b-dex-val))
+        (pure-run-getfx
+          (getfx-compare-by-dex (dex-name) a-name b-name))))
     
-    (define (dex-internals-in? this x)
+    (define (getfx-dex-internals-is-in this x)
       (dissect this (dex-internals-particular dex-val name val)
-      #/expect (compare-by-dex dex-val val x) (just #/ordering-eq) #f
-        #t))
+      #/getmaybefx-map (getfx-compare-by-dex dex-val val x)
+      #/fn result
+        (ordering-eq? result)))
     
-    (define (dex-internals-name-of this x)
+    (define (getfx-dex-internals-name-of this x)
       (dissect this (dex-internals-particular dex-val name val)
-      #/expect (compare-by-dex dex-val val x) (just #/ordering-eq)
-        (nothing)
-      #/just name))
+      #/getmaybefx-bind (getfx-compare-by-dex dex-val val x)
+      #/expectfn (ordering-eq) (getfx-done #/nothing)
+      #/getfx-name-of dex-val x))
     
-    (define (dex-internals-dexed-of this x)
+    (define (getfx-dex-internals-dexed-of this x)
       (dissect this (dex-internals-particular dex-val name val)
-      #/expect (compare-by-dex dex-val val x) (just #/ordering-eq)
-        (nothing)
-      #/dexed-of dex-val x))
+      #/getmaybefx-bind (getfx-compare-by-dex dex-val val x)
+      #/expectfn (ordering-eq) (getfx-done #/nothing)
+      #/getfx-dexed-of dex-val x))
     
-    (define (dex-internals-compare this a b)
+    (define (getfx-dex-internals-compare this a b)
       (dissect this (dex-internals-particular dex-val name val)
-      #/expect (compare-by-dex dex-val val a) (just #/ordering-eq)
-        (nothing)
-      #/expect (compare-by-dex dex-val val b) (just #/ordering-eq)
-        (nothing)
-      #/just #/ordering-eq))
+      #/getmaybefx-bind (getfx-compare-by-dex dex-val val a)
+      #/expectfn (ordering-eq) (getfx-done #/nothing)
+      #/getmaybefx-bind (getfx-compare-by-dex dex-val val b)
+      #/expectfn (ordering-eq) (getfx-done #/nothing)
+      #/getfx-done #/just #/ordering-eq))
   ])
 
 (define/contract (dex-particular dex-val name val)
@@ -500,23 +540,23 @@
     (define (dex-internals-autodex this other)
       (dissect this (dex-internals-for-dexed a-dex)
       #/dissect other (dex-internals-for-dexed b-dex)
-      #/compare-by-dex (dex-dex) a-dex b-dex))
+      #/pure-run-getfx #/getfx-compare-by-dex (dex-dex) a-dex b-dex))
     
-    (define (dex-internals-in? this x)
+    (define (getfx-dex-internals-is-in this x)
       (dissect this (dex-internals-for-dexed dex)
-      #/in-dex? dex x))
+      #/getfx-is-in-dex dex x))
     
-    (define (dex-internals-name-of this x)
+    (define (getfx-dex-internals-name-of this x)
       (dissect this (dex-internals-for-dexed dex)
-      #/name-of dex x))
+      #/getfx-name-of dex x))
     
-    (define (dex-internals-dexed-of this x)
+    (define (getfx-dex-internals-dexed-of this x)
       (dissect this (dex-internals-for-dexed dex)
-      #/dexed-of dex x))
+      #/getfx-dexed-of dex x))
     
-    (define (dex-internals-compare this a b)
+    (define (getfx-dex-internals-compare this a b)
       (dissect this (dex-internals-for-dexed dex)
-      #/compare-by-dex dex a b))
+      #/getfx-compare-by-dex dex a b))
   ])
 
 (define/contract (dex-for-dexed dex)
@@ -543,20 +583,21 @@
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
     
-    (define (dex-internals-in? this x)
-      (name? x))
+    (define (getfx-dex-internals-is-in this x)
+      (getfx-done name? x))
     
-    (define (dex-internals-name-of this x)
+    (define (getfx-dex-internals-name-of this x)
       (expect x (internal:name rep) (nothing)
-      #/just #/internal:name #/list 'name:name rep))
+      #/getfx-done #/just #/internal:name #/list 'name:name rep))
     
-    (define (dex-internals-dexed-of this x)
-      (dex-internals-simple-dexed-of this x))
+    (define (getfx-dex-internals-dexed-of this x)
+      (getfx-dex-internals-simple-dexed-of this x))
     
-    (define (dex-internals-compare this a b)
-      (if (and (name? a) (name? b))
-        (just #/names-autodex a b)
-        (nothing)))
+    (define (getfx-dex-internals-compare this a b)
+      (getfx-done
+        (if (and (name? a) (name? b))
+          (just #/names-autodex a b)
+          (nothing))))
   ])
 
 (define/contract (dex-name)
@@ -579,23 +620,26 @@
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
     
-    (define (dex-internals-in? this x)
-      (dex? x))
+    (define (getfx-dex-internals-is-in this x)
+      (getfx-done #/dex? x))
     
-    (define (dex-internals-name-of this x)
-      (if (dex? x)
-        (just #/internal:name #/autoname-dex x)
-        (nothing)))
+    (define (getfx-dex-internals-name-of this x)
+      (getfx-done
+        (if (dex? x)
+          (just #/internal:name #/autoname-dex x)
+          (nothing))))
     
-    (define (dex-internals-dexed-of this x)
-      (dex-internals-simple-dexed-of this x))
+    (define (getfx-dex-internals-dexed-of this x)
+      (getfx-dex-internals-simple-dexed-of this x))
     
-    (define (dex-internals-compare this a b)
-      (expect a (internal:dex a) (nothing)
-      #/expect b (internal:dex b) (nothing)
-      #/w- tag internal:dex-internals-tag
-      #/maybe-ordering-or (just #/lt-autodex (tag a) (tag b) symbol<?)
-      #/internal:dex-internals-autodex a b))
+    (define (getfx-dex-internals-compare this a b)
+      (getfx-done
+        (expect a (internal:dex a) (nothing)
+        #/expect b (internal:dex b) (nothing)
+        #/w- tag internal:dex-internals-tag
+        #/maybe-ordering-or
+          (just #/lt-autodex (tag a) (tag b) symbol<?)
+        #/internal:dex-internals-autodex a b)))
   ])
 
 (define/contract (dex-dex)
@@ -618,21 +662,22 @@
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
     
-    (define (dex-internals-in? this x)
-      (dexed? x))
+    (define (getfx-dex-internals-is-in this x)
+      (getfx-done #/dexed? x))
     
-    (define (dex-internals-name-of this x)
-      (expect (dexed? x) #t (nothing)
-      #/dissect (dexed-get-name x) (internal:name rep)
-      #/just #/internal:name #/list 'name:dexed rep))
+    (define (getfx-dex-internals-name-of this x)
+      (getfx-done
+        (expect (dexed? x) #t (nothing)
+        #/dissect (dexed-get-name x) (internal:name rep)
+        #/just #/internal:name #/list 'name:dexed rep)))
     
-    (define (dex-internals-dexed-of this x)
-      (dex-internals-simple-dexed-of this x))
+    (define (getfx-dex-internals-dexed-of this x)
+      (getfx-dex-internals-simple-dexed-of this x))
     
-    (define (dex-internals-compare this a b)
+    (define (getfx-dex-internals-compare this a b)
       (expect (dexed? a) #t (nothing)
       #/expect (dexed? b) #t (nothing)
-      #/compare-by-dex (dex-name)
+      #/getfx-compare-by-dex (dex-name)
         (dexed-get-name a)
         (dexed-get-name b)))
   ])
@@ -657,17 +702,17 @@
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
     
-    (define (dex-internals-in? this x)
-      #f)
+    (define (getfx-dex-internals-in this x)
+      (getfx-done #f))
     
-    (define (dex-internals-name-of this x)
-      (nothing))
+    (define (getfx-dex-internals-name-of this x)
+      (getfx-done #/nothing))
     
-    (define (dex-internals-dexed-of this x)
-      (nothing))
+    (define (getfx-dex-internals-dexed-of this x)
+      (getfx-done #/nothing))
     
-    (define (dex-internals-compare this a b)
-      (nothing))
+    (define (getfx-dex-internals-compare this a b)
+      (getfx-done #/nothing))
   ])
 
 (define/contract (dex-give-up)
@@ -697,36 +742,40 @@
       (dissect this (dex-internals-default a1 a2)
       #/dissect other (dex-internals-default b1 b2)
       #/maybe-ordering-or
-        (compare-by-dex (dex-dex) a1 b1)
-        (compare-by-dex (dex-dex) a2 b2)))
+        (pure-run-getfx #/getfx-compare-by-dex (dex-dex) a1 b1)
+        (pure-run-getfx #/getfx-compare-by-dex (dex-dex) a2 b2)))
     
-    (define (dex-internals-in? this x)
+    (define (getfx-dex-internals-in this x)
       (dissect this (dex-internals-default first second)
-      #/or (in-dex? first x) (in-dex? second x)))
+      #/getfx-bind (getfx-is-in-dex first x) #/expectfn #f
+        (getfx-done #t)
+      #/getfx-is-in-dex second x))
     
-    (define (dex-internals-name-of this x)
+    (define (getfx-dex-internals-name-of this x)
       (dissect this (dex-internals-default first second)
-      #/mat (name-of first x) (just result) (just result)
-      #/name-of second x))
+      #/getfx-bind (getfx-name-of first x) #/fn maybe-result
+      #/mat maybe-result (just result) (getfx-done #/just result)
+      #/getfx-name-of second x))
     
-    (define (dex-internals-dexed-of this x)
+    (define (getfx-dex-internals-dexed-of this x)
       (dissect this (dex-internals-default first second)
-      #/mat (dexed-of first x) (just result) (just result)
-      #/dexed-of second x))
+      #/getfx-bind (getfx-dexed-of first x) #/fn maybe-result
+      #/mat maybe-result (just result) (getfx-done #/just result)
+      #/getfx-dexed-of second x))
     
-    (define (dex-internals-compare this a b)
+    (define (getfx-dex-internals-compare this a b)
       (dissect this (dex-internals-default first second)
-      #/w- first-result (compare-by-dex first a b)
-      #/mat first-result (just _) first-result
-      #/if (in-dex? first a)
-        (if (in-dex? second b)
-          (just #/ordering-lt)
-          (nothing))
-      #/if (in-dex? first b)
-        (if (in-dex? second a)
-          (just #/ordering-gt)
-          (nothing))
-      #/compare-by-dex second a b))
+      #/getfx-bind (getfx-compare-by-dex first a b) #/fn first-result
+      #/mat first-result (just _) (getfx-done first-result)
+      #/getfx-bind (getfx-is-in-dex first a) #/expectfn #f
+        (getfx-bind (getfx-is-in-dex second b) #/expectfn #f
+          (getfx-done #/just #/ordering-lt)
+          (getfx-done #/nothing))
+      #/getfx-bind (getfx-is-in-dex first b) #/expectfn #f
+        (getfx-bind (getfx-is-in-dex second a) #/expectfn #f
+          (getfx-done #/just #/ordering-gt)
+          (getfx-done #/nothing))
+      #/getfx-compare-by-dex second a b))
   ])
 
 (define/contract
@@ -753,24 +802,26 @@
       (dissect this (dex-internals-opaque a-name a-dex)
       #/dissect other (dex-internals-default b-name b-dex)
       #/maybe-ordering-or
-        (compare-by-dex (dex-name) a-name b-name)
-        (compare-by-dex (dex-dex) a-dex b-dex)))
+        (pure-run-getfx
+          (getfx-compare-by-dex (dex-name) a-name b-name))
+        (pure-run-getfx
+          (getfx-compare-by-dex (dex-dex) a-dex b-dex))))
     
-    (define (dex-internals-in? this x)
+    (define (getfx-dex-internals-is-in this x)
       (dissect this (dex-internals-opaque name dex)
-      #/in-dex? dex x))
+      #/getfx-is-in-dex dex x))
     
-    (define (dex-internals-name-of this x)
+    (define (getfx-dex-internals-name-of this x)
       (dissect this (dex-internals-opaque name dex)
-      #/name-of dex x))
+      #/getfx-name-of dex x))
     
-    (define (dex-internals-dexed-of this x)
+    (define (getfx-dex-internals-dexed-of this x)
       (dissect this (dex-internals-opaque name dex)
-      #/dexed-of dex x))
+      #/getfx-dexed-of dex x))
     
-    (define (dex-internals-compare this a b)
+    (define (getfx-dex-internals-compare this a b)
       (dissect this (dex-internals-opaque name dex)
-      #/compare-by-dex dex a b))
+      #/getfx-compare-by-dex dex a b))
   ])
 
 (define/contract (dex-opaque name dex)
@@ -782,39 +833,41 @@
   (define-cmp-by-own-method
     internal:cmp
     cmp?
-    cmp-by-own-method::raise-different-methods-error
-    cmp-by-own-method::get-method
+    cmp-by-own-method::getfx-err-different-methods
+    cmp-by-own-method::getfx-get-method
     cmp-by-own-method-delegate/c
-    cmp-internals-by-own-method-delegate-raise-different-methods-error
-    cmp-internals-by-own-method-delegate-get-method
+    getfx-err-cmp-internals-by-own-method-delegate-different-methods
+    getfx-cmp-internals-by-own-method-delegate-get-method
     cmp-internals-by-own-method
     cmp-by-own-method-thorough
     cmp-by-own-method-unthorough
     cmp-by-own-method
-    expected-raise-different-methods
-    expected-the-result-of-delegate-get-method-to-be-a-cmp
-    expected-the-result-of-dexed-get-method-to-be-a-cmp)
+    expected-getfx-err-different-methods
+    expected-err-different-methods
+    expected-getfx-delegate-get-method
+    expected-delegate-get-method
+    expected-getfx-get-method
+    expected-get-method)
   (begin
     
     (struct-easy
-      (cmp-by-own-method::raise-different-methods-error
+      (cmp-by-own-method::getfx-err-different-methods
         a b a-method b-method))
     (struct-easy
-      (cmp-by-own-method::get-method source))
+      (cmp-by-own-method::getfx-get-method source))
     
     (define/contract cmp-by-own-method-delegate/c
       contract?
       (case->
         (->
-          (match/c cmp-by-own-method::raise-different-methods-error
+          (match/c cmp-by-own-method::getfx-err-different-methods
             any/c any/c cmp? cmp?)
-          none/c)
-        (->
-          (match/c cmp-by-own-method::get-method any/c)
-          (maybe/c cmp?))))
+          (getfx/c none/c))
+        (-> (match/c cmp-by-own-method::getfx-get-method any/c)
+          (getfx/c #/maybe/c cmp?))))
     
     (define/contract
-      (cmp-internals-by-own-method-delegate-raise-different-methods-error
+      (getfx-err-cmp-internals-by-own-method-delegate-different-methods
         dexed-delegate a b a-method b-method)
       (->
         (dexed-first-order/c cmp-by-own-method-delegate/c)
@@ -822,13 +875,25 @@
         any/c
         cmp?
         cmp?
-        none/c)
+        (getfx/c none/c))
       (w- delegate (dexed-get-value dexed-delegate)
-      #/w- result
-        (delegate #/cmp-by-own-method::raise-different-methods-error
+      #/w- getfx-result
+        (delegate #/cmp-by-own-method::getfx-err-different-methods
           a b a-method b-method)
-      #/raise-arguments-error 'cmp-by-own-method-thorough
-        expected-raise-different-methods
+      #/expect (getfx? getfx-result) #t
+        (getfx-err-unraise #/raise-arguments-error
+          'cmp-by-own-method-thorough
+          expected-getfx-err-different-methods
+          "dexed-delegate" dexed-delegate
+          "a" a
+          "b" b
+          "a-method" a-method
+          "b-method" b-method
+          "getfx-result" getfx-result)
+      #/getfx-bind getfx-result #/fn result
+      #/getfx-err-unraise #/raise-arguments-error
+        'cmp-by-own-method-thorough
+        expected-err-different-methods
         "dexed-delegate" dexed-delegate
         "a" a
         "b" b
@@ -837,19 +902,29 @@
         "result" result))
     
     (define/contract
-      (cmp-internals-by-own-method-delegate-get-method
+      (getfx-cmp-internals-by-own-method-delegate-get-method
         dexed-delegate source)
       (-> (dexed-first-order/c cmp-by-own-method-delegate/c) any/c
-        (maybe/c cmp?))
+        (getfx/c #/maybe/c cmp?))
       (w- delegate (dexed-get-value dexed-delegate)
-      #/w- result (delegate #/cmp-by-own-method::get-method source)
-      #/expect (contract-first-order-passes? (maybe/c cmp?) result) #t
-        (raise-arguments-error 'cmp-by-own-method-thorough
-          expected-the-result-of-delegate-get-method-to-be-a-cmp
+      #/w- getfx-method
+        (delegate #/cmp-by-own-method::getfx-get-method source)
+      #/expect (getfx? getfx-method) #t
+        (getfx-err-unraise #/raise-arguments-error
+          'cmp-by-own-method-thorough
+          expected-getfx-delegate-get-method
           "dexed-delegate" dexed-delegate
           "source" source
-          "result" result)
-        result))
+          "getfx-method" getfx-method)
+      #/getfx-bind getfx-method #/fn method
+      #/expect (contract-first-order-passes? (maybe/c cmp?) method) #t
+        (getfx-err-unraise #/raise-arguments-error
+          'cmp-by-own-method-thorough
+          expected-delegate-get-method
+          "dexed-delegate" dexed-delegate
+          "source" source
+          "method" method)
+      #/getfx-done method))
     
     ; NOTE: If we weren't using this macro, we'd write the
     ; (struct-easy (cmp-internals-by-own-method ...) ...) declaration
@@ -863,56 +938,71 @@
       (-> (dexed-first-order/c cmp-by-own-method-delegate/c) cmp?)
       (internal:cmp #/cmp-internals-by-own-method dexed-delegate))
     
-    (struct-easy (cmp-by-own-method-unthorough dexed-get-method)
+    (struct-easy (cmp-by-own-method-unthorough dexed-getfx-get-method)
       #:other
       
       #:property prop:procedure
       (fn this command
-        (dissect this (cmp-by-own-method-unthorough dexed-get-method)
+        (dissect this
+          (cmp-by-own-method-unthorough dexed-getfx-get-method)
         #/mat command
-          (cmp-by-own-method::raise-different-methods-error
+          (cmp-by-own-method::getfx-err-different-methods
             a b a-method b-method)
-          (raise-arguments-error 'cmp-by-own-method
+          (getfx-err-unraise #/raise-arguments-error
+            'cmp-by-own-method
             "obtained two different methods from the two values being compared"
-            "dexed-get-method" dexed-get-method
+            "dexed-getfx-get-method" dexed-getfx-get-method
             "a" a
             "b" b
             "a-method" a-method
             "b-method" b-method)
-        #/dissect command (cmp-by-own-method::get-method source)
-        #/w- get-method (dexed-get-value dexed-get-method)
-        #/w- result (get-method source)
-        #/expect (contract-first-order-passes? (maybe/c cmp?) result)
-          #t
-          (raise-arguments-error 'cmp-by-own-method
-            expected-the-result-of-dexed-get-method-to-be-a-cmp
-            "dexed-get-method" dexed-get-method
+        #/dissect command (cmp-by-own-method::getfx-get-method source)
+        #/w- get-method (dexed-get-value dexed-getfx-get-method)
+        #/w- getfx-method (get-method source)
+        #/expect (getfx? getfx-method) #t
+          (getfx-err-unraise #/raise-arguments-error
+            'cmp-by-own-method
+            expected-getfx-get-method
+            "dexed-getfx-get-method" dexed-getfx-get-method
             "source" source
-            "result" result)
-          result)))
+            "getfx-method" getfx-method)
+        #/getfx-bind getfx-method #/fn method
+        #/expect (contract-first-order-passes? (maybe/c cmp?) method)
+          #t
+          (getfx-err-unraise #/raise-arguments-error
+            'cmp-by-own-method
+            expected-get-method
+            "dexed-getfx-get-method" dexed-getfx-get-method
+            "source" source
+            "method" method)
+        #/getfx-done method)))
     
-    (define/contract (cmp-by-own-method dexed-get-method)
-      (-> (dexed-first-order/c #/-> any/c #/maybe/c cmp?) cmp?)
-      (cmp-by-own-method-thorough #/just-value #/dexed-of
-        (dex-struct cmp-by-own-method-unthorough #/dex-dexed)
-        (cmp-by-own-method-unthorough dexed-get-method)))
+    (define/contract (cmp-by-own-method dexed-getfx-get-method)
+      (-> (dexed-first-order/c #/-> any/c #/getfx/c #/maybe/c cmp?)
+        cmp?)
+      (cmp-by-own-method-thorough
+        (dexed-struct-of-dexed cmp-by-own-method-unthorough
+          dexed-getfx-get-method)))
   ))
 
 (define-cmp-by-own-method
   internal:dex
   dex?
-  dex-by-own-method::raise-different-methods-error
-  dex-by-own-method::get-method
+  dex-by-own-method::getfx-err-different-methods
+  dex-by-own-method::getfx-get-method
   dex-by-own-method-delegate/c
-  dex-internals-by-own-method-delegate-raise-different-methods-error
-  dex-internals-by-own-method-delegate-get-method
+  getfx-err-dex-internals-by-own-method-delegate-different-methods
+  getfx-dex-internals-by-own-method-delegate-get-method
   dex-internals-by-own-method
   dex-by-own-method-thorough
   dex-by-own-method-unthorough
   dex-by-own-method
-  "expected dexed-delegate not to return for dex-by-own-method::raise-different-methods-error"
-  "expected the result of dexed-delegate for dex-by-own-method::get-method to be a maybe of a dex"
-  "expected the result of dexed-get-method to be a maybe of a dex")
+  "expected the pure result of dexed-delegate for dex-by-own-method::getfx-err-different-methods to be a getfx effectful computation"
+  "expected dexed-delegate not to have a result for dex-by-own-method::getfx-err-different-methods"
+  "expected the pure result of dexed-delegate for dex-by-own-method::getfx-get-method to be a getfx effectful computation"
+  "expected the result of dexed-delegate for dex-by-own-method::getx-get-method to be a maybe of a dex"
+  "expected the pure result of dexed-getfx-get-method to be a getfx effectful computation"
+  "expected the result of dexed-getfx-get-method to be a maybe of a dex")
 
 (struct-easy (dex-internals-by-own-method dexed-delegate)
   #:other
@@ -931,63 +1021,72 @@
     (define (dex-internals-autodex this other)
       (dissect this (dex-internals-by-own-method a)
       #/dissect other (dex-internals-by-own-method b)
-      #/compare-by-dex (dex-dexed) a b))
+      #/pure-run-getfx #/getfx-compare-by-dex (dex-dexed) a b))
     
-    (define (dex-internals-in? this x)
+    (define (getfx-dex-internals-is-in this x)
       (dissect this (dex-internals-by-own-method dexed-delegate)
-      #/expect
-        (dex-internals-by-own-method-delegate-get-method
+      #/getfx-bind
+        (getfx-dex-internals-by-own-method-delegate-get-method
           dexed-delegate x)
-        (just method)
-        #f
-      #/in-dex? method x))
+      #/expectfn (just method) (getfx-done #f)
+      #/getfx-is-in-dex method x))
     
-    (define (dex-internals-name-of this x)
+    (define (getfx-dex-internals-name-of this x)
       (dissect this (dex-internals-by-own-method dexed-delegate)
-      #/maybe-bind
-        (dex-internals-by-own-method-delegate-get-method
-          dexed-delegate x)
-      #/fn method
-      #/name-of method x))
-    
-    (define (dex-internals-dexed-of this x)
-      (dissect this (dex-internals-by-own-method dexed-delegate)
-      #/maybe-bind
-        (dex-internals-by-own-method-delegate-get-method
+      #/getmaybefx-bind
+        (getfx-dex-internals-by-own-method-delegate-get-method
           dexed-delegate x)
       #/fn method
-      #/dexed-of method x))
+      #/getfx-name-of method x))
     
-    (define (dex-internals-compare this a b)
+    (define (getfx-dex-internals-dexed-of this x)
       (dissect this (dex-internals-by-own-method dexed-delegate)
-      #/maybe-bind
-        (dex-internals-by-own-method-delegate-get-method
+      #/getmaybefx-bind
+        (getfx-dex-internals-by-own-method-delegate-get-method
+          dexed-delegate x)
+      #/fn method
+      #/getfx-dexed-of method x))
+    
+    (define (getfx-dex-internals-compare this a b)
+      (dissect this (dex-internals-by-own-method dexed-delegate)
+      #/getmaybefx-bind
+        (getfx-dex-internals-by-own-method-delegate-get-method
           dexed-delegate a)
       #/fn a-method
-      #/maybe-bind
-        (dex-internals-by-own-method-delegate-get-method
+      #/getmaybefx-bind
+        (getfx-dex-internals-by-own-method-delegate-get-method
           dexed-delegate b)
       #/fn b-method
-      #/expect (eq-by-dex? (dex-dex) a-method b-method) #t
-        (dex-internals-by-own-method-delegate-raise-different-methods-error
+      #/getfx-bind (getfx-is-eq-by-dex (dex-dex) a-method b-method)
+      #/expectfn #t
+        (getfx-err-dex-internals-by-own-method-delegate-different-methods
           dexed-delegate a b a-method b-method)
-      #/compare-by-dex a-method a b))
+      #/getfx-compare-by-dex a-method a b))
   ])
 
 
-(define/contract (dex-internals-fix-delegate-unwrap dexed-unwrap this)
-  (-> (dexed-first-order/c #/-> dex? dex?) dex? dex?)
-  (w- unwrap (dexed-get-value dexed-unwrap)
-  #/w- result (unwrap this)
+(define/contract
+  (getfx-dex-internals-fix-delegate-unwrap dexed-getfx-unwrap this)
+  (-> (dexed-first-order/c #/-> dex? #/getfx/c dex?) dex?
+    (getfx/c dex?))
+  (w- getfx-unwrap (dexed-get-value dexed-getfx-unwrap)
+  #/w- getfx-result (getfx-unwrap this)
+  #/expect (getfx? getfx-result) #t
+    (raise-arguments-error 'dex-fix
+      "expected the pure result of dexed-getfx-unwrap to be a getfx effectful computation"
+      "dexed-getfx-unwrap" dexed-getfx-unwrap
+      "this" this
+      "getfx-result" getfx-result)
+  #/getfx-bind getfx-result #/fn result
   #/expect (dex? result) #t
     (raise-arguments-error 'dex-fix
-      "expected the result of dexed-unwrap to be a dex"
-      "dexed-unwrap" dexed-unwrap
+      "expected the result of dexed-getfx-unwrap to be a dex"
+      "dexed-getfx-unwrap" dexed-getfx-unwrap
       "this" this
       "result" result)
-    result))
+  #/getfx-done result))
 
-(struct-easy (dex-internals-fix dexed-unwrap)
+(struct-easy (dex-internals-fix dexed-getfx-unwrap)
   #:other
   
   #:methods internal:gen:dex-internals
@@ -997,48 +1096,52 @@
       'tag:dex-fix)
     
     (define (dex-internals-autoname this)
-      (dissect this (dex-internals-fix dexed-unwrap)
-      #/dissect (dexed-get-name dexed-unwrap) (internal:name rep)
+      (dissect this (dex-internals-fix dexed-getfx-unwrap)
+      #/dissect (dexed-get-name dexed-getfx-unwrap)
+        (internal:name rep)
       #/list 'tag:dex-fix rep))
     
     (define (dex-internals-autodex this other)
       (dissect this (dex-internals-fix a)
       #/dissect other (dex-internals-fix b)
-      #/compare-by-dex (dex-dexed) a b))
+      #/pure-run-getfx #/getfx-compare-by-dex (dex-dexed) a b))
     
-    (define (dex-internals-in? this x)
-      (dissect this (dex-internals-fix dexed-unwrap)
-      #/in-dex?
-        (dex-internals-fix-delegate-unwrap dexed-unwrap
+    (define (getfx-dex-internals-is-in this x)
+      (dissect this (dex-internals-fix dexed-getfx-unwrap)
+      #/getfx-bind
+        (getfx-dex-internals-fix-delegate-unwrap dexed-getfx-unwrap
           (internal:dex this))
-        x))
+      #/fn this
+      #/getfx-is-in-dex this x))
     
-    (define (dex-internals-name-of this x)
-      (dissect this (dex-internals-fix dexed-unwrap)
-      #/name-of
-        (dex-internals-fix-delegate-unwrap dexed-unwrap
+    (define (getfx-dex-internals-name-of this x)
+      (dissect this (dex-internals-fix dexed-getfx-unwrap)
+      #/getfx-bind
+        (getfx-dex-internals-fix-delegate-unwrap dexed-getfx-unwrap
           (internal:dex this))
-        x))
+      #/fn this
+      #/getfx-name-of this x))
     
-    (define (dex-internals-dexed-of this x)
-      (dissect this (dex-internals-fix dexed-unwrap)
-      #/dexed-of
-        (dex-internals-fix-delegate-unwrap dexed-unwrap
+    (define (getfx-dex-internals-dexed-of this x)
+      (dissect this (dex-internals-fix dexed-getfx-unwrap)
+      #/getfx-bind
+        (getfx-dex-internals-fix-delegate-unwrap dexed-getfx-unwrap
           (internal:dex this))
-        x))
+      #/fn this
+      #/getfx-dexed-of this x))
     
-    (define (dex-internals-compare this a b)
-      (dissect this (dex-internals-fix dexed-unwrap)
-      #/compare-by-dex
-        (dex-internals-fix-delegate-unwrap dexed-unwrap
+    (define (getfx-dex-internals-compare this a b)
+      (dissect this (dex-internals-fix dexed-getfx-unwrap)
+      #/getfx-bind
+        (getfx-dex-internals-fix-delegate-unwrap dexed-getfx-unwrap
           (internal:dex this))
-        a
-        b))
+      #/fn this
+      #/getfx-compare-by-dex this a b))
   ])
 
-(define/contract (dex-fix dexed-unwrap)
-  (-> (dexed-first-order/c #/-> dex? dex?) dex?)
-  (internal:dex #/dex-internals-fix dexed-unwrap))
+(define/contract (dex-fix dexed-getfx-unwrap)
+  (-> (dexed-first-order/c #/-> dex? #/getfx/c dex?) dex?)
+  (internal:dex #/dex-internals-fix dexed-getfx-unwrap))
 
 
 (struct-easy (dex-internals-struct descriptor counts? fields)
@@ -1073,42 +1176,45 @@
         #/fn a-field b-field
           (dissect a-field (list a-getter a-position a-dex)
           #/dissect b-field (list b-getter b-position b-dex)
-          #/compare-by-dex (dex-dex) a-dex b-dex))))
+          #/pure-run-getfx
+            (getfx-compare-by-dex (dex-dex) a-dex b-dex)))))
     
-    (define (dex-internals-in? this x)
+    (define (getfx-dexed-dex-internals-is-in this x)
       (dissect this (dex-internals-struct descriptor counts? fields)
-      #/and (counts? x)
+      #/expect (counts? x) #t (getfx-done #f)
       #/w-loop next fields fields
-        (expect fields (cons field fields) #t
+        (expect fields (cons field fields) (getfx-done #t)
         #/dissect field (list getter position dex)
         
         ; We do a tail call if we can.
-        #/mat fields (list) (in-dex? dex #/getter x)
+        #/mat fields (list) (getfx-is-in-dex dex #/getter x)
         
-        #/and (in-dex? dex #/getter x)
+        #/getfx-bind (getfx-is-in-dex dex #/getter x) #/fn is-in
+        #/expect is-in #t (getfx-done #f)
         #/next fields)))
     
-    (define (dex-internals-name-of this x)
+    (define (getfx-dex-internals-name-of this x)
       (dissect this (dex-internals-struct descriptor counts? fields)
-      #/expect (counts? x) #t (nothing)
+      #/expect (counts? x) #t (getfx-done #/nothing)
       #/w-loop next fields fields unsorted-reps (list)
         (expect fields (cons field fields)
-          (just #/internal:name #/list* 'name:struct descriptor
-            (list-map
-              (sort unsorted-reps #/fn a b
-                (dissect a (cons a-position a-rep)
-                #/dissect b (cons b-position b-rep)
-                #/< a-position b-position))
-            #/dissectfn (list position rep)
-              rep))
+          (getfx-done #/just
+            (internal:name #/list* 'name:struct descriptor
+              (list-map
+                (sort unsorted-reps #/fn a b
+                  (dissect a (cons a-position a-rep)
+                  #/dissect b (cons b-position b-rep)
+                  #/< a-position b-position))
+              #/dissectfn (list position rep)
+                rep)))
         #/dissect field (list getter position dex)
-        #/expect (name-of dex #/getter x) (just name) (nothing)
-        #/dissect name (internal:name rep)
+        #/getmaybefx-bind (getfx-name-of dex #/getter x)
+        #/dissectfn (internal:name rep)
         #/next fields (cons (list position rep) unsorted-reps))))
     
-    (define (dex-internals-dexed-of this x)
+    (define (getfx-dex-internals-dexed-of this x)
       (dissect this (dex-internals-struct descriptor counts? fields)
-      #/expect (counts? x) #t (nothing)
+      #/expect (counts? x) #t (getfx-done #/nothing)
       #/w-loop next fields fields unsorted-dexeds (list)
         (expect fields (cons field fields)
           (w- dexeds
@@ -1116,7 +1222,7 @@
               (dissect a (list a-getter a-position a-dexed)
               #/dissect b (list b-getter b-position b-dexed)
               #/< a-position b-position))
-          #/just #/dexed
+          #/getfx-done #/just #/dexed
             (internal:dex #/dex-internals-struct descriptor counts?
               (list-map dexeds
               #/dissectfn (list getter position (dexed dex name val))
@@ -1129,36 +1235,40 @@
                 rep))
             x)
         #/dissect field (list getter position dex)
-        #/expect (dexed-of dex #/getter x) (just dexed) (nothing)
+        #/getmaybefx-bind (getfx-dexed-of dex #/getter x) #/fn dexed
         #/next fields
           (cons (list getter position dexed) unsorted-dexeds))))
     
-    (define (dex-internals-compare this a b)
+    (define (getfx-dex-internals-compare this a b)
       (dissect this (dex-internals-struct descriptor counts? fields)
-      #/expect (counts? a) #t (nothing)
-      #/expect (counts? b) #t (nothing)
+      #/expect (counts? a) #t (getfx-done #/nothing)
+      #/expect (counts? b) #t (getfx-done #/nothing)
       #/w-loop next fields fields
-        (expect fields (cons field fields) (just #/ordering-eq)
+        (expect fields (cons field fields)
+          (getfx-done #/just #/ordering-eq)
         #/dissect field (list getter position dex)
         
         ; We do a tail call if we can.
-        #/mat fields (list) (compare-by-dex dex (getter a) (getter b))
+        #/mat fields (list)
+          (getfx-compare-by-dex dex (getter a) (getter b))
         
-        #/w- result (compare-by-dex dex (getter a) (getter b))
-        #/expect result (just #/ordering-eq)
-          (mat result (nothing) (nothing)
+        #/getmaybefx-bind
+          (getfx-compare-by-dex dex (getter a) (getter b))
+        #/fn result
+        #/expect result (ordering-eq)
           ; We have a potential result to use, but first we check that
           ; the rest of the field values belong to their respective
           ; dexes' domains. If they don't, this structure instance is
           ; not part part of this dex's domain, so the result is
           ; `(nothing)`.
-          #/w-loop next fields fields
-            (expect fields (cons field fields) result
+          (w-loop next fields fields
+            (expect fields (cons field fields)
+              (getfx-done #/just result)
             #/dissect field (list getter position dex)
-            #/expect
-              (and (in-dex? dex #/getter a) (in-dex? dex #/getter b))
-              #t
-              (nothing)
+            #/getfx-bind (getfx-is-in-dex dex #/getter a)
+            #/expectfn #t (getfx-done #/nothing)
+            #/getfx-bind (getfx-is-in-dex dex #/getter b)
+            #/expectfn #t (getfx-done #/nothing)
             #/next fields))
         #/next fields)))
   ])
@@ -1292,15 +1402,15 @@
   (dissect cline (internal:cline internals)
   #/internal:cline-internals-dex internals))
 
-(define/contract (in-cline? cline x)
-  (-> cline? any/c boolean?)
+(define/contract (getfx-is-in-cline cline x)
+  (-> cline? any/c #/getfx/c boolean?)
   (dissect cline (internal:cline internals)
-  #/internal:cline-internals-in? internals x))
+  #/internal:getfx-cline-internals-is-in internals x))
 
-(define/contract (compare-by-cline cline a b)
-  (-> cline? any/c any/c #/maybe/c cline-result?)
+(define/contract (getfx-compare-by-cline cline a b)
+  (-> cline? any/c any/c #/getfx/c #/maybe/c cline-result?)
   (dissect cline (internal:cline internals)
-  #/internal:cline-internals-compare internals a b))
+  #/internal:getfx-cline-internals-compare internals a b))
 
 
 (struct-easy (dex-internals-cline)
@@ -1318,23 +1428,25 @@
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
     
-    (define (dex-internals-in? this x)
-      (cline? x))
+    (define (getfx-dex-internals-is-in this x)
+      (getfx-done #/cline? x))
     
-    (define (dex-internals-name-of this x)
-      (if (cline? x)
-        (just #/internal:name #/autoname-cline x)
-        (nothing)))
+    (define (getfx-dex-internals-name-of this x)
+      (getfx-done
+        (if (cline? x)
+          (just #/internal:name #/autoname-cline x)
+          (nothing))))
     
-    (define (dex-internals-dexed-of this x)
-      (dex-internals-simple-dexed-of this x))
+    (define (getfx-dex-internals-dexed-of this x)
+      (getfx-dex-internals-simple-dexed-of this x))
     
-    (define (dex-internals-compare this a b)
-      (expect a (internal:cline a) (nothing)
-      #/expect b (internal:cline b) (nothing)
-      #/w- tag internal:cline-internals-tag
-      #/maybe-ordering-or (just #/lt-autodex (tag a) (tag b) symbol<?)
-      #/internal:cline-internals-autodex a b))
+    (define (getfx-dex-internals-compare this a b)
+      (getfx-done
+        (expect a (internal:cline a) (nothing)
+        #/expect b (internal:cline b) (nothing)
+        #/w- tag internal:cline-internals-tag
+        #/maybe-ordering-or (just #/lt-autodex (tag a) (tag b) symbol<?)
+        #/internal:cline-internals-autodex a b)))
   ])
 
 (define/contract (dex-cline)
@@ -1358,19 +1470,19 @@
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-by-dex a)
       #/dissect other (cline-internals-by-dex b)
-      #/compare-by-dex (dex-dex) a b))
+      #/pure-run-getfx #/getfx-compare-by-dex (dex-dex) a b))
     
     (define (cline-internals-dex this)
       (dissect this (cline-internals-by-dex dex)
         dex))
     
-    (define (cline-internals-in? this x)
+    (define (getfx-cline-internals-is-in this x)
       (dissect this (cline-internals-by-dex dex)
-      #/in-dex? dex x))
+      #/getfx-is-in-dex dex x))
     
-    (define (cline-internals-compare this a b)
+    (define (getfx-cline-internals-compare this a b)
       (dissect this (cline-internals-by-dex dex)
-      #/compare-by-dex dex a b))
+      #/getfx-compare-by-dex dex a b))
   ])
 
 (define/contract (cline-by-dex dex)
@@ -1396,11 +1508,11 @@
     (define (cline-internals-dex this)
       (dex-give-up))
     
-    (define (cline-internals-in? this x)
-      #f)
+    (define (getfx-cline-internals-is-in this x)
+      (getfx-done #f))
     
-    (define (cline-internals-compare this a b)
-      (nothing))
+    (define (getfx-cline-internals-compare this a b)
+      (getfx-done #/nothing))
   ])
 
 (define/contract (cline-give-up)
@@ -1430,8 +1542,8 @@
       (dissect this (cline-internals-default a1 a2)
       #/dissect other (cline-internals-default b1 b2)
       #/maybe-ordering-or
-        (compare-by-dex (dex-cline) a1 b1)
-        (compare-by-dex (dex-cline) a2 b2)))
+        (pure-run-getfx #/getfx-compare-by-dex (dex-cline) a1 b1)
+        (pure-run-getfx #/getfx-compare-by-dex (dex-cline) a2 b2)))
     
     (define (cline-internals-dex this)
       (dissect this (cline-internals-default first second)
@@ -1439,23 +1551,26 @@
         (get-dex-from-cline first)
         (get-dex-from-cline second)))
     
-    (define (cline-internals-in? this x)
+    (define (getfx-cline-internals-is-in this x)
       (dissect this (cline-internals-default first second)
-      #/or (in-cline? first x) (in-cline? second x)))
+      #/getfx-bind (getfx-cline-internals-is-in first x) #/expectfn #f
+        (getfx-done #t)
+      #/getfx-cline-internals-is-in second x))
     
-    (define (cline-internals-compare this a b)
+    (define (getfx-cline-internals-compare this a b)
       (dissect this (cline-internals-default first second)
-      #/w- first-result (compare-by-cline first a b)
-      #/mat first-result (just _) first-result
-      #/if (in-cline? first a)
-        (if (in-cline? second b)
-          (just #/ordering-lt)
-          (nothing))
-      #/if (in-cline? first b)
-        (if (in-cline? second a)
-          (just #/ordering-gt)
-          (nothing))
-      #/compare-by-cline second a b))
+      #/getfx-bind (getfx-compare-by-cline first a b)
+      #/fn first-result
+      #/mat first-result (just _) (getfx-done first-result)
+      #/getfx-bind (getfx-is-in-cline first a) #/expectfn #f
+        (getfx-bind (getfx-is-in-cline second b) #/expectfn #f
+          (getfx-done #/just #/ordering-lt)
+          (getfx-done #/nothing))
+      #/getfx-bind (getfx-is-in-cline first b) #/expectfn #f
+        (getfx-bind (getfx-is-in-cline second a) #/expectfn #f
+          (getfx-done #/just #/ordering-gt)
+          (getfx-done #/nothing))
+      #/getfx-compare-by-cline second a b))
   ])
 
 (define/contract
@@ -1485,20 +1600,22 @@
       (dissect this (cline-internals-opaque a-name a-cline)
       #/dissect other (cline-internals-opaque b-name b-cline)
       #/maybe-ordering-or
-        (compare-by-dex (dex-name) a-name b-name)
-        (compare-by-dex (dex-cline) a-cline b-cline)))
+        (pure-run-getfx
+          (getfx-compare-by-dex (dex-name) a-name b-name))
+        (pure-run-getfx
+          (getfx-compare-by-dex (dex-cline) a-cline b-cline))))
     
     (define (cline-internals-dex this)
       (dissect this (cline-internals-opaque name cline)
       #/dex-opaque name #/get-dex-from-cline cline))
     
-    (define (cline-internals-in? this x)
+    (define (getfx-cline-internals-is-in this x)
       (dissect this (cline-internals-opaque name cline)
-      #/in-cline? cline x))
+      #/getfx-is-in-cline cline x))
     
-    (define (cline-internals-compare this a b)
+    (define (getfx-cline-internals-compare this a b)
       (dissect this (cline-internals-opaque name cline)
-      #/compare-by-cline cline a b))
+      #/getfx-compare-by-cline cline a b))
   ])
 
 (define/contract (cline-opaque name cline)
@@ -1509,18 +1626,21 @@
 (define-cmp-by-own-method
   internal:cline
   cline?
-  cline-by-own-method::raise-different-methods-error
-  cline-by-own-method::get-method
+  cline-by-own-method::getfx-err-different-methods
+  cline-by-own-method::getfx-get-method
   cline-by-own-method-delegate/c
-  cline-internals-by-own-method-delegate-raise-different-methods-error
-  cline-internals-by-own-method-delegate-get-method
+  getfx-err-cline-internals-by-own-method-delegate-different-methods
+  getfx-cline-internals-by-own-method-delegate-get-method
   cline-internals-by-own-method
   cline-by-own-method-thorough
   cline-by-own-method-unthorough
   cline-by-own-method
-  "expected dexed-delegate not to return for cline-by-own-method::raise-different-methods-error"
-  "expected the result of dexed-delegate for cline-by-own-method::get-method to be a maybe of a cline"
-  "expected the result of dexed-get-method to be a maybe of a cline")
+  "expected the pure result of dexed-delegate for cline-by-own-method::getfx-err-different-methods to be a getfx effectful computation"
+  "expected dexed-delegate not to have a result for cline-by-own-method::getfx-err-different-methods"
+  "expected the pure result of dexed-delegate for cline-by-own-method::getfx-get-method to be a getfx effectful computation"
+  "expected the result of dexed-delegate for cline-by-own-method::getx-get-method to be a maybe of a cline"
+  "expected the pure result of dexed-getfx-get-method to be a getfx effectful computation"
+  "expected the result of dexed-getfx-get-method to be a maybe of a cline")
 
 (struct-easy (convert-dex-from-cline-by-own-method dexed-delegate)
   #:other
@@ -1529,11 +1649,11 @@
   (fn this x
     (dissect this
       (convert-dex-from-cline-by-own-method dexed-delegate)
-    #/maybe-bind
-      (cline-internals-by-own-method-delegate-get-method
+    #/getmaybefx-bind
+      (getfx-cline-internals-by-own-method-delegate-get-method
         dexed-delegate x)
     #/fn method
-    #/just #/get-dex-from-cline method)))
+    #/getfx-done #/just #/get-dex-from-cline method)))
 
 (struct-easy (cline-internals-by-own-method dexed-delegate)
   #:other
@@ -1552,64 +1672,74 @@
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-by-own-method a)
       #/dissect other (cline-internals-by-own-method b)
-      #/compare-by-dex (dex-dexed) a b))
+      #/pure-run-getfx #/getfx-compare-by-dex (dex-dexed) a b))
     
     (define (cline-internals-dex this)
       (dissect this (cline-internals-by-own-method dexed-delegate)
-      #/dex-by-own-method #/just-value #/dexed-of
-        (dex-struct convert-dex-from-cline-by-own-method #/dex-dexed)
-        (convert-dex-from-cline-by-own-method dexed-delegate)))
+      #/dex-by-own-method
+        (dexed-struct-of-dexed convert-dex-from-cline-by-own-method
+          dexed-delegate)))
     
-    (define (cline-internals-in? this x)
+    (define (getfx-cline-internals-is-in this x)
       (dissect this (cline-internals-by-own-method dexed-delegate)
-      #/expect
-        (cline-internals-by-own-method-delegate-get-method
+      #/getfx-bind
+        (getfx-cline-internals-by-own-method-delegate-get-method
           dexed-delegate x)
-        (just method)
-        #f
-      #/in-cline? method x))
+      #/expectfn (just method) (getfx-done #f)
+      #/getfx-is-in-cline method x))
     
-    (define (cline-internals-compare this a b)
+    (define (getfx-cline-internals-compare this a b)
       (dissect this (cline-internals-by-own-method dexed-delegate)
-      #/maybe-bind
-        (cline-internals-by-own-method-delegate-get-method
+      #/getmaybefx-bind
+        (getfx-cline-internals-by-own-method-delegate-get-method
           dexed-delegate a)
       #/fn a-method
-      #/maybe-bind
-        (cline-internals-by-own-method-delegate-get-method
+      #/getmaybefx-bind
+        (getfx-cline-internals-by-own-method-delegate-get-method
           dexed-delegate b)
       #/fn b-method
-      #/expect (eq-by-dex? (dex-cline) a-method b-method) #t
-        (cline-internals-by-own-method-delegate-raise-different-methods-error
+      #/getfx-bind (getfx-is-eq-by-dex (dex-cline) a-method b-method)
+      #/expectfn #t
+        (getfx-err-cline-internals-by-own-method-delegate-different-methods
           dexed-delegate a b a-method b-method)
-      #/compare-by-cline a-method a b))
+      #/getfx-compare-by-cline a-method a b))
   ])
 
 
 (define/contract
-  (cline-internals-fix-delegate-unwrap dexed-unwrap this)
-  (-> (dexed-first-order/c #/-> cline? cline?) cline? cline?)
-  (w- unwrap (dexed-get-value dexed-unwrap)
-  #/w- result (unwrap this)
+  (getfx-cline-internals-fix-delegate-unwrap dexed-getfx-unwrap this)
+  (-> (dexed-first-order/c #/-> cline? #/getfx/c cline?) cline?
+    (getfx/c cline?))
+  (w- getfx-unwrap (dexed-get-value dexed-getfx-unwrap)
+  #/w- getfx-result (getfx-unwrap this)
+  #/expect (getfx? getfx-result) #t
+    (raise-arguments-error 'cline-fix
+      "expected the pure result of dexed-getfx-unwrap to be a getfx effectful computation"
+      "dexed-getfx-unwrap" dexed-getfx-unwrap
+      "this" this
+      "getfx-result" getfx-result)
+  #/getfx-bind getfx-result #/fn result
   #/expect (cline? result) #t
     (raise-arguments-error 'cline-fix
-      "expected the result of dexed-unwrap to be a cline"
-      "dexed-unwrap" dexed-unwrap
+      "expected the result of dexed-getfx-unwrap to be a cline"
+      "dexed-getfx-unwrap" dexed-getfx-unwrap
       "this" this
       "result" result)
-    result))
+  #/getfx-done result))
 
-(struct-easy (convert-dex-from-cline-fix dexed-unwrap)
+(struct-easy (convert-dex-from-cline-fix dexed-getfx-unwrap)
   #:other
   
   #:property prop:procedure
   (fn this dex
-    (dissect this (convert-dex-from-cline-fix dexed-unwrap)
-    #/get-dex-from-cline
-      (cline-internals-fix-delegate-unwrap dexed-unwrap
-        (cline-by-dex dex)))))
+    (dissect this (convert-dex-from-cline-fix dexed-getfx-unwrap)
+    #/getfx-map
+      (getfx-cline-internals-fix-delegate-unwrap dexed-getfx-unwrap
+        (cline-by-dex dex))
+    #/fn cline
+      (get-dex-from-cline cline))))
 
-(struct-easy (cline-internals-fix dexed-unwrap)
+(struct-easy (cline-internals-fix dexed-getfx-unwrap)
   #:other
   
   #:methods internal:gen:cline-internals
@@ -1619,40 +1749,41 @@
       'tag:cline-fix)
     
     (define (cline-internals-autoname this)
-      (dissect this (cline-internals-fix dexed-unwrap)
-      #/dissect (dexed-get-name dexed-unwrap) (internal:name rep)
+      (dissect this (cline-internals-fix dexed-getfx-unwrap)
+      #/dissect (dexed-get-name dexed-getfx-unwrap)
+        (internal:name rep)
       #/list 'tag:cline-fix rep))
     
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-fix a)
       #/dissect other (cline-internals-fix b)
-      #/compare-by-dex (dex-dexed) a b))
+      #/pure-run-getfx #/getfx-compare-by-dex (dex-dexed) a b))
     
     (define (cline-internals-dex this)
-      (dissect this (cline-internals-fix dexed-unwrap)
-      #/dex-fix #/just-value #/dexed-of
-        (dex-struct convert-dex-from-cline-fix #/dex-dexed)
-        (convert-dex-from-cline-fix dexed-unwrap)))
+      (dissect this (cline-internals-fix dexed-getfx-unwrap)
+      #/dex-fix #/dexed-struct-of-dexed convert-dex-from-cline-fix
+        convert-dex-from-cline-fix))
     
-    (define (cline-internals-in? this x)
-      (dissect this (cline-internals-fix dexed-unwrap)
-      #/in-cline?
-        (cline-internals-fix-delegate-unwrap dexed-unwrap
+    (define (getfx-cline-internals-is-in this x)
+      (dissect this (cline-internals-fix dexed-getfx-unwrap)
+      #/getfx-bind
+        (getfx-cline-internals-fix-delegate-unwrap dexed-getfx-unwrap
           (internal:cline this))
-        x))
+      #/fn this
+      #/getfx-is-in-cline this x))
     
-    (define (cline-internals-compare this a b)
-      (dissect this (cline-internals-fix dexed-unwrap)
-      #/compare-by-cline
-        (cline-internals-fix-delegate-unwrap dexed-unwrap
+    (define (getfx-cline-internals-compare this a b)
+      (dissect this (cline-internals-fix dexed-getfx-unwrap)
+      #/getfx-bind
+        (getfx-cline-internals-fix-delegate-unwrap dexed-getfx-unwrap
           (internal:cline this))
-        a
-        b))
+      #/fn this
+      #/getfx-compare-by-cline this a b))
   ])
 
-(define/contract (cline-fix dexed-unwrap)
-  (-> (dexed-first-order/c #/-> cline? cline?) cline?)
-  (internal:cline #/cline-internals-fix dexed-unwrap))
+(define/contract (cline-fix dexed-getfx-unwrap)
+  (-> (dexed-first-order/c #/-> cline? #/getfx/c cline?) cline?)
+  (internal:cline #/cline-internals-fix dexed-getfx-unwrap))
 
 
 (struct-easy (cline-internals-struct descriptor counts? fields)
@@ -1687,20 +1818,8 @@
         #/fn a-field b-field
           (dissect a-field (list a-getter a-position a-cline)
           #/dissect b-field (list b-getter b-position b-cline)
-          #/compare-by-dex (dex-cline) a-cline b-cline))))
-    
-    (define (cline-internals-in? this x)
-      (dissect this (cline-internals-struct descriptor counts? fields)
-      #/and (counts? x)
-      #/w-loop next fields fields
-        (expect fields (cons field fields) #t
-        #/dissect field (list getter position cline)
-        
-        ; We do a tail call if we can.
-        #/mat fields (list) (in-cline? cline #/getter x)
-        
-        #/and (in-cline? cline #/getter x)
-        #/next fields)))
+          #/pure-run-getfx
+            (getfx-compare-by-dex (dex-cline) a-cline b-cline)))))
     
     (define (cline-internals-dex this)
       (dissect this (cline-internals-struct descriptor counts? fields)
@@ -1708,35 +1827,50 @@
       #/list-map fields #/dissectfn (list getter position cline)
         (list getter position #/get-dex-from-cline cline)))
     
-    (define (cline-internals-compare this a b)
+    (define (getfx-cline-internals-is-in this x)
       (dissect this (cline-internals-struct descriptor counts? fields)
-      #/expect (counts? a) #t (nothing)
-      #/expect (counts? b) #t (nothing)
+      #/expect (counts? x) #t (getfx-done #f)
       #/w-loop next fields fields
-        (expect fields (cons field fields) (just #/ordering-eq)
+        (expect fields (cons field fields) (getfx-done #t)
+        #/dissect field (list getter position cline)
+        
+        ; We do a tail call if we can.
+        #/mat fields (list) (getfx-is-in-cline cline #/getter x)
+        
+        #/getfx-bind (getfx-is-in-cline cline #/getter x)
+        #/expectfn #t (getfx-done #f)
+        #/next fields)))
+    
+    (define (getfx-cline-internals-compare this a b)
+      (dissect this (cline-internals-struct descriptor counts? fields)
+      #/expect (counts? a) #t (getfx-done #/nothing)
+      #/expect (counts? b) #t (getfx-done #/nothing)
+      #/w-loop next fields fields
+        (expect fields (cons field fields)
+          (getfx-done #/just #/ordering-eq)
         #/dissect field (list getter position cline)
         
         ; We do a tail call if we can.
         #/mat fields (list)
-          (compare-by-cline cline (getter a) (getter b))
+          (getfx-compare-by-cline cline (getter a) (getter b))
         
-        #/w- result (compare-by-cline cline (getter a) (getter b))
-        #/expect result (just #/ordering-eq)
-          (mat result (nothing) (nothing)
+        #/getmaybefx-bind
+          (getfx-compare-by-cline cline (getter a) (getter b))
+        #/fn result
+        #/expect result (ordering-eq)
           ; We have a potential result to use, but first we check that
           ; the rest of the field values belong to their respective
           ; clines' domains. If they don't, this structure instance is
           ; not part part of this cline's domain, so the result is
           ; `(nothing)`.
-          #/w-loop next fields fields
-            (expect fields (cons field fields) result
+          (w-loop next fields fields
+            (expect fields (cons field fields)
+              (getfx-done #/just result)
             #/dissect field (list getter position cline)
-            #/expect
-              (and
-                (in-cline? cline #/getter a)
-                (in-cline? cline #/getter b))
-              #t
-              (nothing)
+            #/getfx-bind (getfx-is-in-cline cline #/getter a)
+            #/expectfn #t (getfx-done #/nothing)
+            #/getfx-bind (getfx-is-in-cline cline #/getter b)
+            #/expectfn #t (getfx-done #/nothing)
             #/next fields))
         #/next fields)))
   ])
@@ -1815,19 +1949,20 @@
     (define (cline-internals-autodex this other)
       (dissect this (cline-internals-flip a)
       #/dissect other (cline-internals-flip b)
-      #/compare-by-dex (dex-cline) a b))
+      #/pure-run-getfx #/getfx-compare-by-dex (dex-cline) a b))
     
     (define (cline-internals-dex this)
       (dissect this (cline-internals-flip cline)
       #/get-dex-from-cline cline))
     
-    (define (cline-internals-in? this x)
+    (define (getfx-cline-internals-is-in this x)
       (dissect this (cline-internals-flip cline)
-      #/in-cline? cline x))
+      #/getfx-is-in-cline cline x))
     
-    (define (cline-internals-compare this a b)
+    (define (getfx-cline-internals-compare this a b)
       (dissect this (cline-internals-flip cline)
-      #/maybe-map (compare-by-cline cline a b) #/fn unflipped-result
+      #/getmaybefx-map (getfx-compare-by-cline cline a b)
+      #/fn unflipped-result
         (mat unflipped-result (ordering-lt) (ordering-gt)
         #/mat unflipped-result (ordering-gt) (ordering-lt)
           unflipped-result)))
@@ -1886,23 +2021,26 @@
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
     
-    (define (dex-internals-in? this x)
-      (merge? x))
+    (define (getfx-dex-internals-is-in this x)
+      (getfx-done #/merge? x))
     
-    (define (dex-internals-name-of this x)
-      (if (merge? x)
-        (just #/internal:name #/autoname-merge x)
-        (nothing)))
+    (define (getfx-dex-internals-name-of this x)
+      (getfx-done
+        (if (merge? x)
+          (just #/internal:name #/autoname-merge x)
+          (nothing))))
     
-    (define (dex-internals-dexed-of this x)
-      (dex-internals-simple-dexed-of this x))
+    (define (getfx-dex-internals-dexed-of this x)
+      (getfx-dex-internals-simple-dexed-of this x))
     
-    (define (dex-internals-compare this a b)
-      (expect a (internal:merge a) (nothing)
-      #/expect b (internal:merge b) (nothing)
-      #/w- tag internal:furge-internals-tag
-      #/maybe-ordering-or (just #/lt-autodex (tag a) (tag b) symbol<?)
-      #/internal:furge-internals-autodex a b))
+    (define (getfx-dex-internals-compare this a b)
+      (getfx-done
+        (expect a (internal:merge a) (nothing)
+        #/expect b (internal:merge b) (nothing)
+        #/w- tag internal:furge-internals-tag
+        #/maybe-ordering-or
+          (just #/lt-autodex (tag a) (tag b) symbol<?)
+        #/internal:furge-internals-autodex a b)))
   ])
 
 (define/contract (dex-merge)
@@ -1925,23 +2063,26 @@
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
     
-    (define (dex-internals-in? this x)
-      (fuse? x))
+    (define (getfx-dex-internals-is-in this x)
+      (getfx-done #/fuse? x))
     
-    (define (dex-internals-name-of this x)
-      (if (fuse? x)
-        (just #/internal:name #/autoname-fuse x)
-        (nothing)))
+    (define (getfx-dex-internals-name-of this x)
+      (getfx-done
+        (if (fuse? x)
+          (just #/internal:name #/autoname-fuse x)
+          (nothing))))
     
-    (define (dex-internals-dexed-of this x)
-      (dex-internals-simple-dexed-of this x))
+    (define (getfx-dex-internals-dexed-of this x)
+      (getfx-dex-internals-simple-dexed-of this x))
     
-    (define (dex-internals-compare this a b)
-      (expect a (internal:fuse a) (nothing)
-      #/expect b (internal:fuse b) (nothing)
-      #/w- tag internal:furge-internals-tag
-      #/maybe-ordering-or (just #/lt-autodex (tag a) (tag b) symbol<?)
-      #/internal:furge-internals-autodex a b))
+    (define (getfx-dex-internals-compare this a b)
+      (getfx-done
+        (expect a (internal:fuse a) (nothing)
+        #/expect b (internal:fuse b) (nothing)
+        #/w- tag internal:furge-internals-tag
+        #/maybe-ordering-or
+          (just #/lt-autodex (tag a) (tag b) symbol<?)
+        #/internal:furge-internals-autodex a b)))
   ])
 
 (define/contract (dex-fuse)
@@ -1965,7 +2106,7 @@
     (define (furge-internals-autodex this other)
       (dissect this (fuse-internals-by-merge a)
       #/dissect other (fuse-internals-by-merge b)
-      #/compare-by-dex (dex-merge) a b))
+      #/pure-run-getfx #/getfx-compare-by-dex (dex-merge) a b))
     
     (define (getfx-furge-internals-call this a b)
       (dissect this (fuse-internals-by-merge merge)
@@ -1993,14 +2134,13 @@
     (define (furge-internals-autodex this other)
       (dissect this (furge-internals-by-dex a)
       #/dissect other (furge-internals-by-dex b)
-      #/compare-by-dex (dex-dex) a b))
+      #/pure-run-getfx #/getfx-compare-by-dex (dex-dex) a b))
     
     (define (getfx-furge-internals-call this a b)
       (dissect this (furge-internals-by-dex dex)
-      #/getfx-done
-        (mat (compare-by-dex dex a b) (just #/ordering-eq)
-          (just a)
-          (nothing))))
+      #/getmaybefx-bind (getfx-compare-by-dex dex a b)
+      #/expectfn (ordering-eq) (getfx-done #/nothing)
+      #/getfx-done #/just a))
   ])
 
 (define/contract (merge-by-dex dex)
@@ -2023,14 +2163,14 @@
     (define (furge-internals-autodex this other)
       (dissect this (furge-internals-by-cline-min a)
       #/dissect other (furge-internals-by-cline-min b)
-      #/compare-by-dex (dex-cline) a b))
+      #/pure-run-getfx #/getfx-compare-by-dex (dex-cline) a b))
     
     (define (getfx-furge-internals-call this a b)
       (dissect this (furge-internals-by-cline-min cline)
-      #/getfx-done
-        (maybe-map (compare-by-cline cline a b) #/fn cline-result
-          (mat cline-result (ordering-gt) b
-            a))))
+      #/getmaybefx-map (getfx-compare-by-cline cline a b)
+      #/fn cline-result
+        (mat cline-result (ordering-gt) b
+          a)))
   ])
 
 (define/contract (merge-by-cline-min cline)
@@ -2071,8 +2211,10 @@
           (dissect this (furge-internals-opaque a-name a-furge)
           #/dissect other (furge-internals-opaque b-name b-furge)
           #/maybe-ordering-or
-            (compare-by-dex (dex-name) a-name b-name)
-            (compare-by-dex (dex-furge) a-furge b-furge)))
+            (pure-run-getfx
+              (getfx-compare-by-dex (dex-name) a-name b-name))
+            (pure-run-getfx
+              (getfx-compare-by-dex (dex-furge) a-furge b-furge))))
         
         (define (getfx-furge-internals-call this a b)
           (dissect this (furge-internals-opaque name furge)
@@ -2322,7 +2464,7 @@
         (define (furge-internals-autodex this other)
           (dissect this (furge-internals-by-own-method a)
           #/dissect other (furge-internals-by-own-method b)
-          #/compare-by-dex (dex-dexed) a b))
+          #/pure-run-getfx #/getfx-compare-by-dex (dex-dexed) a b))
         
         (define (getfx-furge-internals-call this a b)
           (dissect this (furge-internals-by-own-method dexed-delegate)
@@ -2334,7 +2476,10 @@
             (getfx-furge-internals-by-own-method-delegate-get-method
               dexed-delegate b)
           #/fn b-method
-          #/expect (compare-by-dex (dex-furge) a-method b-method)
+          #/expect
+            (pure-run-getfx #/getfx-compare-by-dex (dex-furge)
+              a-method
+              b-method)
             (just #/ordering-eq)
             (getfx-err-furge-internals-by-own-method-delegate-different-input-methods
               dexed-delegate a b a-method b-method)
@@ -2347,7 +2492,10 @@
           #/expect maybe-result-method (just result-method)
             (getfx-err-furge-internals-by-own-method-delegate-cannot-get-output-method
               dexed-delegate a b result a-method)
-          #/expect (compare-by-dex (dex-furge) a-method result-method)
+          #/expect
+            (pure-run-getfx #/getfx-compare-by-dex (dex-furge)
+              a-method
+              result-method)
             (just #/ordering-eq)
             (getfx-err-furge-internals-by-own-method-delegate-different-output-method
               dexed-delegate a b result a-method result-method)
@@ -2426,9 +2574,9 @@
     (define/contract (furge-by-own-method dexed-get-method)
       (-> (dexed-first-order/c #/-> any/c #/getfx/c #/maybe/c furge?)
         furge?)
-      (furge-by-own-method-thorough #/just-value #/dexed-of
-        (dex-struct furge-by-own-method-unthorough #/dex-dexed)
-        (furge-by-own-method-unthorough dexed-get-method)))
+      (furge-by-own-method-thorough
+        (dexed-struct-of-dexed furge-by-own-method-unthorough
+          dexed-get-method)))
   ))
 
 (define-furge-by-own-method
@@ -2506,7 +2654,7 @@
     (define (furge-internals-autodex this other)
       (dissect this (furge-internals-fix _ _ a)
       #/dissect other (furge-internals-fix _ _ b)
-      #/compare-by-dex (dex-dexed) a b))
+      #/pure-run-getfx #/getfx-compare-by-dex (dex-dexed) a b))
     
     (define (getfx-furge-internals-call this a b)
       (dissect this
@@ -2605,7 +2753,8 @@
         #/fn a-field b-field
           (dissect a-field (list a-getter a-position a-furge)
           #/dissect b-field (list b-getter b-position b-furge)
-          #/compare-by-dex dex-furge a-furge b-furge))))
+          #/pure-run-getfx
+            (getfx-compare-by-dex dex-furge a-furge b-furge)))))
     
     (define (getfx-furge-internals-call this a b)
       (dissect this
@@ -2787,8 +2936,74 @@
     #/expect (table-get k result) (nothing) (nothing)
     #/next assocs #/table-shadow k (just v) result)))
 
-(define/contract (table-sort cline table)
-  (-> cline? table? #/maybe/c #/listof table?)
+; Performs a stable sort of the given list according to a total
+; preorder. The given comparator is expected to check whether the
+; given two elements are in strictly ascending order (like `<`).
+; Unlike Racket's `sort`, this one can perform getfx computations
+; along the way without resorting to continuation capture.
+;
+; TODO: See if we should export this.
+;
+(define/contract (getfx-list-sort elems getfx-is-lt)
+  (-> list? (-> any/c any/c #/getfx/c boolean?) #/getfx/c list?)
+  
+  ; We use a merge sort. We start with one-element lists (which are
+  ; trivially sorted) and sweep back and forth merging the sorted
+  ; lists in pairs until there's only one sorted list left.
+  ;
+  ; TODO: See if we ought to use a different algorithm for some
+  ; reason.
+  
+  (define (list-rev-onto rev-before after)
+    (expect rev-before (cons middle rev-before) after
+    #/list-rev-onto rev-before (cons middle after)))
+  
+  ; NOTE: At worst, this performs a number of comparisons equal to the
+  ; total number of elements in `a` and `b` minus one.
+  (define (getfx-merge a b)
+    (w-loop next a a b b rev-result (list)
+      (expect a (cons a-first a-rest)
+        (getfx-done #/list-rev-onto rev-result b)
+      #/expect b (cons b-first b-rest)
+        (getfx-done #/list-rev-onto rev-result a)
+      #/getfx-bind (getfx-is-lt b-first a-first) #/expectfn #f
+        (next a b-rest (cons b-first rev-result))
+        (next a-rest b (cons a-first rev-result)))))
+  
+  ; NOTE: At worst, this performs a number of comparisons equal to the
+  ; total number of elements in all the sorted lists minus half the
+  ; number of sorted lists.
+  (define (getfx-merge-pairs-and-reverse sorted-lists)
+    (w-loop next sorted-lists sorted-lists result (list)
+      (expect sorted-lists (cons a sorted-lists) (getfx-done result)
+      #/expect sorted-lists (cons b sorted-lists)
+        (getfx-done #/cons a result)
+      #/getfx-bind (getfx-merge a b) #/fn merged
+      #/next sorted-lists (cons merged result))))
+  
+  ; NOTE: At worst, this performs a number of comparisons roughly
+  ; equal to (N * log_2 M), where `N` is the total number of elements
+  ; in all the sorted lists and `M` is the number of sorted lists.
+  ; That's because it has to iterate roughly (log_2 M) times until all
+  ; the sorted lists are merged into one, and each iteration performs
+  ; roughly `N` comparisons.
+  ;
+  (define (getfx-merge-all-back-and-forth at-least-one-sorted-list)
+    (mat at-least-one-sorted-list (list sorted-list)
+      (getfx-done sorted-list)
+    #/getfx-bind
+      (getfx-merge-pairs-and-reverse at-least-one-sorted-list)
+    #/fn at-least-one-sorted-list
+    #/getfx-merge-all-back-and-forth at-least-one-sorted-list))
+  
+  ; NOTE: At worst, this performs a number of comparisons roughly
+  ; equal to (N * log_2 N), where `N` is the number of elements.
+  (mat elems (list) (getfx-done #/list)
+  #/getfx-merge-all-back-and-forth
+    (list-map elems #/fn elem #/list elem)))
+
+(define/contract (getfx-table-sort cline table)
+  (-> cline? table? #/getfx/c #/maybe/c #/listof table?)
   (dissect table (internal:table hash)
   #/w- unsorted (hash->list hash)
   
@@ -2797,19 +3012,22 @@
   ; that their sometimes-non-terminating `cline-by-own-method` wasn't
   ; called on certain operands. This also makes it easy to take care
   ; of every condition where we need to return `(nothing)`.
-  #/expect
-    (list-all unsorted #/dissectfn (cons k v) #/in-cline? cline v)
-    #t
-    (nothing)
-  #/just
+  #/getmaybefx-bind
+    (getmaybefx-list-map #/list-map unsorted #/dissectfn (cons k v)
+      (getfx-map (getfx-is-in-cline cline v) #/fn is-in
+        (if is-in
+          (just #/trivial)
+          (nothing))))
+  #/dissectfn _
   
-  #/w- sorted-flat
-    (sort (hash->list hash) #/fn a b
+  #/getfx-bind
+    (getfx-list-sort (hash->list hash) #/fn a b
       (dissect a (cons ak av)
       #/dissect b (cons bk bv)
-      #/dissect (compare-by-cline cline av bv) (just cline-result)
-      #/mat cline-result (ordering-lt) #t
-        #f))
+      #/getfx-map (getfx-compare-by-cline cline av bv)
+      #/dissectfn (just cline-result)
+        (ordering-lt? cline-result)))
+  #/fn sorted-flat
   #/w- sorted-flat
     (list-map sorted-flat #/dissectfn (cons k v)
       (cons (internal:name k) v))
@@ -2823,12 +3041,13 @@
         (reverse rev-sorted-grouped)
         (dissect (assocs->table-if-mutually-unique current-group)
           (just current-group)
-        #/reverse #/cons current-group rev-sorted-grouped))
+        #/getfx-done #/just
+          (reverse #/cons current-group rev-sorted-grouped)))
     #/dissect entry (cons k v)
     #/expect current-group (cons existing-v _)
       (next sorted-flat (list entry) rev-sorted-grouped)
-    #/dissect (compare-by-cline cline existing-v v)
-      (just cline-result)
+    #/getfx-bind (getfx-compare-by-cline cline existing-v v)
+    #/dissectfn (just cline-result)
     #/mat cline-result (ordering-lt)
       ; The element we're on is part of a new group, so we commit the
       ; current group to the result.
@@ -2902,46 +3121,49 @@
     (define (dex-internals-autodex this other)
       (dissect this (dex-internals-table a-dex-val)
       #/dissect other (dex-internals-table b-dex-val)
-      #/compare-by-dex (dex-dex) a-dex-val b-dex-val))
+      #/pure-run-getfx
+        (getfx-compare-by-dex (dex-dex) a-dex-val b-dex-val)))
     
-    (define (dex-internals-in? this x)
+    (define (getfx-dex-internals-is-in this x)
       (dissect this (dex-internals-table dex-val)
-      #/expect x (internal:table x) #f
-      #/hash-v-all x #/fn val
-        (in-dex? dex-val val)))
+      #/expect (table? x) #t (getfx-done #f)
+      #/getfx-bind
+        (getmaybefx-list-map #/list-map (table->sorted-list x)
+        #/dissectfn (list k v)
+          (getfx-map (getfx-is-in-dex dex-val v) #/expectfn #f
+            (just #/trivial)
+            (nothing)))
+      #/expectfn (just _) (getfx-done #f)
+      #/getfx-done #t))
     
     ; TODO: See if we should have the ordering of the
-    ; `internal:dex-internals-name-of` names of tables be consistent
-    ; with the `internal:dex-internals-compare` ordering of the tables
-    ; themselves.
+    ; `internal:getfx-dex-internals-name-of` names of tables be
+    ; consistent with the `internal:getfx-dex-internals-compare`
+    ; ordering of the tables themselves.
     
-    (define (dex-internals-name-of this x)
+    (define (getfx-dex-internals-name-of this x)
       (dissect this (dex-internals-table dex-val)
-      ; TODO: Currently, this calls `in-dex?` on each value of the
-      ; table (indirectly via this one `internal:dex-internals-in?`
-      ; call), and then if they all succeed, it calls `name-of`. This
-      ; could be doing some redundant computation. See if we can
-      ; optimize this.
-      #/if (not #/internal:dex-internals-in? this x) (nothing)
-      #/just #/internal:name #/cons 'name:table
-        (list-bind (table->sorted-list x)
+      #/expect (table? x) #t (getfx-done #/nothing)
+      #/getmaybefx-bind
+        (getmaybefx-list-map #/list-map (table->sorted-list x)
         #/dissectfn (list (internal:name k-rep) v)
-          (dissect (name-of dex-val v) (just #/internal:name v-rep)
-          #/list k-rep v-rep))))
+          (getmaybefx-bind (getfx-name-of dex-val v)
+          #/dissectfn (internal:name v-rep)
+          #/getfx-done #/just #/list k-rep v-rep))
+      #/fn kv-reps
+      #/getfx-done #/just #/internal:name #/cons 'name:table
+        (list-bind kv-reps #/fn kv kv)))
     
-    (define (dex-internals-dexed-of this x)
+    (define (getfx-dex-internals-dexed-of this x)
       (dissect this (dex-internals-table dex-val)
-      ; TODO: Currently, this calls `in-dex?` on each value of the
-      ; table (indirectly via this one `internal:dex-internals-in?`
-      ; call), and then if they all succeed, it calls `dexed-of`. This
-      ; could be doing some redundant computation. See if we can
-      ; optimize this.
-      #/if (not #/internal:dex-internals-in? this x) (nothing)
-      #/w- dexeds
-        (list-map (table->sorted-list x) #/dissectfn (list k v)
-          (dissect (dexed-of dex-val v) (just dexed)
-          #/list k dexed))
-      #/just #/dexed
+      #/expect (table? x) #t (getfx-done #/nothing)
+      #/getmaybefx-bind
+        (getmaybefx-list-map #/list-map (table->sorted-list x)
+        #/dissectfn (list k v)
+          (getmaybefx-bind (getfx-dexed-of dex-val v) #/fn dexed
+          #/getfx-done #/just #/list k dexed))
+      #/fn dexeds
+      #/getfx-done #/just #/dexed
         ; TODO: Move the definition of `dex-internals-table-ordered`
         ; before this.
         (internal:dex #/dex-internals-table-ordered
@@ -2956,47 +3178,53 @@
             (list k-rep v-rep)))
         x))
     
-    (define (dex-internals-compare this a b)
+    (define (getfx-dex-internals-compare this a b)
       (dissect this (dex-internals-table dex-val)
-      ; TODO: Currently, this calls `in-dex?` on each value of each
-      ; table (indirectly via these two `internal:dex-internals-in?`
-      ; calls), and then if they all succeed, it calls
-      ; `compare-by-dex` on each one too (up to the point, if any,
-      ; where it exits early due to a nonequal result). This could be
-      ; doing some redundant computation. See if we can optimize this.
-      #/if (not #/internal:dex-internals-in? this a) (nothing)
-      #/if (not #/internal:dex-internals-in? this b) (nothing)
-      #/maybe-ordering-or
-        (just #/lt-autodex (table-count a) (table-count b) <)
+      
+      ; We check that the tables are the same size.
+      #/getmaybefx-ordering-or
+        (getfx-done #/just
+          (lt-autodex (table-count a) (table-count b) <))
+      
       #/w- a (table->sorted-list a)
       #/w- b (table->sorted-list b)
-      #/maybe-ordering-or
-        (w-loop next
-          keys
-          (map list
-            (list-map a #/dissectfn (list k v) k)
-            (list-map b #/dissectfn (list k v) k))
-          (expect keys (cons entry keys) (just #/ordering-eq)
-          #/dissect entry (list a b)
-          #/maybe-ordering-or (just #/names-autodex a b)
-          #/next keys))
-        (w-loop next
-          vals
-          ; NOTE: If we get to this point, we compare *every* pair of
-          ; corresponding values. That's because if we short-circuit
-          ; before comparing certain values, then a client can deduce
-          ; that their sometimes-non-terminating `dex-by-own-method`
-          ; hasn't been called on certain values in the table.
-          (list-map
+      
+      ; We check that the tables have the same keys.
+      #/getmaybefx-ordering-or
+        (getfx-done
+          (w-loop next
+            keys
             (map list
-              (list-map a #/dissectfn (list k v) v)
-              (list-map b #/dissectfn (list k v) v))
-          #/dissectfn (list a b)
-            (compare-by-dex dex-val a b))
-          (expect vals (cons maybe-dex-result vals)
-            (just #/ordering-eq)
-          #/maybe-ordering-or maybe-dex-result
-          #/next vals))))
+              (list-map a #/dissectfn (list k v) k)
+              (list-map b #/dissectfn (list k v) k))
+            (expect keys (cons entry keys) (just #/ordering-eq)
+            #/dissect entry (list a b)
+            #/maybe-ordering-or (just #/names-autodex a b)
+            #/next keys)))
+      
+      ; We compare *every* pair of corresponding values.
+      ;
+      ; NOTE: We do this because if we short-circuit before comparing
+      ; certain values, then a client can deduce that their
+      ; sometimes-non-terminating `dex-by-own-method` hasn't been
+      ; called on certain values in the table.
+      ;
+      #/getfx-bind
+        (getfx-list-map #/list-map
+          (map list
+            (list-map a #/dissectfn (list k v) v)
+            (list-map b #/dissectfn (list k v) v))
+        #/dissectfn (list a b)
+          (getfx-compare-by-dex dex-val a b))
+      #/fn dex-results
+      
+      ; We collect the comparison results into a single overall
+      ; result.
+      #/w-loop next dex-results dex-results
+        (expect dex-results (cons maybe-dex-result dex-results)
+          (getfx-done #/just #/ordering-eq)
+        #/maybe-ordering-or maybe-dex-result
+        #/next dex-results)))
   ])
 
 (define/contract (dex-table dex-val)
@@ -3039,43 +3267,48 @@
         #/fn a-entry b-entry
           (dissect a-entry (list a-k a-dex-v)
           #/dissect b-entry (list b-k b-dex-v)
-          #/compare-by-dex (dex-dex) a-dex-v b-dex-v))))
+          #/pure-run-getfx
+            (getfx-compare-by-dex (dex-dex) a-dex-v b-dex-v)))))
     
-    (define (dex-internals-in? this x)
+    (define (getfx-dex-internals-is-in this x)
       (dissect this (dex-internals-table-ordered assoc)
-      #/and (table-ordered-counts? assoc x)
+      #/expect (table-ordered-counts? assoc x) #t (getfx-done #f)
       #/w-loop next assoc assoc
-        (expect assoc (cons entry assoc) #t
+        (expect assoc (cons entry assoc) (getfx-done #t)
         #/dissect entry (list k dex-v)
         #/dissect (table-get k x) (just v)
         
         ; We do a tail call if we can.
-        #/mat assoc (list) (in-dex? dex-v v)
+        #/mat assoc (list) (getfx-is-in-dex dex-v v)
         
-        #/and (in-dex? dex-v v)
+        #/getfx-bind (getfx-is-in-dex dex-v v) #/fn is-in
+        #/expect is-in #t (getfx-done #f)
         #/next assoc)))
     
-    (define (dex-internals-name-of this x)
+    (define (getfx-dex-internals-name-of this x)
       (dissect this (dex-internals-table-ordered assoc)
-      #/expect (table-ordered-counts? assoc x) #t (nothing)
+      #/expect (table-ordered-counts? assoc x) #t
+        (getfx-done #/nothing)
       #/w-loop next assoc assoc reps (table-empty)
         (expect assoc (cons entry assoc)
-          (just #/internal:name #/cons 'name:table
+          (getfx-done #/just #/internal:name #/cons 'name:table
             (list-bind (table->sorted-list reps)
             #/dissectfn (list (internal:name k-rep) v-rep)
               (list k-rep v-rep)))
         #/dissect entry (list k dex-v)
         #/dissect (table-get k x) (just v)
-        #/maybe-bind (name-of dex-v v) #/dissectfn (internal:name rep)
+        #/getmaybefx-bind (getfx-name-of dex-v v)
+        #/dissectfn (internal:name rep)
         #/next assoc #/table-shadow k (just rep) reps)))
     
-    (define (dex-internals-dexed-of this x)
+    (define (getfx-dex-internals-dexed-of this x)
       (dissect this (dex-internals-table-ordered assoc)
-      #/expect (table-ordered-counts? assoc x) #t (nothing)
+      #/expect (table-ordered-counts? assoc x) #t
+        (getfx-done #/nothing)
       #/w-loop next assoc assoc dexeds (table-empty)
         (expect assoc (cons entry assoc)
           (w- dexeds (table->sorted-list dexeds)
-          #/just #/dexed
+          #/getfx-done #/just #/dexed
             (internal:dex #/dex-internals-table-ordered
               (list-map dexeds #/dissectfn (list k (dexed dex name v))
                 (list k dex)))
@@ -3089,37 +3322,43 @@
             x)
         #/dissect entry (list k dex-v)
         #/dissect (table-get k x) (just v)
-        #/maybe-bind (dexed-of dex-v v) #/fn dexed
+        #/getmaybefx-bind (getfx-dexed-of dex-v v) #/fn dexed
         #/next assoc #/table-shadow k (just dexed) dexeds)))
     
-    (define (dex-internals-compare this a b)
+    (define (getfx-dex-internals-compare this a b)
       (dissect this (dex-internals-table-ordered assoc)
-      #/expect (table-ordered-counts? assoc a) #t (nothing)
-      #/expect (table-ordered-counts? assoc b) #t (nothing)
+      #/expect (table-ordered-counts? assoc a) #t
+        (getfx-done #/nothing)
+      #/expect (table-ordered-counts? assoc b) #t
+        (getfx-done #/nothing)
       #/w-loop next assoc assoc
-        (expect assoc (cons entry assoc) (just #/ordering-eq)
+        (expect assoc (cons entry assoc)
+          (getfx-done #/just #/ordering-eq)
         #/dissect entry (list k dex-v)
         #/dissect (table-get k a) (just a-v)
         #/dissect (table-get k b) (just b-v)
         
         ; We do a tail call if we can.
-        #/mat assoc (list) (compare-by-dex dex-v a-v b-v)
+        #/mat assoc (list) (getfx-compare-by-dex dex-v a-v b-v)
         
-        #/w- result (compare-by-dex dex-v a-v b-v)
-        #/expect result (just #/ordering-eq)
-          (mat result (nothing) (nothing)
+        #/getmaybefx-bind (getfx-compare-by-dex dex-v a-v b-v)
+        #/fn result
+        #/expect result (ordering-eq)
           ; We have a potential result to use, but first we check that
           ; the rest of the field values belong to their respective
           ; dexes' domains. If they don't, this structure instance is
           ; not part part of this dex's domain, so the result is
           ; `(nothing)`.
-          #/w-loop next assoc assoc
-            (expect assoc (cons entry assoc) result
+          (w-loop next assoc assoc
+            (expect assoc (cons entry assoc)
+              (getfx-done #/just result)
             #/dissect entry (list k dex-v)
             #/dissect (table-get k a) (just a-v)
             #/dissect (table-get k b) (just b-v)
-            #/expect (and (in-dex? dex-v a-v) (in-dex? dex-v b-v)) #t
-              (nothing)
+            #/getfx-bind (getfx-is-in-dex dex-v a-v)
+            #/expectfn #t (getfx-done #/nothing)
+            #/getfx-bind (getfx-is-in-dex dex-v b-v)
+            #/expectfn #t (getfx-done #/nothing)
             #/next assoc))
         #/next assoc)))
   ])
@@ -3162,7 +3401,8 @@
         #/fn a-entry b-entry
           (dissect a-entry (list a-k a-cline-v)
           #/dissect b-entry (list b-k b-cline-v)
-          #/compare-by-dex (dex-cline) a-cline-v b-cline-v))))
+          #/pure-run-getfx
+            (getfx-compare-by-dex (dex-cline) a-cline-v b-cline-v)))))
     
     (define (cline-internals-dex this)
       (dissect this (cline-internals-table-ordered assoc)
@@ -3172,50 +3412,55 @@
         (list-map assoc #/dissectfn (list k cline-v)
           (list k (get-dex-from-cline cline-v)))))
     
-    (define (cline-internals-in? this x)
+    (define (getfx-cline-internals-is-in this x)
       (dissect this (cline-internals-table-ordered assoc)
-      #/and (table-ordered-counts? assoc x)
+      #/expect (table-ordered-counts? assoc x) #t (getfx-done #f)
       #/w-loop next assoc assoc
-        (expect assoc (cons entry assoc) #t
+        (expect assoc (cons entry assoc) (getfx-done #t)
         #/dissect entry (list k cline-v)
         #/dissect (table-get k x) (just v)
         
         ; We do a tail call if we can.
-        #/mat assoc (list) (in-cline? cline-v v)
+        #/mat assoc (list) (getfx-is-in-cline cline-v v)
         
-        #/and (in-cline? cline-v v)
+        #/getfx-bind (getfx-is-in-cline cline-v v) #/expectfn #t
+          (getfx-done #f)
         #/next assoc)))
     
-    (define (cline-internals-compare this a b)
+    (define (getfx-cline-internals-compare this a b)
       (dissect this (cline-internals-table-ordered assoc)
-      #/expect (table-ordered-counts? assoc a) #t (nothing)
-      #/expect (table-ordered-counts? assoc b) #t (nothing)
+      #/expect (table-ordered-counts? assoc a) #t
+        (getfx-done #/nothing)
+      #/expect (table-ordered-counts? assoc b) #t
+        (getfx-done #/nothing)
       #/w-loop next assoc assoc
-        (expect assoc (cons entry assoc) (just #/ordering-eq)
+        (expect assoc (cons entry assoc)
+          (getfx-done #/just #/ordering-eq)
         #/dissect entry (list k cline-v)
         #/dissect (table-get k a) (just a-v)
         #/dissect (table-get k b) (just b-v)
         
         ; We do a tail call if we can.
-        #/mat assoc (list) (compare-by-cline cline-v a-v b-v)
+        #/mat assoc (list) (getfx-compare-by-cline cline-v a-v b-v)
         
-        #/w- result (compare-by-cline cline-v a-v b-v)
-        #/expect result (just #/ordering-eq)
-          (mat result (nothing) (nothing)
+        #/getmaybefx-bind (getfx-compare-by-cline cline-v a-v b-v)
+        #/fn result
+        #/expect result (ordering-eq)
           ; We have a potential result to use, but first we check that
           ; the rest of the field values belong to their respective
           ; clines' domains. If they don't, this structure instance is
           ; not part part of this cline's domain, so the result is
           ; `(nothing)`.
-          #/w-loop next assoc assoc
-            (expect assoc (cons entry assoc) result
+          (w-loop next assoc assoc
+            (expect assoc (cons entry assoc)
+              (getfx-done #/just result)
             #/dissect entry (list k cline-v)
             #/dissect (table-get k a) (just a-v)
             #/dissect (table-get k b) (just b-v)
-            #/expect
-              (and (in-cline? cline-v a-v) (in-cline? cline-v b-v))
-              #t
-              (nothing)
+            #/getfx-bind (getfx-is-in-cline cline-v a-v)
+            #/expectfn #t (getfx-done #/nothing)
+            #/getfx-bind (getfx-is-in-cline cline-v b-v)
+            #/expectfn #t (getfx-done #/nothing)
             #/next assoc))
         #/next assoc)))
   ])
@@ -3247,7 +3492,7 @@
     (define (furge-internals-autodex this other)
       (dissect this (furge-internals-table _ dex-furge _ a)
       #/dissect other (furge-internals-table _ _ _ b)
-      #/compare-by-dex dex-furge a b))
+      #/pure-run-getfx #/getfx-compare-by-dex dex-furge a b))
     
     (define (getfx-furge-internals-call this a b)
       (dissect this
@@ -3398,7 +3643,7 @@
     (define (furge-internals-autodex this other)
       (dissect this (furge-internals-fusable-function a)
       #/dissect other (furge-internals-fusable-function b)
-      #/compare-by-dex (dex-dexed) a b))
+      #/pure-run-getfx #/getfx-compare-by-dex (dex-dexed) a b))
     
     (define (getfx-furge-internals-call this a b)
       (dissect this (furge-internals-fusable-function dexed-delegate)
@@ -3467,9 +3712,9 @@
 
 (define/contract (fuse-fusable-function dexed-arg-to-method)
   (-> (dexed-first-order/c #/-> any/c #/getfx/c fuse?) fuse?)
-  (fuse-fusable-function-thorough #/just-value #/dexed-of
-    (dex-struct fuse-fusable-function-unthorough #/dex-dexed)
-    (fuse-fusable-function-unthorough dexed-arg-to-method)))
+  (fuse-fusable-function-thorough
+    (dexed-struct-of-dexed fuse-fusable-function-unthorough
+      dexed-arg-to-method)))
 
 
 
@@ -3501,22 +3746,24 @@
         (define (dex-internals-autodex this other)
           (just #/ordering-eq))
         
-        (define (dex-internals-in? this x)
-          (id? x))
+        (define (getfx-dex-internals-is-in this x)
+          (getfx-done #/id? x))
         
-        (define (dex-internals-name-of this x)
-          (if (id? x)
-            (just #/internal:name
-            #/list 'name:id #/id->name-internals x)
-            (nothing)))
+        (define (getfx-dex-internals-name-of this x)
+          (getfx-done
+            (if (id? x)
+              (just #/internal:name #/list 'name:id
+                (id->name-internals x))
+              (nothing))))
         
-        (define (dex-internals-dexed-of this x)
-          (dex-internals-simple-dexed-of this x))
+        (define (getfx-dex-internals-dexed-of this x)
+          (getfx-dex-internals-simple-dexed-of this x))
         
-        (define (dex-internals-compare this a b)
-          (expect (id? a) #t (nothing)
-          #/expect (id? b) #t (nothing)
-          #/just #/lt-autodex a b id<?))
+        (define (getfx-dex-internals-compare this a b)
+          (getfx-done
+            (expect (id? a) #t (nothing)
+            #/expect (id? b) #t (nothing)
+            #/just #/lt-autodex a b id<?)))
       ])
     
     (define/contract (dex-id)
@@ -3552,13 +3799,14 @@
         (define (cline-internals-dex this)
           (dex-id))
         
-        (define (cline-internals-in? this x)
-          (id? x))
+        (define (getfx-cline-internals-is-in this x)
+          (getfx-done #/id? x))
         
-        (define (cline-internals-compare this a b)
-          (expect (id? a) #t (nothing)
-          #/expect (id? b) #t (nothing)
-          #/just #/lt-autocline a b id<?))
+        (define (getfx-cline-internals-compare this a b)
+          (getfx-done
+            (expect (id? a) #t (nothing)
+            #/expect (id? b) #t (nothing)
+            #/just #/lt-autocline a b id<?)))
       ])
     
     (define/contract (cline-id)

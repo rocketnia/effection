@@ -250,6 +250,12 @@
     (getfx-done #/nothing)
   #/then intermediate))
 
+; TODO: See if we should export this.
+(define/contract (getmaybefx-map effects func)
+  (-> (getfx/c maybe?) (-> any/c any/c) #/getfx/c maybe?)
+  (getmaybefx-bind effects #/fn intermediate
+  #/getfx-done #/just #/func intermediate))
+
 ; TODO: See if we should export this from somewhere.
 (define/contract (monad-list-map fx-done fx-bind list-of-fx)
   (-> (-> any/c any/c) (-> any/c (-> any/c any/c) any/c) list? any/c)

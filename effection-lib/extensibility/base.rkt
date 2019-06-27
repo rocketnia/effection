@@ -30,13 +30,13 @@
   struct-easy)
 (require #/only-in lathe-comforts/trivial trivial trivial?)
 
-(require #/only-in effection/order eq-by-dex? table-v-of)
+(require #/only-in effection/order getfx-is-eq-by-dex table-v-of)
 (require #/only-in effection/order/base
-  compare-by-dex dex? dexed? dexed/c dexed-first-order/c
-  dexed-get-name dexed-get-value dex-name fuse? name? ordering-eq
-  table? table-empty? table-empty table-get table-shadow)
+  dex? dexed? dexed/c dexed-first-order/c dexed-get-name
+  dexed-get-value dex-name fuse? getfx-compare-by-dex name?
+  ordering-eq table? table-empty? table-empty table-get table-shadow)
 (require #/only-in (submod effection/order/base private)
-  dex-internals-simple-dexed-of maybe-ordering-or)
+  getfx-dex-internals-simple-dexed-of getmaybefx-ordering-or)
 (require effection/private/getfx)
 (require #/only-in effection/private/order object-identities-autodex)
 
@@ -275,7 +275,7 @@
           [ds dspace?]
           [unique-name (ds) (authorized-name-dspace-ancestor/c ds)]
           [then continuation-ticket?])
-        [_ extfx?])
+        [_ (list/c (-> (-> any) any) extfx?)])
       (or/c
         (match/c run-extfx-result-failure run-extfx-errors?)
         (match/c run-extfx-result-success any/c)))])
@@ -520,33 +520,36 @@
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
     
-    (define (dex-internals-in? this x)
-      (dspace? x))
+    (define (getfx-dex-internals-is-in this x)
+      (getfx-done #/dspace? x))
     
-    (define (dex-internals-name-of this x)
-      (expect x (internal:dspace runtime-symbol name parents-list)
-        (nothing)
-      #/dissect name (unsafe:name name)
-      #/just #/unsafe:name #/list 'name:dspace name))
+    (define (getfx-dex-internals-name-of this x)
+      (getfx-done
+        (expect x (internal:dspace runtime-symbol name parents-list)
+          (nothing)
+        #/dissect name (unsafe:name name)
+        #/just #/unsafe:name #/list 'name:dspace name)))
     
-    (define (dex-internals-dexed-of this x)
-      (dex-internals-simple-dexed-of this x))
+    (define (getfx-dex-internals-dexed-of this x)
+      (getfx-dex-internals-simple-dexed-of this x))
     
-    (define (dex-internals-compare this a b)
-      (expect a (internal:dspace a-runtime-symbol a-name _) (nothing)
-      #/expect b (internal:dspace b-runtime-symbol b-name _) (nothing)
-      #/maybe-ordering-or
-        (just #/object-identities-autodex
+    (define (getfx-dex-internals-compare this a b)
+      (expect a (internal:dspace a-runtime-symbol a-name _)
+        (getfx-done #/nothing)
+      #/expect b (internal:dspace b-runtime-symbol b-name _)
+        (getfx-done #/nothing)
+      #/getmaybefx-ordering-or
+        (getfx-done #/just #/object-identities-autodex
           a-runtime-symbol
           b-runtime-symbol)
-        (compare-by-dex (dex-name) a-name b-name)))
+        (getfx-compare-by-dex (dex-name) a-name b-name)))
   ])
 
 (define (dex-dspace)
   (unsafe:dex #/dex-internals-dspace))
 
 (define (dspace-eq? a b)
-  (eq-by-dex? (dex-dspace) a b))
+  (pure-run-getfx #/getfx-is-eq-by-dex (dex-dspace) a b))
 
 (define (dspace-descends? ancestor descendant)
   (dissect ancestor
@@ -560,7 +563,8 @@
   #/and (eq? ancestor-runtime-symbol descendant-runtime-symbol)
   #/mat ancestor-parents-list (list) #t
   #/list-any (cons descendant-name descendant-parents-list) #/fn name
-    (eq-by-dex? (dex-name) ancestor-name name)))
+    (pure-run-getfx
+      (getfx-is-eq-by-dex (dex-name) ancestor-name name))))
 
 ; NOTE: In our interfaces here, the point of
 ; `success-or-error-definer?` values is not only to let conflicts be
@@ -815,26 +819,27 @@
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
     
-    (define (dex-internals-in? this x)
-      (authorized-name? x))
+    (define (getfx-dex-internals-is-in this x)
+      (getfx-done #/authorized-name? x))
     
-    (define (dex-internals-name-of this x)
-      (expect x (internal:authorized-name ds n parents) (nothing)
-      #/dissect ds (internal:dspace _ (unsafe:name ds-name) _)
-      #/dissect n (unsafe:name n)
-      #/just #/unsafe:name #/list 'name:authorized-name ds-name n))
+    (define (getfx-dex-internals-name-of this x)
+      (getfx-done
+        (expect x (internal:authorized-name ds n parents) (nothing)
+        #/dissect ds (internal:dspace _ (unsafe:name ds-name) _)
+        #/dissect n (unsafe:name n)
+        #/just #/unsafe:name #/list 'name:authorized-name ds-name n)))
     
-    (define (dex-internals-dexed-of this x)
-      (dex-internals-simple-dexed-of this x))
+    (define (getfx-dex-internals-dexed-of this x)
+      (getfx-dex-internals-simple-dexed-of this x))
     
-    (define (dex-internals-compare this a b)
+    (define (getfx-dex-internals-compare this a b)
       (expect a (internal:authorized-name a-ds a-n a-parents)
-        (nothing)
+        (getfx-done #/nothing)
       #/expect b (internal:authorized-name b-ds b-n b-parents)
-        (nothing)
-      #/maybe-ordering-or
-        (compare-by-dex (dex-dspace) a-ds b-ds)
-        (compare-by-dex (dex-name) a-n b-n)))
+        (getfx-done #/nothing)
+      #/getmaybefx-ordering-or
+        (getfx-compare-by-dex (dex-dspace) a-ds b-ds)
+        (getfx-compare-by-dex (dex-name) a-n b-n)))
   ])
 
 (define (dex-authorized-name)
@@ -1227,6 +1232,11 @@
         #/table-union a b #/fn a b
         #/table-union a b #/fn a b
         #/trivial-union a b)))
+  #/dissect
+    (body root-ds root-unique-authorized-name
+      root-continuation-ticket)
+    (list with-dynamic-scope extfx-body)
+  #/with-dynamic-scope #/fn
   #/w-loop next-full
     
     processes
@@ -1236,8 +1246,7 @@
         'claim-unique (table-empty)
         'put (table-empty)
         'private-put (table-empty))
-      (body root-ds root-unique-authorized-name
-        root-continuation-ticket))
+      extfx-body)
     
     rev-next-processes (list)
     
@@ -1559,7 +1568,7 @@
                 (err-once)
               #/mat value (internal:optionally-dexed-dexed d)
                 (expect
-                  (eq-by-dex? (dex-name)
+                  (pure-run-getfx #/getfx-is-eq-by-dex (dex-name)
                     (dexed-get-name existing-dexed)
                     (dexed-get-name d))
                   #t

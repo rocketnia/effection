@@ -39,7 +39,7 @@ For a more thorough overview of Effection's goals, @hyperlink["https://github.co
 
 A “cline” is based on a total ordering on values in its domain, or in other words a binary relation that is reflexive, transitive, and antisymmetric. Its antisymmetry is as fine-grained as possible: If any two values in a cline’s domain are related by that cline in both directions, only Effection-unsafe code will be able to distinguish the two values.
 
-However, a cline does not merely expose this total ordering. Within the cline’s domain, there may be equivalence classes of values for which every two nonequal values will not have their relative order exposed to Effection-safe code. When Effection-safe code uses @racket[compare-by-cline] to compare two values by a cline, it can get several results:
+However, a cline does not merely expose this total ordering. Within the cline’s domain, there may be equivalence classes of values for which every two nonequal values will not have their relative order exposed to Effection-safe code. When Effection-safe code uses @racket[getfx-compare-by-cline] to compare two values by a cline, it can get several results:
 
 @itemlist[
     @item{@racket[(nothing)]: The values are not both in the domain.}
@@ -112,7 +112,7 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 @subsection[#:tag "dexes"]{Names, Dexes, and Dexed Values}
 
 @defproc[(name? [x any/c]) boolean?]{
-  Returns whether the given value is a name. In Effection, a "name" is something like a partial application of comparison by a dex. Any value can be converted to a name using @racket[name-of] if any dex for that value is at hand (and it always converts to the same name regardless of which dex is chosen), and names themselves can be compared using @racket[(dex-name)].
+  Returns whether the given value is a name. In Effection, a "name" is something like a partial application of comparison by a dex. Any value can be converted to a name using @racket[getfx-name-of] if any dex for that value is at hand (and it always converts to the same name regardless of which dex is chosen), and names themselves can be compared using @racket[(dex-name)].
 }
 
 
@@ -120,23 +120,38 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   Returns whether the given value is a dex.
 }
 
-@defproc[(in-dex? [dex dex?] [x any/c]) boolean?]{
-  Given a dex and a value, returns whether the value belongs to the dex's domain.
-}
-
-@defproc[(name-of [dex dex?] [x any/c]) (maybe/c name?)]{
-  Given a dex and a value, returns a @racket[just] of a name that the value can be compared by, if the value belongs to the dex's domain; otherwise returns a @racket[nothing].
-}
-
-@defproc[(dexed-of [dex dex?] [x any/c]) (maybe/c dexed?)]{
-  Given a dex and a value, returns a @racket[just] of a dexed version of the given value, if the value belongs to the dex's domain; otherwise returns a @racket[nothing].
+@defproc[(getfx-is-in-dex [dex dex?] [x any/c]) (getfx/c boolean?)]{
+  Given a dex and a value, returns a @racket[getfx?] computation that computes whether the value belongs to the dex's domain.
+  
+  Whether this @racket[getfx?] computation can be run through @racket[pure-run-getfx] without problems depends on the given dex. This is one way to "call" a dex.
 }
 
 @defproc[
-  (compare-by-dex [dex dex?] [a any/c] [b any/c])
-  (maybe/c dex-result?)
+  (getfx-name-of [dex dex?] [x any/c])
+  (getfx/c (maybe/c name?))
 ]{
-  Given a dex and two values, compares those values according to the dex. The result is @racket[(nothing)] if either value is outside the dex's domain.
+  Given a dex and a value, returns a @racket[getfx?] computation. If the value belongs to the dex's domain, this computation results in a @racket[just] of a name that the value can be compared by. Otherwise, it results in a @racket[nothing].
+  
+  Whether this @racket[getfx?] computation can be run through @racket[pure-run-getfx] without problems depends on the given dex. This is one way to "call" a dex.
+}
+
+@defproc[
+  (getfx-dexed-of [dex dex?] [x any/c])
+  (getfx/c (maybe/c dexed?))
+]{
+  Given a dex and a value, returns a @racket[just] of a dexed version of the given value, if the value belongs to the dex's domain; otherwise returns a @racket[nothing].
+  Given a dex and a value, returns a @racket[getfx?] computation. If the value belongs to the dex's domain, this computation results in a @racket[just] of a dexed version of the given value. Otherwise, it results in a @racket[nothing].
+  
+  Whether this @racket[getfx?] computation can be run through @racket[pure-run-getfx] without problems depends on the given dex. This is one way to "call" a dex.
+}
+
+@defproc[
+  (getfx-compare-by-dex [dex dex?] [a any/c] [b any/c])
+  (getfx/c (maybe/c dex-result?))
+]{
+  Given a dex and two values, returns a @racket[getfx?] computation that compares those values according to the dex. The result is @racket[(nothing)] if either value is outside the dex's domain.
+  
+  Whether this @racket[getfx?] computation can be run through @racket[pure-run-getfx] without problems depends on the given dex. This is one way to "call" a dex.
 }
 
 
@@ -157,6 +172,8 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 @defproc[(dexed-get-dex [d dexed?]) dex?]{
   Given a dexed value, returns a dex that has a domain consisting of just one value, namely the value of the given dexed value.
   
+  A call to the resulting dex can be run through @racket[pure-run-getfx] without problems.
+  
   When compared by @racket[(dex-dex)], all @tt{dexed-get-dex} results are @racket[ordering-eq] if the corresponding @racket[dexed-get-value] results are.
 }
 
@@ -171,22 +188,30 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 
 @defproc[(dex-name) dex?]{
   Returns a dex that compares names.
+  
+  A call to this dex can be run through @racket[pure-run-getfx] without problems.
 }
 
 @defproc[(dex-dex) dex?]{
   Returns a dex that compares dexes.
   
   All presently existing dexes allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(dex-default (dex-give-up) (dex-give-up))] and @racket[(dex-give-up)] can be distinguished this way despite otherwise having equivalent behavior.
+  
+  A call to this dex can be run through @racket[pure-run-getfx] without problems.
 }
 
 @; TODO: Add this to Cene for Racket.
 @defproc[(dex-dexed) dex?]{
   Returns a dex that compares dexed values.
+  
+  A call to this dex can be run through @racket[pure-run-getfx] without problems.
 }
 
 
 @defproc[(dex-give-up) dex?]{
   Returns a dex over an empty domain.
+  
+  A call to this dex can be run through @racket[pure-run-getfx] without problems.
 }
 
 @defproc[
@@ -201,33 +226,43 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   
   The invocation of @racket[dex-for-trying-second] is a tail call.
   
+  If calls to the given dexes can be run through @racket[pure-run-getfx] without problems, then so can a call to this dex.
+  
   When compared by @racket[(dex-dex)], all @tt{dex-default} values are @racket[ordering-eq] if their @racket[dex-for-trying-first] values are and their @racket[dex-for-trying-second] values are.
 }
 
 @defproc[(dex-opaque [name name?] [dex dex?]) dex?]{
   Given a name and a dex, returns another dex that behaves like the given one but is not equal to it.
   
+  If calls to the given dex can be run through @racket[pure-run-getfx] without problems, then so can a call to this dex.
+  
   When compared by @racket[(dex-dex)], all @tt{dex-opaque} values are @racket[ordering-eq] if their @racket[name] values are and their @racket[dex] values are.
 }
 
 @defproc[
   (dex-by-own-method
-    [dexed-get-method
-      (dexed-first-order/c (-> any/c (maybe/c dex?)))])
+    [dexed-getfx-get-method
+      (dexed-first-order/c (-> any/c (getfx/c (maybe/c dex?))))])
   dex?
 ]{
-  Given a dexed function, returns a dex that works by invoking that function with each value to get @racket[(just _dex)] or @racket[(nothing)], verifying that the two @var[dex] values are the same, and then proceeding to tail-call that dex value.
+  Given a dexed @racket[getfx?] operation, returns a dex that works by invoking that operation with each value to get @racket[(just _dex)] or @racket[(nothing)], verifying that the two @var[dex] values are the same, and then proceeding to tail-call that dex value.
   
-  When compared by @racket[(dex-dex)], all @tt{dex-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-get-method] values are.
+  If the @racket[getfx?] computations that result from @racket[dexed-getfx-get-method] and the calls to their resulting dexes can be run through @racket[pure-run-getfx] without problems, then so can a call to this dex.
+  
+  When compared by @racket[(dex-dex)], all @tt{dex-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-getfx-get-method] values are.
 }
 
 @defproc[
-  (dex-fix [dexed-unwrap (dexed-first-order/c (-> dex? dex?))])
+  (dex-fix
+    [dexed-getfx-unwrap
+      (dexed-first-order/c (-> dex? (getfx/c dex?)))])
   dex?
 ]{
-  Given a dexed function, returns a dex that works by passing itself to the function and then tail-calling the resulting dex.
+  Given a dexed @racket[getfx?] operation, returns a dex that works by passing itself to the operation and then tail-calling the resulting dex.
   
-  When compared by @racket[(dex-dex)], all @tt{dex-fix} values are @racket[ordering-eq] if their @racket[dexed-unwrap] values are.
+  If the @racket[getfx?] computations that result from @racket[dexed-getfx-unwrap] and the calls to their resulting dexes can be run through @racket[pure-run-getfx] without problems, then so can a call to this dex.
+  
+  When compared by @racket[(dex-dex)], all @tt{dex-fix} values are @racket[ordering-eq] if their @racket[dexed-getfx-unwrap] values are.
 }
 
 @defform[
@@ -244,6 +279,8 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
+  If calls to the given dexes can be run through @racket[pure-run-getfx] without problems, then so can a call to this dex.
+  
   When compared by @racket[(dex-dex)], all @tt{dex-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[dex-expr] values are @racket[ordering-eq].
 }
 
@@ -257,6 +294,8 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
+  If calls to the given dexes can be run through @racket[pure-run-getfx] without problems, then so can a call to this dex.
+  
   When compared by @racket[(dex-dex)], each @tt{dex-struct} value is @racket[ordering-eq] to the equivalent @racket[dex-struct-by-field-position] value.
 }
 
@@ -269,28 +308,41 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 
 @defproc[(get-dex-from-cline [cline cline?]) dex?]{
   Given a cline, returns a dex over the same domain.
-}
-
-@defproc[(in-cline? [cline cline?] [x any/c]) boolean?]{
-  Given a cline and a value, returns whether the value belongs to the cline's domain.
+  
+  If calls to the given cline can be run through @racket[pure-run-getfx] without problems, then so can a call to the resulting dex.
 }
 
 @defproc[
-  (compare-by-cline [cline cline?] [a any/c] [b any/c])
-  (maybe/c cline-result?)
+  (getfx-is-in-cline [cline cline?] [x any/c])
+  (getfx/c boolean?)
 ]{
-  Given a cline and two values, compares those values according to the cline. The result is @racket[(nothing)] if either value is outside the cline's domain.
+  Given a cline and a value, returns a @racket[getfx?] computation that computes whether the value belongs to the cline's domain.
+  
+  Whether this @racket[getfx?] computation can be run through @racket[pure-run-getfx] without problems depends on the given cline. This is one way to "call" a cline.
+}
+
+@defproc[
+  (getfx-compare-by-cline [cline cline?] [a any/c] [b any/c])
+  (getfx/c (maybe/c cline-result?))
+]{
+  Given a cline and two values, returns a @racket[getfx?] computation that compares those values according to the cline. The result is @racket[(nothing)] if either value is outside the cline's domain.
+  
+  Whether this @racket[getfx?] computation can be run through @racket[pure-run-getfx] without problems depends on the given cline. This is one way to "call" a cline.
 }
 
 @defproc[(dex-cline) dex?]{
   Returns a dex that compares clines.
   
   Almost all presently existing clines allow this comparison to be fine-grained enough that it trivializes their equational theory. For instance, @racket[(cline-default (cline-give-up) (cline-give-up))] and @racket[(cline-give-up)] can be distinguished this way despite otherwise having equivalent behavior. One exception is that calling @racket[cline-flip] twice in a row results in a cline that's @racket[ordering-eq] to the original.
+  
+  A call to this dex can be run through @racket[pure-run-getfx] without problems.
 }
 
 
 @defproc[(cline-by-dex [dex dex?]) cline?]{
   Returns a cline that compares values by tail-calling the given dex. Since the dex never returns the "candidly precedes" or "candidly follows" results, this cline doesn't either.
+  
+  If calls to the given dex can be run through @racket[pure-run-getfx] without problems, then so can a call to this cline.
   
   When compared by @racket[(dex-cline)], all @tt{cline-by-dex} values are @racket[ordering-eq] if their dexes are.
   
@@ -299,6 +351,8 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 
 @defproc[(cline-give-up) cline?]{
   Returns a cline over an empty domain.
+  
+  A call to this cline can be run through @racket[pure-run-getfx] without problems.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to @racket[(dex-give-up)].
 }
@@ -315,6 +369,8 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   
   The invocation of @racket[cline-for-trying-second] is a tail call.
   
+  If calls to the given clines can be run through @racket[pure-run-getfx] without problems, then so can a call to this cline.
+  
   When compared by @racket[(dex-cline)], all @tt{cline-default} values are @racket[ordering-eq] if their @racket[cline-for-trying-first] values are and their @racket[cline-for-trying-second] values are.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to the similarly constructed @racket[dex-default].
@@ -323,29 +379,37 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 @defproc[(cline-opaque [name name?] [cline cline?]) cline?]{
   Given a name and a cline, returns another cline that behaves like the given one but is not equal to it.
   
+  If calls to the given cline can be run through @racket[pure-run-getfx] without problems, then so can a call to the resulting cline.
+  
   When compared by @racket[(dex-cline)], all @tt{cline-opaque} values are @racket[ordering-eq] if their @racket[name] values are and their @racket[cline] values are.
 }
 
 @defproc[
   (cline-by-own-method
-    [dexed-get-method
-      (dexed-first-order/c (-> any/c (maybe/c cline?)))])
+    [dexed-getfx-get-method
+      (dexed-first-order/c (-> any/c (getfx/c (maybe/c cline?))))])
   cline?
 ]{
-  Given a dexed function, returns a cline that works by invoking that function with each value to get @racket[(just _cline)] or @racket[(nothing)], verifying that the two @var[cline] values are the same, and then proceeding to tail-call that value.
+  Given a dexed @racket[getfx?] operation, returns a cline that works by invoking that operation with each value to get @racket[(just _cline)] or @racket[(nothing)], verifying that the two @var[cline] values are the same, and then proceeding to tail-call that cline value.
   
-  When compared by @racket[(dex-cline)], all @tt{cline-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-get-method] values are.
+  If the @racket[getfx?] computations that result from @racket[dexed-getfx-get-method] and the calls to their resulting clines can be run through @racket[pure-run-getfx] without problems, then so can a call to this cline.
+  
+  When compared by @racket[(dex-cline)], all @tt{cline-by-own-method} values are @racket[ordering-eq] if their @racket[dexed-getfx-get-method] values are.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
 }
 
 @defproc[
-  (cline-fix [dexed-unwrap (dexed-first-order/c (-> cline? cline?))])
+  (cline-fix
+    [dexed-getfx-unwrap
+      (dexed-first-order/c (-> cline? (getfx/c cline?)))])
   cline?
 ]{
-  Given a dexed function, returns a cline that works by passing itself to the function and then tail-calling the resulting cline.
+  Given a dexed @racket[getfx?] operation, returns a cline that works by passing itself to the operation and then tail-calling the resulting cline.
   
-  When compared by @racket[(dex-cline)], all @tt{cline-fix} values are @racket[ordering-eq] if their @racket[dexed-unwrap] values are.
+  If the @racket[getfx?] computations that result from @racket[dexed-getfx-unwrap] and the calls to their resulting clines can be run through @racket[pure-run-getfx] without problems, then so can a call to this cline.
+  
+  When compared by @racket[(dex-cline)], all @tt{cline-fix} values are @racket[ordering-eq] if their @racket[dexed-getfx-unwrap] values are.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to another dex only if that dex was obtained the same way from a cline @racket[ordering-eq] to this one.
 }
@@ -364,6 +428,8 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
+  If calls to the given clines can be run through @racket[pure-run-getfx] without problems, then so can a call to this cline.
+  
   When compared by @racket[(dex-cline)], all @tt{cline-struct-by-field-position} values are @racket[ordering-eq] if they're for the same structure type descriptor, if they have @racket[field-position-nat] values in the same sequence, and if their @racket[cline-expr] values are @racket[ordering-eq].
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to the similarly constructed @racket[dex-struct-by-field-position].
@@ -379,6 +445,8 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
   
   A struct type is only permitted for @racket[struct-id] if it's fully immutable and has no super-type.
   
+  If calls to the given clines can be run through @racket[pure-run-getfx] without problems, then so can a call to this cline.
+  
   When compared by @racket[(dex-cline)], each @tt{cline-struct} value is @racket[ordering-eq] to the equivalent @racket[cline-struct-by-field-position] value.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to the similarly constructed @racket[dex-struct].
@@ -387,6 +455,8 @@ All the exports of @tt{effection/order/base} are also exported by @racketmodname
 @; TODO: Add this to Cene for Racket.
 @defproc[(cline-flip [cline cline?]) cline?]{
   Returns a cline that compares values by calling the given dex but reverses the "candidly precedes" and "candidly follows" results (@racket[ordering-lt] and @racket[ordering-gt]). It dosn't reverse the "secretly precedes" and "secretly follows" results.
+  
+  If calls to the given cline can be run through @racket[pure-run-getfx] without problems, then so can a call to the resulting cline.
   
   When compared by @racket[(dex-cline)], @tt{cline-flip} values are usually @racket[ordering-eq] if their given clines are. The one exception is that calling @tt{cline-flip} twice in a row has no effect; the result of the second call is @racket[ordering-eq] to the original cline. This behavior is experimental; future revisions to this library may remove this exception or add more exceptions (such as having @racket[(@#,tt{cline-flip} (cline-default _a _b))] be @racket[ordering-eq] to @racket[(cline-default (@#,tt{cline-flip} _a) (@#,tt{cline-flip} _b))]).
   
@@ -436,13 +506,15 @@ The idempotence of a merge operation is such that if the two inputs to the merge
   @defproc[(dex-fuse) dex?]
 )]{
   Returns a dex that compares merges/fuses.
+  
+  A call to this dex can be run through @racket[pure-run-getfx] without problems.
 }
 
 
 @defproc[(merge-by-dex [dex dex?]) merge?]{
   Returns a merge that merges any values that are already @racket[ordering-eq] according the given dex. The result of the merge is @racket[ordering-eq] to both of the inputs.
   
-  A call to this merge can be run through @racket[pure-run-getfx] without problems.
+  If calls to the given dex can be run through @racket[pure-run-getfx] without problems, then so can a call to this merge.
   
   When compared by @racket[(dex-merge)], all @tt{merge-by-dex} values are @racket[ordering-eq] if their dexes are.
 }
@@ -451,7 +523,7 @@ The idempotence of a merge operation is such that if the two inputs to the merge
 @defproc[(merge-by-cline-min [cline cline?]) merge?]{
   Returns a merge that finds the minimum of any set of values in the given cline's domain. The result of the merge is @racket[ordering-eq] to at least one of the inputs, and it's @racket[ordering-lt] to the rest.
   
-  A call to this merge can be run through @racket[pure-run-getfx] without problems.
+  If calls to the given cline can be run through @racket[pure-run-getfx] without problems, then so can a call to this merge.
   
   When compared by @racket[(dex-merge)], all @tt{merge-by-cline-min} values are @racket[ordering-eq] if their clines are. They're also @racket[ordering-eq] to @racket[(merge-by-cline-max (cline-flip cline))].
 }
@@ -460,7 +532,7 @@ The idempotence of a merge operation is such that if the two inputs to the merge
 @defproc[(merge-by-cline-max [cline cline?]) merge?]{
   Returns a merge that finds the maximum of any set of values in the given cline's domain. The result of the merge is @racket[ordering-eq] to at least one of the inputs, and it's @racket[ordering-gt] to the rest.
   
-  A call to this merge can be run through @racket[pure-run-getfx] without problems.
+  If calls to the given cline can be run through @racket[pure-run-getfx] without problems, then so can a call to this merge.
   
   When compared by @racket[(dex-merge)], all @tt{merge-by-cline-max} values are @racket[ordering-eq] if their clines are. They're also @racket[ordering-eq] to @racket[(merge-by-cline-min (cline-flip cline))].
 }
@@ -468,7 +540,7 @@ The idempotence of a merge operation is such that if the two inputs to the merge
 @defproc[(fuse-by-merge [merge merge?]) fuse?]{
   Returns a fuse that fuses values by merging them using the given merge.
   
-  If a call to the given merge can be run through @racket[pure-run-getfx] without problems, then so can a call to the resulting fuse.
+  If calls to the given merge can be run through @racket[pure-run-getfx] without problems, then so can a call to the resulting fuse.
   
   When compared by @racket[(dex-fuse)], all @tt{fuse-by-merge} values are @racket[ordering-eq] if their merges are.
 }
@@ -479,7 +551,7 @@ The idempotence of a merge operation is such that if the two inputs to the merge
 )]{
   Given a name and a merge/fuse, returns another merge/fuse that behaves like the given one but is not equal to it.
   
-  If a call to the given merge/fuse can be run through @racket[pure-run-getfx] without problems, then so can a call to the resulting merge/fuse.
+  If calls to the given merge/fuse can be run through @racket[pure-run-getfx] without problems, then so can a call to the resulting merge/fuse.
   
   When compared by @racket[(dex-merge)]/@racket[(dex-fuse)], all @tt{merge-opaque}/@tt{fuse-opaque} values are @racket[ordering-eq] if their @racket[name] values are and their @racket[merge]/@racket[fuse] values are.
 }
@@ -519,7 +591,7 @@ The idempotence of a merge operation is such that if the two inputs to the merge
     fuse?
   ]
 )]{
-  Given a dexed function, returns a merge/fuse that works by passing itself to the function, running the resulting @racket[getfx?] computation, and then tail-calling the resulting merge/fuse.
+  Given a dexed @racket[getfx?] operation, returns a merge/fuse that works by passing itself to the operation and then tail-calling the resulting merge/fuse.
   
   If the @racket[getfx?] computations that result from @racket[dexed-getfx-unwrap] and the calls to their resulting merges/fuses can be run through @racket[pure-run-getfx] without problems, then so can a call to this merge/fuse.
   
@@ -612,10 +684,10 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
 }
 
 @defproc[
-  (table-sort [cline cline?] [table table?])
-  (maybe/c (listof table?))
+  (getfx-table-sort [cline cline?] [table table?])
+  (getfx/c (maybe/c (listof table?)))
 ]{
-  Given a cline and a table, sorts the values of the table by the cline, without determining an order on values that the cline doesn't determine an order on. This returns @racket[(nothing)] if any of the values are outside the cline's domain. Otherwise, it returns a @racket[just] containing a list of nonempty tables, partitioning the original table's values in ascending order.
+  Given a cline and a table, returns a @racket[getfx?] computation that sorts the values of the table by the cline, without determining an order on values that the cline doesn't determine an order on. This computation results in @racket[(nothing)] if any of the values are outside the cline's domain. Otherwise, it results in a @racket[just] containing a list of nonempty tables, partitioning the original table's values in ascending order.
   
   What we mean by partitioning is this: Each entry of the original table appears in one and only one table in the list, and the tables have no other entries.
   
@@ -624,6 +696,8 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
 
 @defproc[(dex-table [dex-val dex?]) dex?]{
   Returns a dex that compares tables, using the given dex to compare each value.
+  
+  If calls to the given dex can be run through @racket[pure-run-getfx] without problems, then so can a call to the resulting dex.
   
   When compared by @racket[(dex-dex)], all @tt{dex-table} values are @racket[ordering-eq] if their @racket[dex-val] values are.
 }
@@ -636,6 +710,8 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
   
   For the sake of nontermination, error, and performance concerns, this dex computes by attempting the given dexes in the order they appear in the @racket[assoc] association list. If a dex before the last one determines a non-@racket[ordering-eq] result, the following dexes are only checked to be sure their domains contain the respective field values. Otherwise, the last dex, if any, is attempted as a tail call.
   
+  If calls to the given dexes can be run through @racket[pure-run-getfx] without problems, then so can a call to this dex.
+  
   When compared by @racket[(dex-dex)], all @tt{dex-table-ordered} values are @racket[ordering-eq] if they have the same key names in the same sequence and if the associated dexes are @racket[ordering-eq].
 }
 
@@ -646,6 +722,8 @@ Effection's "tables" are similar to Racket hash tables where all the keys are Ef
   The given keys must be mutually unique.
   
   For the sake of nontermination, error, and performance concerns, this cline computes by attempting the given clines in the order they appear in the @racket[assoc] association list. If a cline before the last one determines a non-@racket[ordering-eq] result, the following clines are only checked to be sure their domains contain the respective field values. Otherwise, the last cline, if any, is attempted as a tail call.
+  
+  If calls to the given clines can be run through @racket[pure-run-getfx] without problems, then so can a call to this cline.
   
   When compared by @racket[(dex-cline)], all @tt{cline-table-ordered} values are @racket[ordering-eq] if they have the same key names in the same sequence and if the associated clines are @racket[ordering-eq].
   
@@ -723,16 +801,22 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
 
 @defproc[(dex-trivial) dex?]{
   Returns a dex that compares @racket[trivial?] values from Lathe Comforts. Every two @racket[trivial?] values are @racket[ordering-eq].
+  
+  A call to this dex can be run through @racket[pure-run-getfx] without problems.
 }
 
 @; TODO: Add this to Cene for Racket.
 @defproc[(dex-boolean) dex?]{
   Returns a dex that compares @racket[boolean?] values.
+  
+  A call to this dex can be run through @racket[pure-run-getfx] without problems.
 }
 
 @; TODO: Add this to Cene for Racket.
 @defproc[(cline-boolean-by-truer) cline?]{
   Returns a cline that compares booleans by an ordering where @racket[#f] is @racket[ordering-lt] to @racket[#t].
+  
+  A call to this cline can be run through @racket[pure-run-getfx] without problems.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to @racket[(dex-boolean)].
 }
@@ -740,6 +824,8 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
 @; TODO: Add this to Cene for Racket.
 @defproc[(cline-boolean-by-falser) cline?]{
   Returns a cline that compares booleans by an ordering where @racket[#t] is @racket[ordering-lt] to @racket[#f].
+  
+  A call to this cline can be run through @racket[pure-run-getfx] without problems.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to @racket[(dex-boolean)].
 }
@@ -760,22 +846,30 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
 
 @defproc[(dex-immutable-string) dex?]{
   Returns a dex that compares immutable strings.
+  
+  A call to this dex can be run through @racket[pure-run-getfx] without problems.
 }
 
 @defproc[(cline-immutable-string) cline?]{
   Returns a cline that compares immutable strings by their
   @racket[string<?] ordering.
   
+  A call to this cline can be run through @racket[pure-run-getfx] without problems.
+  
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to @racket[(dex-immutable-string)].
 }
 
 @defproc[(dex-exact-rational) dex?]{
   Returns a dex that compares exact rational numbers.
+  
+  A call to this dex can be run through @racket[pure-run-getfx] without problems.
 }
 
 @defproc[(cline-exact-rational) cline?]{
   Returns a cline that compares exact rational numbers by their
   @racket[<] ordering.
+  
+  A call to this cline can be run through @racket[pure-run-getfx] without problems.
   
   When the dex obtained from this cline using @racket[get-dex-from-cline] is compared by @racket[(dex-dex)], it is @racket[ordering-eq] to @racket[(dex-exact-rational)].
 }
@@ -802,8 +896,11 @@ The @tt{effection/order} module exports all the definitions of @racketmodname[ef
   This is a procedure that is convenient for two purposes: It's useful for detecting duplicates in a list of names, and it's useful for constructing tables. These purposes often coincide, since data structures which contain mutually unique names are often good candidates for converting to tables.
 }
 
-@defproc[(eq-by-dex? [dex dex?] [a any/c] [b any/c]) boolean?]{
-  Given a dex and two values which must be in the dex's domain, computes whether those values are @racket[ordering-eq] according to the dex.
+@defproc[
+  (getfx-is-eq-by-dex [dex dex?] [a any/c] [b any/c])
+  (getfx/c boolean?)
+]{
+  Given a dex and two values, returns a @racket[getfx?] computation that computes whether those values are @racket[ordering-eq] according to the dex. The two values must be in the dex's domain; otherwise, the computation raises an @racket[exn:fail:contract?] exception.
 }
 
 @defproc[
