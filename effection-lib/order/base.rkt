@@ -880,6 +880,7 @@
           (raise-arguments-error 'cmp-by-own-method
             expected-the-result-of-dexed-get-method-to-be-a-cmp
             "dexed-get-method" dexed-get-method
+            "source" source
             "result" result)
           result)))
     
