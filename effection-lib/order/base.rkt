@@ -1072,14 +1072,14 @@
   (w- getfx-unwrap (dexed-get-value dexed-getfx-unwrap)
   #/w- getfx-result (getfx-unwrap this)
   #/expect (getfx? getfx-result) #t
-    (raise-arguments-error 'dex-fix
+    (getfx-err-unraise #/raise-arguments-error 'dex-fix
       "expected the pure result of dexed-getfx-unwrap to be a getfx effectful computation"
       "dexed-getfx-unwrap" dexed-getfx-unwrap
       "this" this
       "getfx-result" getfx-result)
   #/getfx-bind getfx-result #/fn result
   #/expect (dex? result) #t
-    (raise-arguments-error 'dex-fix
+    (getfx-err-unraise #/raise-arguments-error 'dex-fix
       "expected the result of dexed-getfx-unwrap to be a dex"
       "dexed-getfx-unwrap" dexed-getfx-unwrap
       "this" this
@@ -1713,14 +1713,14 @@
   (w- getfx-unwrap (dexed-get-value dexed-getfx-unwrap)
   #/w- getfx-result (getfx-unwrap this)
   #/expect (getfx? getfx-result) #t
-    (raise-arguments-error 'cline-fix
+    (getfx-err-unraise #/raise-arguments-error 'cline-fix
       "expected the pure result of dexed-getfx-unwrap to be a getfx effectful computation"
       "dexed-getfx-unwrap" dexed-getfx-unwrap
       "this" this
       "getfx-result" getfx-result)
   #/getfx-bind getfx-result #/fn result
   #/expect (cline? result) #t
-    (raise-arguments-error 'cline-fix
+    (getfx-err-unraise #/raise-arguments-error 'cline-fix
       "expected the result of dexed-getfx-unwrap to be a cline"
       "dexed-getfx-unwrap" dexed-getfx-unwrap
       "this" this
