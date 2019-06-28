@@ -3133,13 +3133,30 @@
     (define (getfx-dex-internals-is-in this x)
       (dissect this (dex-internals-table dex-val)
       #/expect (table? x) #t (getfx-done #f)
+      
+      ; We call `getfx-is-in-dex` on *every* value of the table.
+      ;
+      ; NOTE: We do this because if we short-circuit before processing
+      ; certain values, then a client can deduce that their
+      ; sometimes-non-terminating `dex-by-own-method` hasn't been
+      ; called on certain values in the table.
+      ;
       #/getfx-bind
-        (getmaybefx-list-map #/list-map (table->sorted-list x)
+        (getfx-list-map #/list-map (table->sorted-list x)
         #/dissectfn (list k v)
           (getfx-map (getfx-is-in-dex dex-val v) #/expectfn #f
             (just #/trivial)
             (nothing)))
+      #/fn ins
+      
+      ; Now that we have all the recursive results, we end with `#f`
+      ; if any of them is `#f` (which we've re-encoded as `(nothing)`
+      ; at this point).
+      #/getfx-bind
+        (getmaybefx-list-map #/list-map ins #/fn maybe-in
+          (getfx-done maybe-in))
       #/expectfn (just _) (getfx-done #f)
+      
       #/getfx-done #t))
     
     ; TODO: See if we should have the ordering of the
@@ -3150,25 +3167,57 @@
     (define (getfx-dex-internals-name-of this x)
       (dissect this (dex-internals-table dex-val)
       #/expect (table? x) #t (getfx-done #/nothing)
-      #/getmaybefx-bind
-        (getmaybefx-list-map #/list-map (table->sorted-list x)
+      
+      ; We call `getfx-name-of` on *every* value of the table.
+      ;
+      ; NOTE: We do this because if we short-circuit before processing
+      ; certain values, then a client can deduce that their
+      ; sometimes-non-terminating `dex-by-own-method` hasn't been
+      ; called on certain values in the table.
+      ;
+      #/getfx-bind
+        (getfx-list-map #/list-map (table->sorted-list x)
         #/dissectfn (list (internal:name k-rep) v)
           (getmaybefx-bind (getfx-name-of dex-val v)
           #/dissectfn (internal:name v-rep)
           #/getfx-done #/just #/list k-rep v-rep))
       #/fn kv-reps
+      
+      ; Now that we have all the recursive results, we end with
+      ; `(nothing)` early if any of them is `(nothing)`.
+      #/getmaybefx-bind
+        (getmaybefx-list-map #/list-map kv-reps #/fn maybe-entry
+          (getfx-done maybe-entry))
+      #/fn kv-reps
+      
       #/getfx-done #/just #/internal:name #/cons 'name:table
         (list-bind kv-reps #/fn kv kv)))
     
     (define (getfx-dex-internals-dexed-of this x)
       (dissect this (dex-internals-table dex-val)
       #/expect (table? x) #t (getfx-done #/nothing)
-      #/getmaybefx-bind
-        (getmaybefx-list-map #/list-map (table->sorted-list x)
+      
+      ; We call `getfx-dexed-of` on *every* value of the table.
+      ;
+      ; NOTE: We do this because if we short-circuit before processing
+      ; certain values, then a client can deduce that their
+      ; sometimes-non-terminating `dex-by-own-method` hasn't been
+      ; called on certain values in the table.
+      ;
+      #/getfx-bind
+        (getfx-list-map #/list-map (table->sorted-list x)
         #/dissectfn (list k v)
           (getmaybefx-bind (getfx-dexed-of dex-val v) #/fn dexed
           #/getfx-done #/just #/list k dexed))
       #/fn dexeds
+      
+      ; Now that we have all the recursive results, we end with
+      ; `(nothing)` early if any of them is `(nothing)`.
+      #/getmaybefx-bind
+        (getmaybefx-list-map #/list-map dexeds #/fn maybe-entry
+          (getfx-done maybe-entry))
+      #/fn dexeds
+      
       #/getfx-done #/just #/dexed
         ; TODO: Move the definition of `dex-internals-table-ordered`
         ; before this.
@@ -3210,7 +3259,7 @@
       
       ; We compare *every* pair of corresponding values.
       ;
-      ; NOTE: We do this because if we short-circuit before comparing
+      ; NOTE: We do this because if we short-circuit before processing
       ; certain values, then a client can deduce that their
       ; sometimes-non-terminating `dex-by-own-method` hasn't been
       ; called on certain values in the table.
@@ -3226,6 +3275,14 @@
       
       ; We collect the comparison results into a single overall
       ; result.
+      ;
+      ; NOTE: Unlike `getfx-dex-internals-is-in`,
+      ; `getfx-dex-internals-name-of`, and
+      ; `getfx-dex-internals-dexed-of`, here in
+      ; `getfx-dex-internals-compare` we don't do a specific pass to
+      ; detect `(nothing)` values and finish early. That's because
+      ; we're using `maybe-ordering-or` to combine the results.
+      ;
       #/w-loop next dex-results dex-results
         (expect dex-results (cons maybe-dex-result dex-results)
           (getfx-done #/just #/ordering-eq)
