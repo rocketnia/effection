@@ -769,11 +769,11 @@
       #/mat first-result (just _) (getfx-done first-result)
       #/getfx-bind (getfx-is-in-dex first a) #/expectfn #f
         (getfx-bind (getfx-is-in-dex second b) #/expectfn #f
-          (getfx-done #/just #/ordering-lt)
+          (getfx-done #/just #/ordering-private)
           (getfx-done #/nothing))
       #/getfx-bind (getfx-is-in-dex first b) #/expectfn #f
         (getfx-bind (getfx-is-in-dex second a) #/expectfn #f
-          (getfx-done #/just #/ordering-gt)
+          (getfx-done #/just #/ordering-private)
           (getfx-done #/nothing))
       #/getfx-compare-by-dex second a b))
   ])
