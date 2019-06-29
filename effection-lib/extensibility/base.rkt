@@ -275,7 +275,7 @@
           [ds dspace?]
           [unique-name (ds) (authorized-name-dspace-ancestor/c ds)]
           [then continuation-ticket?])
-        [_ (list/c (-> (-> any) any) extfx?)])
+        [_ extfx?])
       (or/c
         (match/c run-extfx-result-failure run-extfx-errors?)
         (match/c run-extfx-result-success any/c)))])
@@ -1020,7 +1020,7 @@
 ; same name and then one of their shared ancestors does too?
 ;
 ; Fortunately, in this case, the answer is much clearer: The value
-; written is always dexed, so we don't need to store it under "name"
+; written is always dexed, so we don't need to store it under a "name"
 ; apart from the name obtained from the value itself; and since
 ; Effection-safe functions and `extfx?` effects are deterministic and
 ; `extfx?` effects are idempotent, we never need to run the same
@@ -1232,11 +1232,6 @@
         #/table-union a b #/fn a b
         #/table-union a b #/fn a b
         #/trivial-union a b)))
-  #/dissect
-    (body root-ds root-unique-authorized-name
-      root-continuation-ticket)
-    (list with-dynamic-scope extfx-body)
-  #/with-dynamic-scope #/fn
   #/w-loop next-full
     
     processes
@@ -1246,7 +1241,8 @@
         'claim-unique (table-empty)
         'put (table-empty)
         'private-put (table-empty))
-      extfx-body)
+      (body root-ds root-unique-authorized-name
+        root-continuation-ticket))
     
     rev-next-processes (list)
     
