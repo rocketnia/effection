@@ -584,7 +584,7 @@
       (just #/ordering-eq))
     
     (define (getfx-dex-internals-is-in this x)
-      (getfx-done name? x))
+      (getfx-done #/name? x))
     
     (define (getfx-dex-internals-name-of this x)
       (expect x (internal:name rep) (nothing)
