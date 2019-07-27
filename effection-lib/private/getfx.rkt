@@ -216,8 +216,7 @@
     (fn blame
       (w- result/c-late-neg-projection
         ( (get/build-late-neg-projection result/c)
-          (blame-add-context blame #:swap? #t
-            "the anticipated value of"))
+          (blame-add-context blame "the anticipated value of"))
       #/fn v missing-party
         (expect (getfx? v) #t
           (raise-blame-error blame #:missing-party missing-party v
