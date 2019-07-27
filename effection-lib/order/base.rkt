@@ -702,7 +702,7 @@
     (define (dex-internals-autodex this other)
       (just #/ordering-eq))
     
-    (define (getfx-dex-internals-in this x)
+    (define (getfx-dex-internals-is-in this x)
       (getfx-done #f))
     
     (define (getfx-dex-internals-name-of this x)
@@ -745,7 +745,7 @@
         (pure-run-getfx #/getfx-compare-by-dex (dex-dex) a1 b1)
         (pure-run-getfx #/getfx-compare-by-dex (dex-dex) a2 b2)))
     
-    (define (getfx-dex-internals-in this x)
+    (define (getfx-dex-internals-is-in this x)
       (dissect this (dex-internals-default first second)
       #/getfx-bind (getfx-is-in-dex first x) #/expectfn #f
         (getfx-done #t)
@@ -1179,7 +1179,7 @@
           #/pure-run-getfx
             (getfx-compare-by-dex (dex-dex) a-dex b-dex)))))
     
-    (define (getfx-dexed-dex-internals-is-in this x)
+    (define (getfx-dex-internals-is-in this x)
       (dissect this (dex-internals-struct descriptor counts? fields)
       #/expect (counts? x) #t (getfx-done #f)
       #/w-loop next fields fields
