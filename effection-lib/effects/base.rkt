@@ -18,7 +18,7 @@
 (require #/only-in lathe-comforts/struct
   auto-equal auto-write define-imitation-simple-struct struct-easy)
 
-(require #/only-in effection/order/base fuse? name?)
+(require #/only-in interconfection/order/base fuse? name?)
 
 
 ; TODO: Many of the issues raised in the following comment have begun
