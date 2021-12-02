@@ -1,6 +1,6 @@
 # Effection
 
-[![Travis build](https://travis-ci.org/rocketnia/effection.svg?branch=main)](https://travis-ci.org/rocketnia/effection)
+[![CI](https://github.com/rocketnia/effection/actions/workflows/ci.yml/badge.svg)](https://github.com/rocketnia/effection/actions/workflows/ci.yml)
 
 Effection is a highly experimental library for managing side effects in Racket. It supports a certain programming style that's almost pure, but which also has the ability to introduce handlers for custom side effects.
 
