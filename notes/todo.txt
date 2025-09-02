@@ -43,7 +43,7 @@
 (define (run-monadic-effects monadic-effects-body) ...)
 (define (monadic-effects-pure result) ...)
 (define (monadic-effects-bind monadic-effects-intermediate intermediate-to-monadic-effects) ...)
-(define-simple-macro (monadic-effects-handle-struct (struct-type-id:id field-var:id ...) then:expr monadic-effects:expr) ...)
+(define-syntax-parse-rule (monadic-effects-handle-struct (struct-type-id:id field-var:id ...) then:expr monadic-effects:expr) ...)
 (define (monadic-effects-send-to-handler value-to-handle) ...)
 (define (monadic-effects-with-no-handlers monadic-effects-body) ...)
 

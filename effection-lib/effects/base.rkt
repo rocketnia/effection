@@ -10,7 +10,8 @@
 (require #/only-in racket/list split-at take)
 
 (require #/only-in lathe-comforts dissect expect mat w- w-loop)
-(require #/only-in lathe-comforts/contract by-own-method/c)
+(require #/only-in lathe-comforts/contract
+  by-own-method/c equal-always/c)
 (require #/only-in lathe-comforts/list
   list-any list-kv-map list-zip-map)
 (require #/only-in lathe-comforts/match match/c)
@@ -275,9 +276,6 @@
 
 ; TODO: Implement, document, and provide these.
 
-;; TODO: See if we should put `equal/c` in another module.
-;(provide equal/c)
-
 ;(provide #/struct-out sd0 sd1 sd-nothing)
 ;(provide sensitivity-degree?)
 ;(provide sensitivity-from-usage)
@@ -313,11 +311,6 @@
 ; These should guide the design and could serve as a starting point
 ; for the documentation.
 
-
-
-(define/contract (equal/c x)
-  (-> any/c flat-contract?)
-  (lambda (y) #/equal? x y))
 
 
 (struct-easy (token))
@@ -362,13 +355,13 @@
     (list #/hash-set locals-hash 'is-last-populated-degree #f)
     (build-list (- last-degree current-last-degree) #/lambda (i)
       (w- d (+ 1 current-last-degree i)
-      #/hash
+      #/hashalw
         'is-last-populated-degree (= last-degree d)
         'escapable-frames big-escapable-frames
         'big-escapable-frames big-escapable-frames))))
 
 (define pure-locals
-  (list #/hash
+  (list #/hashalw
     'is-last-populated-degree #t
     'escapable-frames (list pure-id)
     'big-escapable-frames (list pure-id)
@@ -796,8 +789,10 @@
           usage-degree)]
       [leaf any/c])
     [_ (sensitivity-degree usage-degree)
-      (computation-h/c (equal/c sensitivity-degree) (=/c usage-degree)
-      #/nothing)])
+      (computation-h/c
+        (equal-always/c sensitivity-degree)
+        (=/c usage-degree)
+        (nothing))])
   (computation-h sensitivity-degree usage-degree #/lambda ()
     (holes-h-and-value
       ; NOTE: These hole effects do nothing but what the client has
@@ -828,11 +823,11 @@
             (first-observable-usage-degree-for-sensitivity ds du)
             du)
           any/c
-          (computation-h/c (equal/c ds) (=/c du) #/nothing))])
+          (computation-h/c (equal-always/c ds) (=/c du) #/nothing))])
     [_ (prefix)
       (w- ds (computation-h-sensitivity-degree prefix)
       #/w- du (computation-h-usage-degree prefix)
-      #/computation-h/c (equal/c ds) (=/c du) #/nothing)])
+      #/computation-h/c (equal-always/c ds) (=/c du) #/nothing)])
   (dissect prefix
     (computation-h sensitivity-degree usage-degree unsafe-run0!h!)
   #/computation-h sensitivity-degree usage-degree #/lambda ()
@@ -920,7 +915,7 @@
   (unsafe-nontrivial-computation-1!h degree unsafe-run0!h!)
   (->i ([degree exact-nonnegative-integer?] [unsafe-run0!h! (-> any)])
     [_ (degree)
-      (computation-h/c (equal/c #/sd1-and degree) (=/c degree)
+      (computation-h/c (equal-always/c #/sd1-and degree) (=/c degree)
       #/nothing)])
   (computation-h (sd1-and degree) degree unsafe-run0!h!))
 
@@ -983,7 +978,7 @@
 (define/contract (purely!h degree)
   (->i ([degree exact-nonnegative-integer?])
     [_ (degree)
-      (computation-h/c (equal/c #/sd1-and degree) (=/c degree)
+      (computation-h/c (equal-always/c #/sd1-and degree) (=/c degree)
       #/nothing)])
   (unsafe-nontrivial-computation-1!h degree #/lambda ()
     (hyperstack-open-new-hole-chaining-to-purity-volatile! degree)
@@ -1019,7 +1014,7 @@
     
     [_ (usage-degree)
       (computation-h/c
-        (equal/c #/sd1-and usage-degree)
+        (equal-always/c #/sd1-and usage-degree)
         (=/c usage-degree)
       #/nothing)])
   (unsafe-nontrivial-computation-1!h usage-degree #/lambda ()
@@ -1072,8 +1067,10 @@
       [binding-usage-degree exact-nonnegative-integer?]
       [key name?])
     [_ (binding-sensitivity-degree)
-      (computation-h/c (equal/c binding-sensitivity-degree) (=/c 0)
-      #/nothing)])
+      (computation-h/c
+        (equal-always/c binding-sensitivity-degree)
+        (=/c 0)
+        (nothing))])
   'TODO)
 
 ; A degree-M-sensitive, usage-degree-N indeterminism effect which
@@ -1108,9 +1105,9 @@
       [val any/c])
     [_ (usage-degree)
       (computation-h/c
-        (equal/c #/sd1-and usage-degree)
+        (equal-always/c #/sd1-and usage-degree)
         (=/c usage-degree)
-      #/nothing)])
+        (nothing))])
   (unsafe-nontrivial-computation-1!h usage-degree #/lambda ()
     'TODO))
 
@@ -1143,9 +1140,9 @@
       [val any/c])
     [_ (usage-degree)
       (computation-h/c
-        (equal/c #/sd1-and usage-degree)
+        (equal-always/c #/sd1-and usage-degree)
         (=/c usage-degree)
-      #/nothing)])
+        (nothing))])
   (unsafe-nontrivial-computation-1!h usage-degree #/lambda ()
     'TODO))
 
@@ -1180,8 +1177,10 @@
       [usage-degree exact-nonnegative-integer?]
       [custom-computation any/c])
     [_ (sensitivity-degree usage-degree)
-      (computation-h/c (equal/c sensitivity-degree) (=/c usage-degree)
-      #/nothing)])
+      (computation-h/c
+        (equal-always/c sensitivity-degree)
+        (=/c usage-degree)
+        (nothing))])
   'TODO)
 
 ; TODO: See if we should still have `with-first-handler!h` if we're
@@ -1199,14 +1198,16 @@
       [usage-degree exact-nonnegative-integer?]
       [handler handler?])
     [_ (sensitivity-degree usage-degree)
-      (computation-h/c (equal/c sensitivity-degree) (=/c usage-degree)
-      #/nothing)])
+      (computation-h/c
+        (equal-always/c sensitivity-degree)
+        (=/c usage-degree)
+        (nothing))])
   (unsafe-nontrivial-computation-1!h usage-degree #/lambda ()
     'TODO))
 
 
 (define/contract gensym!h
-  (computation-h/c (equal/c #/sd1) (=/c 0) #/just symbol?)
+  (computation-h/c (equal-always/c #/sd1) (=/c 0) #/just symbol?)
   ; NOTE: Don't implement this as an ambient capability by defining
   ; it as part of the effect system. Just have this return something
   ; that uses `handle!h` to use a gensym operation if one is in the
